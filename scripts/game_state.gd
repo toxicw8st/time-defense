@@ -54,6 +54,7 @@ var mission_elapsed_seconds: float = 0.0
 var is_clock_paused: bool = false
 var is_enemies_frozen: bool = false
 var is_haste_active: bool = false
+var base_attack_charging_active: bool = false
 
 
 func _ready() -> void:
@@ -71,6 +72,7 @@ func reset_mission() -> void:
 	is_clock_paused = false
 	is_enemies_frozen = false
 	is_haste_active = false
+	base_attack_charging_active = false
 	mission_reset.emit()
 
 
@@ -190,4 +192,9 @@ func get_construction_speed_multiplier() -> float:
 
 func is_base_locked() -> bool:
 	return mission.manipulator_upgrading_remaining > 0.0
+
+
+func is_base_charging() -> bool:
+	return base_attack_charging_active
+
 

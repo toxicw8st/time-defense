@@ -39,7 +39,9 @@
 - [x] Test button resets surge timer and prevents surge
 - [x] Surge pauses during `BUILD` phase and while Manipulator upgrades; resets cleanly on new mission (`tests/test_step5.tscn` -> `STEP5_TEST_PASS`)
 
-
-
-
- (`Step 0: project skeleton + balance data + F1 debug overlay`)
+## Step 6 — Time Powers, Mutation and Manipulator
+- [x] All 3 powers start ready on Wave 1; cooldowns span ~1.5 waves (`Rewind 65s`, `Pause 55s`, `Haste 50s`)
+- [x] Pause freezes alien movement while towers keep firing; Thaw-hardened x3 reduces frozen damage by 30% (floor 50%)
+- [x] Haste 3x finishes a 7 s Mortar in ~2.33 s and adds Swift x1
+- [x] Creator-confirmed Rewind restarts current enemy wave, keeps mid-wave towers/money/research/lost lives/surges, adds Armoured x1, locks nested Rewind, and starts 65 s cooldown after replay ends
+- [x] Manipulator upgrade disables all 3 powers (`OFFLINE`), locks Refineries, and pauses Surge for exact build duration (`tests/test_step6.tscn` -> `STEP6_TEST_PASS`)

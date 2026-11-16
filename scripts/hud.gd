@@ -30,12 +30,17 @@ signal start_wave_requested
 @onready var upg_spd_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeSpdButton
 @onready var sell_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/SellButton
 
+@onready var manip_status_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox/ManipStatusLabel
+@onready var manip_upgrade_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox/ManipUpgradeButton
+
 @onready var research_list_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox/ResearchButtons
 
 @onready var surge_bar: ProgressBar = $BottomBar/VBox/SurgeRow/SurgeBar
 @onready var surge_label: Label = $BottomBar/VBox/SurgeRow/SurgeLabel
 @onready var surge_penalty_label: Label = $BottomBar/VBox/SurgeRow/SurgePenaltyLabel
-@onready var test_power_button: Button = $BottomBar/VBox/Row2/TestPowerButton
+@onready var rewind_button: Button = $BottomBar/VBox/Row2/RewindButton
+@onready var pause_button: Button = $BottomBar/VBox/Row2/PauseButton
+@onready var haste_button: Button = $BottomBar/VBox/Row2/HasteButton
 @onready var refinery_button: Button = $BottomBar/VBox/Row2/RefineryButton
 @onready var start_wave_button: Button = $BottomBar/VBox/Row2/StartWaveButton
 @onready var event_feed_label: Label = $BottomBar/VBox/EventFeedLabel
@@ -55,6 +60,7 @@ var map_ref: GameMap = null
 var wave_manager_ref: WaveManager = null
 var economy_ref: EconomyManager = null
 var surge_ref: SurgeManager = null
+var time_powers_ref: TimePowersManager = null
 
 var _last_summary_text: String = ""
 var _selected_pad_idx: int = -1
@@ -85,7 +91,11 @@ func _ready() -> void:
 	restart_button.pressed.connect(_on_restart_pressed)
 	start_wave_button.pressed.connect(_on_start_wave_pressed)
 	refinery_button.pressed.connect(_on_refinery_button_pressed)
-	test_power_button.pressed.connect(_on_test_power_pressed)
+	manip_upgrade_button.pressed.connect(_on_manip_upgrade_pressed)
+
+	rewind_button.pressed.connect(func() -> void: _activate_power("rewind"))
+	pause_button.pressed.connect(func() -> void: _activate_power("pause"))
+	haste_button.pressed.connect(func() -> void: _activate_power("haste"))
 
 	build_blaster_button.pressed.connect(func() -> void: _build_tower("blaster"))
 	build_mortar_button.pressed.connect(func() -> void: _build_tower("mortar"))
@@ -121,11 +131,18 @@ func _build_research_buttons() -> void:
 		_research_buttons[key] = btn
 
 
-func set_references(p_map: GameMap, p_wm: WaveManager, p_econ: EconomyManager = null, p_surge: SurgeManager = null) -> void:
+func set_references(
+	p_map: GameMap,
+	p_wm: WaveManager,
+	p_econ: EconomyManager = null,
+	p_surge: SurgeManager = null,
+	p_tp: TimePowersManager = null
+) -> void:
 	map_ref = p_map
 	wave_manager_ref = p_wm
 	economy_ref = p_econ
 	surge_ref = p_surge
+	time_powers_ref = p_tp
 	if map_ref != null:
 		map_ref.pad_selected.connect(_on_pad_selected)
 		map_ref.tower_selected.connect(_on_tower_selected)
@@ -173,8 +190,10 @@ func _refresh_all() -> void:
 
 	_refresh_preview_panel()
 	_refresh_selection_panel()
+	_refresh_manipulator_panel()
 	_refresh_research_panel()
 	_refresh_surge_bar()
+	_refresh_power_buttons()
 	_refresh_refinery_button()
 	_refresh_start_wave_button()
 
@@ -194,7 +213,7 @@ func _refresh_surge_bar() -> void:
 
 	if m.surge_count > 0:
 		var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
-		surge_penalty_label.text = "Towers at %d%% speed - %d surge%s (rest of mission)" % [
+		surge_penalty_label.text = "Towers at %d%% speed - %d surge%s (for the rest of this mission)" % [
 			pct,
 			m.surge_count,
 			"s" if m.surge_count > 1 else "",
@@ -213,6 +232,94 @@ func _refresh_surge_bar() -> void:
 	else:
 		surge_bar.modulate = Color(0.35, 0.78, 0.95)
 		surge_label.modulate = Color(0.85, 0.92, 1.0)
+
+
+func _refresh_power_buttons() -> void:
+	if time_powers_ref == null:
+		return
+	var offline: bool = GameState.is_base_locked()
+	var offline_str: String = _format_mmss(GameState.mission.manipulator_upgrading_remaining)
+	_style_power_button(rewind_button, "rewind", offline, offline_str)
+	_style_power_button(pause_button, "pause", offline, offline_str)
+	_style_power_button(haste_button, "haste", offline, offline_str)
+
+
+func _style_power_button(btn: Button, power_name: String, offline: bool, offline_str: String) -> void:
+	var cfg: Dictionary = Balance.TIME_POWERS[power_name]
+	var title: String = cfg["name"].to_upper()
+	var effect: String = cfg["short_effect"]
+	var cost: String = cfg["cost_label"]
+	var status_line: String = "READY"
+
+	if offline:
+		status_line = "OFFLINE - %s" % offline_str
+	elif power_name == "pause" and time_powers_ref.pause_remaining > 0.0:
+		status_line = "ACTIVE: %.1fs" % time_powers_ref.pause_remaining
+	elif power_name == "haste" and time_powers_ref.haste_remaining > 0.0:
+		status_line = "ACTIVE: %.1fs" % time_powers_ref.haste_remaining
+	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.is_replaying_wave():
+		status_line = "REPLAYING WAVE"
+	elif time_powers_ref.cooldowns.get(power_name, 0.0) > 0.0:
+		status_line = "CD: %.0fs" % ceilf(time_powers_ref.cooldowns[power_name])
+	elif power_name == "rewind" and not time_powers_ref.can_use_power("rewind"):
+		status_line = "WAIT FOR WAVE"
+
+	btn.text = "%s [%s]\n%s | %s" % [title, status_line, effect, cost]
+	var usable: bool = time_powers_ref.can_use_power(power_name)
+	btn.disabled = not usable
+	if offline:
+		btn.modulate = Color(0.55, 0.55, 0.6)
+	elif (power_name == "pause" and time_powers_ref.pause_remaining > 0.0) or (power_name == "haste" and time_powers_ref.haste_remaining > 0.0):
+		btn.modulate = Color(0.45, 0.95, 1.0)
+	elif usable:
+		btn.modulate = Color.WHITE
+	else:
+		btn.modulate = Color(0.72, 0.72, 0.75)
+
+
+func _format_mmss(seconds: float) -> String:
+	var s: int = int(ceilf(maxf(0.0, seconds)))
+	return "%d:%02d" % [s / 60, s % 60]
+
+
+func _refresh_manipulator_panel() -> void:
+	var m := GameState.mission
+	if m.manipulator_upgrading_remaining > 0.0:
+		manip_status_label.text = "Manipulator Lv %d -> %d | OFFLINE %.1fs (Surge paused, Base locked)" % [
+			m.manipulator_level,
+			m.manipulator_level + 1,
+			m.manipulator_upgrading_remaining,
+		]
+		manip_status_label.modulate = Color(1.0, 0.78, 0.35)
+		manip_upgrade_button.text = "Upgrading (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
+		manip_upgrade_button.disabled = true
+		manip_upgrade_button.modulate = Color(0.75, 0.75, 0.75)
+		return
+
+	if m.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
+		manip_status_label.text = "Manipulator Lv %d / %d (MAX)" % [m.manipulator_level, Balance.MANIPULATOR_MAX_LEVEL]
+		manip_status_label.modulate = Color(0.55, 0.95, 0.65)
+		manip_upgrade_button.text = "Manipulator MAX"
+		manip_upgrade_button.disabled = true
+		manip_upgrade_button.modulate = Color(0.75, 0.9, 0.75)
+		return
+
+	var next_lvl: int = m.manipulator_level + 1
+	var cfg: Dictionary = Balance.MANIPULATOR_UPGRADES[next_lvl]
+	var cost: int = int(cfg["cost"])
+	var btime: int = int(cfg["build_time"])
+	manip_status_label.text = "Manipulator Lv %d -> %d: %s" % [m.manipulator_level, next_lvl, cfg["benefit_text"]]
+	manip_status_label.modulate = Color(0.85, 0.9, 1.0)
+	if GameState.is_base_charging():
+		manip_upgrade_button.text = "Upgrade (%d$, %ds) [BASE BUSY]" % [cost, btime]
+		manip_upgrade_button.disabled = true
+		manip_upgrade_button.modulate = Color(0.72, 0.72, 0.72)
+		return
+
+	var can_buy: bool = time_powers_ref != null and time_powers_ref.can_upgrade_manipulator()
+	manip_upgrade_button.text = "Upgrade Manipulator (%d$, %ds downtime)" % [cost, btime]
+	manip_upgrade_button.disabled = not can_buy
+	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.45, 0.45)
 
 
 func _refresh_preview_panel() -> void:
@@ -397,7 +504,7 @@ func _refresh_debug_overlay() -> void:
 		"Wave: %d / 15 | Lives: %d | Enemy Base: %d HP" % [m.wave_number, m.lives, m.enemy_base_hp],
 		"Money: %d | Research: %d | Refineries: %d" % [m.economy["money"], m.economy["research"], m.economy["refineries_owned"]],
 		"Runner Speed: %.1f px/s (balance base: %.1f px/s)" % [eff_runner_speed, Balance.ENEMIES["runner"]["speed"]],
-		"Surge: %.1f s left (%d surges)" % [m.surge_timer_seconds, m.surge_count],
+		"Surge: %.1f s left (%d surges) | Manip Lv%d" % [m.surge_timer_seconds, m.surge_count, m.manipulator_level],
 		"Mutations: Armoured x%d | Thaw x%d | Swift x%d" % [
 			m.mutations["armoured_stacks"],
 			m.mutations["thaw_stacks"],
@@ -411,9 +518,16 @@ func _refresh_debug_overlay() -> void:
 	debug_label.text = "\n".join(lines)
 
 
-func _on_test_power_pressed() -> void:
-	if not GameState.mission.is_over and not GameState.is_base_locked():
-		GameState.time_power_used.emit("test")
+func _activate_power(power_name: String) -> void:
+	if time_powers_ref != null:
+		time_powers_ref.activate_power(power_name)
+		_refresh_all()
+
+
+func _on_manip_upgrade_pressed() -> void:
+	if time_powers_ref != null:
+		time_powers_ref.start_manipulator_upgrade()
+		_refresh_all()
 
 
 func _on_surge_banner_triggered(banner_text: String) -> void:

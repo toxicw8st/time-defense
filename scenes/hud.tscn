@@ -171,6 +171,22 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Sell Tower"
 
+[node name="ManipulatorBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="ManipStatusLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Manipulator Lv 1 -> 2"
+autowrap_mode = 3
+
+[node name="ManipUpgradeButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Upgrade Manipulator (150$, 10s)"
+alignment = 0
+
 [node name="ResearchBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
 theme_override_constants/separation = 4
@@ -217,24 +233,38 @@ text = "0 surges"
 
 [node name="Row2" type="HBoxContainer" parent="BottomBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 8
 
-[node name="TestPowerButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(180, 44)
+[node name="RewindButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(225, 48)
 layout_mode = 2
-text = "Use power (test)"
+theme_override_font_sizes/font_size = 11
+text = "REWIND"
+
+[node name="PauseButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(225, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "PAUSE"
+
+[node name="HasteButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(225, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "HASTE"
 
 [node name="ControlSpacer" type="Control" parent="BottomBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="RefineryButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(210, 44)
+custom_minimum_size = Vector2(185, 48)
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Build Refinery (100$, 6s)"
 
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(180, 44)
+custom_minimum_size = Vector2(165, 48)
 layout_mode = 2
 text = "START WAVE 1"
 

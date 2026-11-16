@@ -19,6 +19,8 @@ var path_length: float = 0.0
 var distance_along_path: float = 0.0
 var last_tangent: Vector2 = Vector2.RIGHT
 var is_dead_or_leaked: bool = false
+var swift_stacks_at_spawn: int = 0
+var speed_multiplier_at_spawn: float = 1.0
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
@@ -33,6 +35,8 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 	leak_cost = cfg["leak_cost"]
 	money_on_kill = cfg["money_on_kill"]
 	research_on_kill = cfg["research_on_kill"]
+	swift_stacks_at_spawn = GameState.mission.mutations.get("swift_stacks", 0)
+	speed_multiplier_at_spawn = pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], swift_stacks_at_spawn)
 	max_hp = float(GameState.get_enemy_wave_hp(p_type, p_wave))
 	hp = max_hp
 	distance_along_path = 0.0
@@ -44,7 +48,9 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 func advance_along_path(delta: float) -> void:
 	if is_dead_or_leaked or path_curve == null or GameState.mission.is_over:
 		return
-	var eff_speed: float = base_speed * GameState.get_enemy_speed_multiplier()
+	if GameState.is_enemies_frozen:
+		return
+	var eff_speed: float = base_speed * speed_multiplier_at_spawn
 	if eff_speed <= 0.0:
 		return
 	distance_along_path += eff_speed * delta
@@ -110,14 +116,13 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius + shell_width * 0.5, 0.0, TAU, 24, Color(0.95, 0.82, 0.35), shell_width)
 
 	# Swift mutation visual cue: speed lines trailing opposite tangent
-	var swift_stacks: int = GameState.mission.mutations.get("swift_stacks", 0)
-	if swift_stacks > 0:
+	if swift_stacks_at_spawn > 0:
 		var back_dir: Vector2 = -last_tangent
 		var perp: Vector2 = Vector2(-back_dir.y, back_dir.x)
-		for i in range(min(3, swift_stacks)):
+		for i in range(min(3, swift_stacks_at_spawn)):
 			var offset_perp: float = (float(i) - 1.0) * 5.0
 			var start_p: Vector2 = perp * offset_perp + back_dir * (radius + 2.0)
-			var end_p: Vector2 = start_p + back_dir * (8.0 + float(swift_stacks) * 2.0)
+			var end_p: Vector2 = start_p + back_dir * (8.0 + float(swift_stacks_at_spawn) * 2.0)
 			draw_line(start_p, end_p, Color(0.4, 0.95, 0.75, 0.85), 2.0)
 
 	draw_circle(Vector2.ZERO, radius, fill_color)

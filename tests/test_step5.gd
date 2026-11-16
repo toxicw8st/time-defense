@@ -46,9 +46,9 @@ func _ready() -> void:
 	hud._refresh_surge_bar()
 	assert(hud.surge_penalty_label.text.contains("86%"), "3 surges must display 86%% speed, got: %s" % hud.surge_penalty_label.text)
 
-	# Verify test button resets timer and prevents surge
+	# Verify time_power_used signal resets timer and prevents surge
 	surge.step_surge(40.0) # 5 s left
-	hud._on_test_power_pressed()
+	GameState.time_power_used.emit("test")
 	assert(is_equal_approx(GameState.mission.surge_timer_seconds, 45.0), "Using power must reset surge timer")
 	surge.step_surge(40.0)
 	assert(GameState.mission.surge_count == 3, "Prevented surge via test button")

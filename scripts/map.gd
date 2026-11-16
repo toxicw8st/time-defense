@@ -296,17 +296,22 @@ func get_active_enemies() -> Array[EnemyUnit]:
 
 func clear_all_enemies() -> void:
 	for child in enemies_container.get_children():
+		if child is EnemyUnit:
+			child.is_dead_or_leaked = true
+		enemies_container.remove_child(child)
 		child.queue_free()
 
 
 func clear_all_towers() -> void:
 	for child in towers_container.get_children():
+		towers_container.remove_child(child)
 		child.queue_free()
 	_reset_pad_occupancy()
 
 
 func clear_all_projectiles() -> void:
 	for child in projectiles_container.get_children():
+		projectiles_container.remove_child(child)
 		child.queue_free()
 
 

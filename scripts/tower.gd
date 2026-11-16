@@ -218,9 +218,12 @@ func _draw() -> void:
 		draw_line(Vector2(-half, -half), Vector2(half, half), Color(0.95, 0.82, 0.32, 0.6), 1.5)
 		draw_line(Vector2(half, -half), Vector2(-half, half), Color(0.95, 0.82, 0.32, 0.6), 1.5)
 
-		# Progress ring + remaining seconds
+		# Progress ring + remaining seconds (highlighted cyan-green during Haste!)
 		var prog: float = current_job.get_progress()
-		draw_arc(Vector2.ZERO, 21.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 32, Color(0.35, 0.95, 0.65), 3.0)
+		var ring_col := Color(0.35, 1.0, 0.9) if GameState.is_haste_active else Color(0.35, 0.95, 0.65)
+		if GameState.is_haste_active:
+			draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 24, Color(0.35, 1.0, 0.9, 0.45), 2.0)
+		draw_arc(Vector2.ZERO, 21.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 32, ring_col, 3.0)
 		var sec_text: String = "%.1fs" % current_job.remaining_time
 		draw_string(font, Vector2(-13, 28), sec_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 	else:
