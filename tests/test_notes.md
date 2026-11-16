@@ -14,9 +14,17 @@
 
 ## Step 2 — Waves as Data
 - [x] Waves 1-15 encoded as pure data in `data/waves.gd`
-- [x] Waves 1-3 play end-to-end (`tests/test_step2.tscn` -> `STEP2_TEST_PASS waves_1_to_3_money=287`)
+- [x] Waves 1-3 play end-to-end (`tests/test_step2.tscn` -> `STEP2_TEST_PASS`)
 - [x] Pre-wave preview shows `"No mutations"` on Wave 1
 - [x] Wave bonus (`25 + 2 * wave`) is paid exactly once per wave number (verified no double-pay on replay)
 - [x] Editing wave count in `data/waves.gd` changes spawned schedule with zero code edits
+
+## Step 3 — Towers and Combat
+- [x] Blaster alone holds Wave 1 with 0 leaks (`tests/test_step3.tscn` -> `STEP3_TEST_PASS w4_blaster_leaks=9 w4_mortar_leaks=3`)
+- [x] Mortar visibly outperforms Blaster on bunched Wave 4; respects 60 px min range; splash evaluates positions at landing
+- [x] Tower under construction or upgrade never fires (`scaffold + progress ring + seconds` visual)
+- [x] Sell refunds exact `floor(50% of total_spent)` (`75->37`, `125->62`) and frees the pad
+- [x] Kill earnings (`+money`, `+research`) appear as floating text and update economy totals
+
 
  (`Step 0: project skeleton + balance data + F1 debug overlay`)

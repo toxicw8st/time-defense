@@ -53,6 +53,7 @@ var mission: MissionState = MissionState.new()
 var mission_elapsed_seconds: float = 0.0
 var is_clock_paused: bool = false
 var is_enemies_frozen: bool = false
+var is_haste_active: bool = false
 
 
 func _ready() -> void:
@@ -69,7 +70,47 @@ func reset_mission() -> void:
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
 	is_enemies_frozen = false
+	is_haste_active = false
 	mission_reset.emit()
+
+
+func spend_money(amount: int) -> bool:
+	if amount < 0 or mission.economy["money"] < amount:
+		return false
+	mission.economy["money"] -= amount
+	economy_changed.emit()
+	return true
+
+
+func add_money(amount: int, count_as_earned: bool = true) -> void:
+	if amount <= 0:
+		return
+	mission.economy["money"] += amount
+	if count_as_earned:
+		mission.stats["money_earned"] += amount
+	economy_changed.emit()
+
+
+func add_research(amount: int) -> void:
+	if amount <= 0:
+		return
+	mission.economy["research"] += amount
+	mission.stats["research_earned"] += amount
+	economy_changed.emit()
+
+
+func spend_research(amount: int) -> bool:
+	if amount < 0 or mission.economy["research"] < amount:
+		return false
+	mission.economy["research"] -= amount
+	economy_changed.emit()
+	return true
+
+
+func award_kill_earnings(enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2) -> void:
+	add_money(money_gained, true)
+	add_research(research_gained)
+	enemy_killed.emit(enemy_type, money_gained, research_gained, world_pos)
 
 
 func lose_lives(amount: int, enemy_type: String = "runner", world_pos: Vector2 = Vector2.ZERO) -> void:
@@ -119,9 +160,29 @@ func get_enemy_wave_hp(enemy_type: String, wave_num: int) -> int:
 	return int(round(scaled))
 
 
+func get_tower_damage_research_multiplier() -> float:
+	var bonus: float = 0.0
+	if mission.owned_research.get("reinforced_shots", false):
+		bonus += Balance.RESEARCH_NODES["reinforced_shots"]["damage_bonus"]
+	return 1.0 + bonus
+
+
+func get_tower_range_research_multiplier() -> float:
+	var bonus: float = 0.0
+	if mission.owned_research.get("extended_optics", false):
+		bonus += Balance.RESEARCH_NODES["extended_optics"]["range_bonus"]
+	return 1.0 + bonus
+
+
 func get_tower_attack_speed_multiplier() -> float:
 	var research_bonus: float = 1.0
 	if mission.owned_research.get("rapid_cycling", false):
 		research_bonus += Balance.RESEARCH_NODES["rapid_cycling"]["fire_rate_bonus"]
 	var surge_penalty: float = pow(Balance.SURGE_ATTACK_SPEED_FACTOR, mission.surge_count)
 	return research_bonus * surge_penalty
+
+
+func get_construction_speed_multiplier() -> float:
+	if is_haste_active:
+		return float(Balance.TIME_POWERS["haste"]["construction_speed_multiplier"])
+	return 1.0

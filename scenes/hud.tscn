@@ -34,10 +34,20 @@ text = "Wave 1 / 15"
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="EconomyLabel" type="Label" parent="TopBar/VBox/Row2"]
+[node name="MoneyLabel" type="Label" parent="TopBar/VBox/Row2"]
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+layout_mode = 2
+text = "Money: 200"
+
+[node name="ResearchLabel" type="Label" parent="TopBar/VBox/Row2"]
+theme_override_colors/font_color = Color(0.45, 0.88, 1, 1)
+layout_mode = 2
+text = "Research: 0"
+
+[node name="RefineriesLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Money: 200 | Research: 0 | Refineries: 1"
+text = "Refineries: 1"
 
 [node name="ClockLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
@@ -51,14 +61,14 @@ offset_bottom = 544.0
 
 [node name="Margin" type="MarginContainer" parent="RightPanel"]
 layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
 
 [node name="VBox" type="VBoxContainer" parent="RightPanel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 6
 
 [node name="PreviewTitleLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
@@ -74,13 +84,69 @@ layout_mode = 2
 text = "Mutations: No mutations"
 autowrap_mode = 3
 
-[node name="HSeparator" type="HSeparator" parent="RightPanel/Margin/VBox"]
-layout_mode = 2
-
 [node name="WaveSummaryLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
 text = ""
 autowrap_mode = 3
+
+[node name="HSeparator" type="HSeparator" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="BuildMenuBox" type="VBoxContainer" parent="RightPanel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+layout_mode = 2
+text = "BUILD ON PAD"
+
+[node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+layout_mode = 2
+text = "Blaster Turret (75$)"
+alignment = 0
+
+[node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+layout_mode = 2
+text = "Cluster Mortar (110$)"
+alignment = 0
+
+[node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="TowerHeaderLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Tower"
+
+[node name="TowerRatingsLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Piercing - Damage: Medium, Speed: High"
+autowrap_mode = 3
+
+[node name="TowerStatusLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Status: Active"
+
+[node name="UpgradeDmgButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Damage"
+alignment = 0
+
+[node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Range"
+alignment = 0
+
+[node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Fire Rate"
+alignment = 0
+
+[node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+layout_mode = 2
+text = "Sell Tower"
 
 [node name="BottomBar" type="PanelContainer" parent="."]
 offset_top = 544.0
@@ -102,7 +168,7 @@ theme_override_constants/separation = 16
 [node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "POWER BAR & EVENT FEED (Steps 3-8)"
+text = "POWER BAR & EVENT FEED (Steps 4-8)"
 
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
 custom_minimum_size = Vector2(200, 44)

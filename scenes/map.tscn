@@ -11,3 +11,7 @@ script = ExtResource("1_map")
 [node name="TowersContainer" type="Node2D" parent="."]
 
 [node name="EnemiesContainer" type="Node2D" parent="."]
+
+[node name="ProjectilesContainer" type="Node2D" parent="."]
+
+[node name="EffectsContainer" type="Node2D" parent="."]

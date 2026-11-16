@@ -1,7 +1,9 @@
 extends Node2D
 class_name GameMap
 
-signal pad_clicked(pad_index: int)
+signal pad_selected(pad_index: int)
+signal tower_selected(tower: TowerUnit)
+signal selection_cleared
 
 const MAP_WIDTH: float = 940.0
 const MAP_HEIGHT: float = 480.0
@@ -42,15 +44,23 @@ const REFINERY_ANNEX_RECT: Rect2 = Rect2(16, 195, 134, 268)
 const PAD_SIZE: float = 36.0
 
 @onready var enemy_path: Path2D = $EnemyPath
-@onready var enemies_container: Node2D = $EnemiesContainer
 @onready var towers_container: Node2D = $TowersContainer
+@onready var enemies_container: Node2D = $EnemiesContainer
+@onready var projectiles_container: Node2D = $ProjectilesContainer
+@onready var effects_container: Node2D = $EffectsContainer
 
 var enemy_scene: PackedScene = preload("res://scenes/enemy.tscn")
+var tower_scene: PackedScene = preload("res://scenes/tower.tscn")
+
 var next_enemy_id: int = 1
+var next_tower_id: int = 1
 var leak_flash_timer: float = 0.0
 var hovered_pad_index: int = -1
 var selected_pad_index: int = -1
-var pad_occupancy: Array[Node] = []
+var selected_tower: TowerUnit = null
+var preview_tower_type: String = ""
+var pad_occupancy: Array[TowerUnit] = []
+var floating_texts: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -58,28 +68,128 @@ func _ready() -> void:
 	_reset_pad_occupancy()
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.enemy_leaked.connect(_on_enemy_leaked)
+	GameState.enemy_killed.connect(_on_enemy_killed)
 
 
 func _process(delta: float) -> void:
+	var needs_redraw: bool = false
 	if leak_flash_timer > 0.0:
 		leak_flash_timer = maxf(0.0, leak_flash_timer - delta)
+		needs_redraw = true
+
+	if not floating_texts.is_empty():
+		for i in range(floating_texts.size() - 1, -1, -1):
+			floating_texts[i]["timer"] -= delta
+			floating_texts[i]["pos"] += Vector2(0.0, -24.0 * delta)
+			if floating_texts[i]["timer"] <= 0.0:
+				floating_texts.remove_at(i)
+		needs_redraw = true
+
+	if needs_redraw:
 		queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if GameState.mission.is_over:
+		return
+	var local_pos: Vector2 = get_local_mouse_position()
+	var in_map: bool = Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)).has_point(local_pos)
+
 	if event is InputEventMouseMotion:
-		var local_pos: Vector2 = get_local_mouse_position()
-		var new_hover: int = _find_pad_at(local_pos)
+		var new_hover: int = _find_pad_at(local_pos) if in_map else -1
 		if new_hover != hovered_pad_index:
 			hovered_pad_index = new_hover
 			queue_redraw()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var local_pos: Vector2 = get_local_mouse_position()
-		var clicked: int = _find_pad_at(local_pos)
-		if clicked != -1:
-			selected_pad_index = clicked
-			pad_clicked.emit(clicked)
-			queue_redraw()
+		if not in_map:
+			return
+		var clicked_pad: int = _find_pad_at(local_pos)
+		if clicked_pad != -1:
+			select_pad(clicked_pad)
+			get_viewport().set_input_as_handled()
+		else:
+			clear_selection()
+
+
+func select_pad(pad_idx: int) -> void:
+	selected_pad_index = pad_idx
+	preview_tower_type = ""
+	if selected_tower != null and is_instance_valid(selected_tower):
+		selected_tower.is_selected = false
+		selected_tower.queue_redraw()
+	selected_tower = pad_occupancy[pad_idx]
+	if selected_tower != null and is_instance_valid(selected_tower):
+		selected_tower.is_selected = true
+		selected_tower.queue_redraw()
+		tower_selected.emit(selected_tower)
+	else:
+		selected_tower = null
+		pad_selected.emit(pad_idx)
+	queue_redraw()
+
+
+func clear_selection() -> void:
+	selected_pad_index = -1
+	preview_tower_type = ""
+	if selected_tower != null and is_instance_valid(selected_tower):
+		selected_tower.is_selected = false
+		selected_tower.queue_redraw()
+	selected_tower = null
+	selection_cleared.emit()
+	queue_redraw()
+
+
+func set_preview_tower_type(tower_type: String) -> void:
+	preview_tower_type = tower_type
+	queue_redraw()
+
+
+func build_tower_on_pad(pad_idx: int, tower_type: String) -> TowerUnit:
+	if pad_idx < 0 or pad_idx >= BUILD_PAD_POSITIONS.size():
+		return null
+	if pad_occupancy[pad_idx] != null:
+		return null
+	var cost: int = int(Balance.TOWERS[tower_type]["cost"])
+	if not GameState.spend_money(cost):
+		return null
+
+	var tower: TowerUnit = tower_scene.instantiate()
+	towers_container.add_child(tower)
+	tower.setup(next_tower_id, tower_type, pad_idx, BUILD_PAD_POSITIONS[pad_idx], self)
+	next_tower_id += 1
+	pad_occupancy[pad_idx] = tower
+	preview_tower_type = ""
+	select_pad(pad_idx)
+	queue_redraw()
+	return tower
+
+
+func sell_tower(tower: TowerUnit) -> int:
+	if tower == null or not is_instance_valid(tower):
+		return 0
+	var refund: int = tower.get_sell_refund()
+	var pad_idx: int = tower.pad_index
+	if pad_idx >= 0 and pad_idx < pad_occupancy.size():
+		pad_occupancy[pad_idx] = null
+	GameState.add_money(refund, false)
+	GameState.event_logged.emit("Sold %s on P%d (+%d money)" % [Balance.TOWERS[tower.tower_type]["name"], pad_idx + 1, refund])
+	if selected_tower == tower:
+		selected_tower = null
+	tower.queue_free()
+	if pad_idx >= 0:
+		select_pad(pad_idx)
+	else:
+		clear_selection()
+	queue_redraw()
+	return refund
+
+
+func get_all_towers() -> Array[TowerUnit]:
+	var list: Array[TowerUnit] = []
+	for t in pad_occupancy:
+		if t != null and is_instance_valid(t):
+			list.append(t)
+	return list
 
 
 func _build_path_curve() -> void:
@@ -97,13 +207,43 @@ func _reset_pad_occupancy() -> void:
 
 func _on_mission_reset() -> void:
 	clear_all_enemies()
+	clear_all_towers()
+	clear_all_projectiles()
+	floating_texts.clear()
 	leak_flash_timer = 0.0
 	selected_pad_index = -1
+	selected_tower = null
+	preview_tower_type = ""
+	next_enemy_id = 1
+	next_tower_id = 1
 	queue_redraw()
 
 
 func _on_enemy_leaked(_enemy_type: String, _lives_lost: int, _world_pos: Vector2) -> void:
 	leak_flash_timer = 0.35
+	queue_redraw()
+
+
+func _on_enemy_killed(_enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2) -> void:
+	var local_p: Vector2 = to_local(world_pos)
+	floating_texts.append({
+		"pos": local_p + Vector2(-18.0, -14.0),
+		"money_text": "+%d$" % money_gained,
+		"research_text": "+%dR" % research_gained,
+		"timer": 0.9,
+		"max_timer": 0.9,
+	})
+	queue_redraw()
+
+
+func spawn_floater(local_pos: Vector2, text: String, col: Color) -> void:
+	floating_texts.append({
+		"pos": local_pos,
+		"custom_text": text,
+		"custom_color": col,
+		"timer": 0.9,
+		"max_timer": 0.9,
+	})
 	queue_redraw()
 
 
@@ -119,11 +259,16 @@ func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
 	enemy.setup(next_enemy_id, enemy_type, wave_num, enemy_path.curve)
 	next_enemy_id += 1
 	enemy.leaked.connect(_on_unit_leaked)
+	enemy.died.connect(_on_unit_died)
 	return enemy
 
 
 func _on_unit_leaked(enemy: EnemyUnit) -> void:
 	GameState.lose_lives(enemy.leak_cost, enemy.enemy_type, enemy.global_position)
+
+
+func _on_unit_died(enemy: EnemyUnit) -> void:
+	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position)
 
 
 func get_active_enemies() -> Array[EnemyUnit]:
@@ -136,6 +281,17 @@ func get_active_enemies() -> Array[EnemyUnit]:
 
 func clear_all_enemies() -> void:
 	for child in enemies_container.get_children():
+		child.queue_free()
+
+
+func clear_all_towers() -> void:
+	for child in towers_container.get_children():
+		child.queue_free()
+	_reset_pad_occupancy()
+
+
+func clear_all_projectiles() -> void:
+	for child in projectiles_container.get_children():
 		child.queue_free()
 
 
@@ -160,7 +316,6 @@ func _draw() -> void:
 	var font: Font = ThemeDB.fallback_font
 	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(8, 18), "REFINERY ANNEX", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.85, 0.78))
 
-	# Draw pre-built/owned refineries in the annex
 	var ref_count: int = GameState.mission.economy.get("refineries_owned", 0)
 	for i in range(ref_count):
 		var col: int = i % 2
@@ -195,6 +350,18 @@ func _draw() -> void:
 		draw_rect(rect, border_col, false, 2.0)
 		draw_string(font, p + Vector2(-7, 4), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.78, 0.92))
 
+	# Range ring preview during placement hover
+	if preview_tower_type != "" and selected_pad_index >= 0 and selected_pad_index < BUILD_PAD_POSITIONS.size():
+		var center: Vector2 = BUILD_PAD_POSITIONS[selected_pad_index]
+		var cfg: Dictionary = Balance.TOWERS[preview_tower_type]
+		var r: float = float(cfg["range"]) * GameState.get_tower_range_research_multiplier()
+		var min_r: float = float(cfg.get("min_range", 0.0))
+		draw_circle(center, r, Color(0.4, 0.85, 1.0, 0.08))
+		draw_arc(center, r, 0.0, TAU, 48, Color(0.45, 0.85, 1.0, 0.65), 1.5)
+		if min_r > 0.0:
+			draw_circle(center, min_r, Color(1.0, 0.35, 0.35, 0.08))
+			draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.7), 1.5)
+
 	# Enemy Base marker (path start)
 	var eb_rect := Rect2(ENEMY_BASE_POS - Vector2(28, 28), Vector2(56, 56))
 	draw_rect(eb_rect, Color(0.45, 0.14, 0.18))
@@ -211,3 +378,15 @@ func _draw() -> void:
 	draw_rect(pb_rect, pb_fill)
 	draw_rect(pb_rect, pb_border, false, 3.0)
 	draw_string(font, PLAYER_BASE_POS + Vector2(-20, -38), "BASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.75, 0.92, 1.0))
+
+	# Floating earnings texts (matching separate Money gold + Research cyan colors)
+	for ft in floating_texts:
+		var alpha: float = clampf(float(ft["timer"]) / float(ft["max_timer"]), 0.0, 1.0)
+		var pos: Vector2 = ft["pos"]
+		if ft.has("custom_text"):
+			var c: Color = ft["custom_color"]
+			c.a = alpha
+			draw_string(font, pos, ft["custom_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c)
+		else:
+			draw_string(font, pos, ft["money_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.85, 0.25, alpha))
+			draw_string(font, pos + Vector2(28, 0), ft["research_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.45, 0.88, 1.0, alpha))
