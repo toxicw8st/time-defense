@@ -55,6 +55,7 @@ var tower_scene: PackedScene = preload("res://scenes/tower.tscn")
 var next_enemy_id: int = 1
 var next_tower_id: int = 1
 var leak_flash_timer: float = 0.0
+var hive_beam_timer: float = 0.0
 var hovered_pad_index: int = -1
 var selected_pad_index: int = -1
 var selected_tower: TowerUnit = null
@@ -78,6 +79,12 @@ func show_refinery_tick_floaters(owned_count: int) -> void:
 			spawn_floater(Vector2(rx, ry), "+%d$" % Balance.REFINERY_INCOME_PER_TICK, Color(0.55, 0.95, 0.65))
 
 
+func trigger_hive_beam_effect() -> void:
+	hive_beam_timer = 0.85
+	spawn_floater(ENEMY_BASE_POS + Vector2(-20, -45), "-%d HP!" % Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE, Color(1.0, 0.72, 0.25))
+	queue_redraw()
+
+
 func _ready() -> void:
 	_build_path_curve()
 	_reset_pad_occupancy()
@@ -90,6 +97,9 @@ func _process(delta: float) -> void:
 	var needs_redraw: bool = false
 	if leak_flash_timer > 0.0:
 		leak_flash_timer = maxf(0.0, leak_flash_timer - delta)
+		needs_redraw = true
+	if hive_beam_timer > 0.0:
+		hive_beam_timer = maxf(0.0, hive_beam_timer - delta)
 		needs_redraw = true
 
 	if not floating_texts.is_empty():
@@ -398,9 +408,17 @@ func _draw() -> void:
 
 	# Enemy Base marker (path start)
 	var eb_rect := Rect2(ENEMY_BASE_POS - Vector2(28, 28), Vector2(56, 56))
-	draw_rect(eb_rect, Color(0.45, 0.14, 0.18))
+	var eb_fill := Color(0.98, 0.78, 0.25) if hive_beam_timer > 0.0 else Color(0.45, 0.14, 0.18)
+	draw_rect(eb_rect, eb_fill)
 	draw_rect(eb_rect, Color(0.95, 0.35, 0.35), false, 2.5)
 	draw_string(font, ENEMY_BASE_POS + Vector2(-24, -34), "HIVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.65, 0.65))
+
+	# Hive Destroyer beam effect when firing
+	if hive_beam_timer > 0.0:
+		var b_alpha: float = clampf(hive_beam_timer / 0.85, 0.0, 1.0)
+		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(0.35, 0.9, 1.0, b_alpha), 10.0)
+		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(1.0, 0.98, 0.75, b_alpha), 4.0)
+		draw_circle(ENEMY_BASE_POS, 38.0 * (1.2 - b_alpha * 0.4), Color(1.0, 0.75, 0.25, b_alpha * 0.5))
 
 	# Player Base (path end) with leak flash
 	var pb_rect := Rect2(PLAYER_BASE_POS - Vector2(32, 32), Vector2(64, 64))

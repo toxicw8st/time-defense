@@ -1,0 +1,119 @@
+extends Node
+class_name BaseAttackManager
+
+## Owns the Hive Destroyer base-attack charge & firing.
+## HARD RULE: Haste can NEVER speed up base-attack charging.
+
+signal charge_started
+signal base_attack_fired(damage: int, remaining_enemy_hp: int)
+
+var map_ref: GameMap = null
+var is_charging: bool = false
+var charge_total_time: float = Balance.BASE_ATTACK_CHARGE_TIME
+var charge_remaining: float = 0.0
+
+
+func setup(p_map: GameMap) -> void:
+	map_ref = p_map
+	if not GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.connect(_on_mission_reset)
+	_reset_state()
+
+
+func _on_mission_reset() -> void:
+	_reset_state()
+
+
+func _reset_state() -> void:
+	is_charging = false
+	charge_total_time = Balance.BASE_ATTACK_CHARGE_TIME
+	charge_remaining = 0.0
+	GameState.base_attack_charging_active = false
+
+
+func _process(delta: float) -> void:
+	step_base_attack(delta)
+
+
+func step_base_attack(delta: float) -> void:
+	if GameState.mission.is_over or not is_charging:
+		return
+	# Haste NEVER accelerates charge_remaining! Always 1.0x mission time.
+	charge_remaining = maxf(0.0, charge_remaining - delta)
+	if charge_remaining <= 0.0:
+		_fire_hive_destroyer()
+
+
+func get_charge_duration() -> float:
+	var dur: float = Balance.BASE_ATTACK_CHARGE_TIME
+	if GameState.mission.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
+		dur *= float(Balance.MANIPULATOR_UPGRADES[5]["base_attack_charge_multiplier"])
+	return dur
+
+
+func get_shot_damage() -> int:
+	var base_dmg: float = float(Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE)
+	if GameState.mission.owned_research.get("hive_breaker", false):
+		base_dmg *= (1.0 + float(Balance.RESEARCH_NODES["hive_breaker"]["base_attack_bonus"]))
+	return int(round(base_dmg))
+
+
+func get_shots_to_destroy_remaining() -> int:
+	var dmg: int = max(1, get_shot_damage())
+	return int(ceil(float(GameState.mission.enemy_base_hp) / float(dmg)))
+
+
+func can_start_charge() -> bool:
+	if GameState.mission.is_over or is_charging:
+		return false
+	if GameState.is_base_locked():
+		return false
+	if GameState.mission.enemy_base_hp <= 0:
+		return false
+	return GameState.mission.economy["money"] >= Balance.BASE_ATTACK_COST
+
+
+func start_charge() -> bool:
+	if not can_start_charge():
+		return false
+	if not GameState.spend_money(Balance.BASE_ATTACK_COST):
+		return false
+	charge_total_time = get_charge_duration()
+	charge_remaining = charge_total_time
+	is_charging = true
+	GameState.base_attack_charging_active = true
+	charge_started.emit()
+	GameState.event_logged.emit("Hive Destroyer charging (%.0fs)" % charge_total_time)
+	return true
+
+
+func is_in_firing_warning() -> bool:
+	return is_charging and charge_remaining <= Balance.BASE_ATTACK_FIRE_WARNING_TIME
+
+
+func get_charge_progress() -> float:
+	if not is_charging or charge_total_time <= 0.0:
+		return 0.0
+	return clampf(1.0 - (charge_remaining / charge_total_time), 0.0, 1.0)
+
+
+func _fire_hive_destroyer() -> void:
+	is_charging = false
+	charge_remaining = 0.0
+	GameState.base_attack_charging_active = false
+
+	var dmg: int = get_shot_damage()
+	var m := GameState.mission
+	m.enemy_base_hp = max(0, m.enemy_base_hp - dmg)
+	m.stats["charges_fired"] += 1
+	GameState.enemy_base_hp_changed.emit(m.enemy_base_hp)
+
+	if map_ref != null:
+		map_ref.trigger_hive_beam_effect()
+
+	var msg: String = "Hive destroyer hit - %d damage" % dmg
+	GameState.event_logged.emit(msg)
+	base_attack_fired.emit(dmg, m.enemy_base_hp)
+
+	if m.enemy_base_hp <= 0:
+		GameState.end_mission("won", "Enemy Base destroyed by Hive Destroyer!")

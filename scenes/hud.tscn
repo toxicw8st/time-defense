@@ -20,11 +20,23 @@ theme_override_constants/separation = 24
 layout_mode = 2
 text = "Lives: 20 / 20"
 
-[node name="EnemyBaseLabel" type="Label" parent="TopBar/VBox/Row1"]
+[node name="EnemyBaseBox" type="VBoxContainer" parent="TopBar/VBox/Row1"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="EnemyBaseBar" type="ProgressBar" parent="TopBar/VBox/Row1/EnemyBaseBox"]
+custom_minimum_size = Vector2(360, 12)
+layout_mode = 2
+max_value = 500.0
+value = 500.0
+show_percentage = false
+
+[node name="EnemyBaseLabel" type="Label" parent="TopBar/VBox/Row1/EnemyBaseBox"]
+layout_mode = 2
 horizontal_alignment = 1
-text = "Enemy Base: 500 / 500 HP (Shots to kill: 3)"
+theme_override_font_sizes/font_size = 12
+text = "Enemy Base: 500 / 500 HP | Shots to destroy: 3"
 
 [node name="WaveLabel" type="Label" parent="TopBar/VBox/Row1"]
 layout_mode = 2
@@ -236,19 +248,19 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="RewindButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(225, 48)
+custom_minimum_size = Vector2(185, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "REWIND"
 
 [node name="PauseButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(225, 48)
+custom_minimum_size = Vector2(185, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "PAUSE"
 
 [node name="HasteButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(225, 48)
+custom_minimum_size = Vector2(185, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "HASTE"
@@ -258,13 +270,19 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="RefineryButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(185, 48)
+custom_minimum_size = Vector2(170, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Build Refinery (100$, 6s)"
 
+[node name="ChargeButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(195, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Hive Destroyer (150$, 30s)"
+
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(165, 48)
+custom_minimum_size = Vector2(145, 48)
 layout_mode = 2
 text = "START WAVE 1"
 

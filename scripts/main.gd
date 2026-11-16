@@ -6,6 +6,7 @@ extends Node2D
 @onready var surge_manager: SurgeManager = $SurgeManager
 @onready var mutation_manager: MutationManager = $MutationManager
 @onready var time_powers_manager: TimePowersManager = $TimePowersManager
+@onready var base_attack_manager: BaseAttackManager = $BaseAttackManager
 @onready var hud: CanvasLayer = $HUD
 
 
@@ -15,8 +16,9 @@ func _ready() -> void:
 	surge_manager.setup(wave_manager)
 	mutation_manager.setup()
 	time_powers_manager.setup(map, wave_manager)
+	base_attack_manager.setup(map)
 	map.set_economy_ref(economy_manager)
-	hud.set_references(map, wave_manager, economy_manager, surge_manager, time_powers_manager)
+	hud.set_references(map, wave_manager, economy_manager, surge_manager, time_powers_manager, base_attack_manager)
 	hud.start_wave_requested.connect(_on_start_wave_requested)
 	hud.restart_requested.connect(_on_restart_requested)
 

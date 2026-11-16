@@ -4,7 +4,8 @@ signal restart_requested
 signal start_wave_requested
 
 @onready var top_status_label: Label = $TopBar/VBox/Row1/TopStatusLabel
-@onready var enemy_base_label: Label = $TopBar/VBox/Row1/EnemyBaseLabel
+@onready var enemy_base_bar: ProgressBar = $TopBar/VBox/Row1/EnemyBaseBox/EnemyBaseBar
+@onready var enemy_base_label: Label = $TopBar/VBox/Row1/EnemyBaseBox/EnemyBaseLabel
 @onready var wave_label: Label = $TopBar/VBox/Row1/WaveLabel
 @onready var money_label: Label = $TopBar/VBox/Row2/MoneyLabel
 @onready var research_label: Label = $TopBar/VBox/Row2/ResearchLabel
@@ -42,6 +43,7 @@ signal start_wave_requested
 @onready var pause_button: Button = $BottomBar/VBox/Row2/PauseButton
 @onready var haste_button: Button = $BottomBar/VBox/Row2/HasteButton
 @onready var refinery_button: Button = $BottomBar/VBox/Row2/RefineryButton
+@onready var charge_button: Button = $BottomBar/VBox/Row2/ChargeButton
 @onready var start_wave_button: Button = $BottomBar/VBox/Row2/StartWaveButton
 @onready var event_feed_label: Label = $BottomBar/VBox/EventFeedLabel
 
@@ -61,6 +63,7 @@ var wave_manager_ref: WaveManager = null
 var economy_ref: EconomyManager = null
 var surge_ref: SurgeManager = null
 var time_powers_ref: TimePowersManager = null
+var base_attack_ref: BaseAttackManager = null
 
 var _last_summary_text: String = ""
 var _selected_pad_idx: int = -1
@@ -91,6 +94,7 @@ func _ready() -> void:
 	restart_button.pressed.connect(_on_restart_pressed)
 	start_wave_button.pressed.connect(_on_start_wave_pressed)
 	refinery_button.pressed.connect(_on_refinery_button_pressed)
+	charge_button.pressed.connect(_on_charge_button_pressed)
 	manip_upgrade_button.pressed.connect(_on_manip_upgrade_pressed)
 
 	rewind_button.pressed.connect(func() -> void: _activate_power("rewind"))
@@ -136,13 +140,15 @@ func set_references(
 	p_wm: WaveManager,
 	p_econ: EconomyManager = null,
 	p_surge: SurgeManager = null,
-	p_tp: TimePowersManager = null
+	p_tp: TimePowersManager = null,
+	p_ba: BaseAttackManager = null
 ) -> void:
 	map_ref = p_map
 	wave_manager_ref = p_wm
 	economy_ref = p_econ
 	surge_ref = p_surge
 	time_powers_ref = p_tp
+	base_attack_ref = p_ba
 	if map_ref != null:
 		map_ref.pad_selected.connect(_on_pad_selected)
 		map_ref.tower_selected.connect(_on_tower_selected)
@@ -174,8 +180,10 @@ func _process(delta: float) -> void:
 func _refresh_all() -> void:
 	var m := GameState.mission
 	top_status_label.text = "Lives: %d / %d" % [m.lives, Balance.PLAYER_STARTING_LIVES]
-	var shots_left: int = int(ceil(float(m.enemy_base_hp) / float(Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE)))
-	enemy_base_label.text = "Enemy Base: %d / %d HP  (Shots to kill: %d)" % [m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP, shots_left]
+	enemy_base_bar.max_value = Balance.ENEMY_BASE_MAX_HP
+	enemy_base_bar.value = m.enemy_base_hp
+	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE)))
+	enemy_base_label.text = "Enemy Base: %d / %d HP  |  Shots to destroy: %d" % [m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP, shots_left]
 	wave_label.text = "Wave %d / 15" % m.wave_number
 	money_label.text = "Money: %d" % m.economy["money"]
 	research_label.text = "Research: %d" % m.economy["research"]
@@ -195,6 +203,7 @@ func _refresh_all() -> void:
 	_refresh_surge_bar()
 	_refresh_power_buttons()
 	_refresh_refinery_button()
+	_refresh_charge_button()
 	_refresh_start_wave_button()
 
 	if debug_panel.visible:
@@ -417,6 +426,41 @@ func _refresh_research_panel() -> void:
 			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
 
+func _refresh_charge_button() -> void:
+	if base_attack_ref == null:
+		charge_button.disabled = true
+		return
+	if base_attack_ref.is_charging:
+		var pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0))
+		if base_attack_ref.is_in_firing_warning():
+			var flash: float = 0.65 + 0.35 * sin(_pulse_accum * 16.0)
+			charge_button.text = "HIVE DESTROYER\nREADY - firing (%.1fs)" % base_attack_ref.charge_remaining
+			charge_button.modulate = Color(1.0, 0.85, 0.25, flash)
+		else:
+			charge_button.text = "HIVE DESTROYER\nCHARGING %d%% (%.1fs)" % [pct, base_attack_ref.charge_remaining]
+			charge_button.modulate = Color(0.45, 0.9, 1.0)
+		charge_button.disabled = true
+		return
+
+	var cost: int = Balance.BASE_ATTACK_COST
+	var dur: int = int(round(base_attack_ref.get_charge_duration()))
+	if GameState.is_base_locked():
+		charge_button.text = "Hive Destroyer (%d$, %ds)\n[BASE LOCKED]" % [cost, dur]
+		charge_button.disabled = true
+		charge_button.modulate = Color(0.7, 0.7, 0.7)
+		return
+	var affordable: bool = base_attack_ref.can_start_charge()
+	charge_button.text = "Hive Destroyer (%d$, %ds)\nDeals %d dmg (no Haste)" % [cost, dur, base_attack_ref.get_shot_damage()]
+	charge_button.disabled = not affordable
+	charge_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+
+
+func _on_charge_button_pressed() -> void:
+	if base_attack_ref != null:
+		base_attack_ref.start_charge()
+		_refresh_all()
+
+
 func _refresh_refinery_button() -> void:
 	if economy_ref == null:
 		refinery_button.disabled = true
@@ -617,20 +661,30 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 		end_title_label.text = "DEFEAT - BASE LOST"
 
 	var m := GameState.mission
+	var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
 	end_stats_label.text = "\n".join([
 		reason,
-		"Mission Time: %.1f s | Wave: %d / 15" % [GameState.mission_elapsed_seconds, m.wave_number],
+		"Mission Time: %.1f s | Wave: %d / 15 | Waves Cleared: %d" % [
+			GameState.mission_elapsed_seconds,
+			m.wave_number,
+			m.stats["waves_completed"],
+		],
 		"Powers Used -> Rewind: %d | Pause: %d | Haste: %d" % [
 			m.stats["powers_used"]["rewind"],
 			m.stats["powers_used"]["pause"],
 			m.stats["powers_used"]["haste"],
 		],
-		"Mutations -> Armoured x%d | Thaw x%d | Swift x%d" % [
+		"Mutations -> Armoured x%d | Thaw-hardened x%d | Swift x%d" % [
 			m.mutations["armoured_stacks"],
 			m.mutations["thaw_stacks"],
 			m.mutations["swift_stacks"],
 		],
-		"Surges Suffered: %d | Base Charges Fired: %d" % [m.surge_count, m.stats["charges_fired"]],
+		"Surges Suffered: %d (Towers at %d%% speed)" % [m.surge_count, pct],
+		"Money Earned: %d | Research Earned: %d | Base Charges Fired: %d" % [
+			m.stats["money_earned"],
+			m.stats["research_earned"],
+			m.stats["charges_fired"],
+		],
 	])
 
 

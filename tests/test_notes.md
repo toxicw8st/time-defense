@@ -45,3 +45,11 @@
 - [x] Haste 3x finishes a 7 s Mortar in ~2.33 s and adds Swift x1
 - [x] Creator-confirmed Rewind restarts current enemy wave, keeps mid-wave towers/money/research/lost lives/surges, adds Armoured x1, locks nested Rewind, and starts 65 s cooldown after replay ends
 - [x] Manipulator upgrade disables all 3 powers (`OFFLINE`), locks Refineries, and pauses Surge for exact build duration (`tests/test_step6.tscn` -> `STEP6_TEST_PASS`)
+
+## Step 7 — Base Attack, Win and Lose
+- [x] Enemy Base HP bar + live shots-to-destroy always visible in Top Bar
+- [x] 3 charges (167 dmg/shot test override) destroy the 500 HP Enemy Base (`tests/test_step7.tscn` -> `STEP7_TEST_PASS`)
+- [x] Haste active during a charge does NOT affect its 30.0 s completion time
+- [x] Win triggers mid-wave the instant the 3rd hit lands
+- [x] Manipulator upgrade & Hive Destroyer charge mutually respect the Base lock
+- [x] Restart after loss zeroes mutations, surges, resets money=200, research=0, refineries=1, manipulator=1, wave=1
