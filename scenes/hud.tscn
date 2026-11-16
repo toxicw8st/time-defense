@@ -108,6 +108,23 @@ autowrap_mode = 3
 [node name="HSeparator" type="HSeparator" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
 
+[node name="HoverInfoPanel" type="PanelContainer" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="HoverMargin" type="MarginContainer" parent="RightPanel/Margin/VBox/HoverInfoPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="HoverInfoLabel" type="Label" parent="RightPanel/Margin/VBox/HoverInfoPanel/HoverMargin"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Hover any button below for its description."
+autowrap_mode = 3
+
 [node name="Scroll" type="ScrollContainer" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -128,18 +145,18 @@ text = "BUILD TOWERS (click a tower or pad P1-P14)"
 autowrap_mode = 3
 
 [node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 12
 text = "Blaster Turret (75$)"
 alignment = 0
-autowrap_mode = 3
 
 [node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 12
 text = "Cluster Mortar (110$)"
 alignment = 0
-autowrap_mode = 3
 
 [node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 visible = false
@@ -163,31 +180,32 @@ theme_override_font_sizes/font_size = 11
 text = "Status: Active"
 
 [node name="UpgradeDmgButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Damage"
 alignment = 0
-autowrap_mode = 3
 
 [node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Range"
 alignment = 0
-autowrap_mode = 3
 
 [node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Fire Rate"
 alignment = 0
-autowrap_mode = 3
 
 [node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Sell Tower"
-autowrap_mode = 3
+alignment = 0
 
 [node name="ManipulatorBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
@@ -200,11 +218,11 @@ text = "Manipulator Lv 1 -> 2"
 autowrap_mode = 3
 
 [node name="ManipUpgradeButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox"]
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
-text = "Upgrade Manipulator (150$, 10s)"
+text = "Upgrade Manipulator (150$)"
 alignment = 0
-autowrap_mode = 3
 
 [node name="ResearchBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2

@@ -85,9 +85,16 @@ func _test_real_ui_clicks_and_prompts() -> void:
 			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] + map.position
 			assert(not r.has_point(pad_screen), "%s overlaps Pad P%d at %s! rect=%s" % [ctrl_name, i + 1, str(pad_screen), str(r)])
 
-	# Verify BuildMenuBox is IMMEDIATELY visible on startup (no mystery!)
+	# Verify BuildMenuBox is IMMEDIATELY visible on startup with icons, button styles & hover descriptions
 	assert(hud.build_menu_box.visible, "BuildMenuBox must be visible on startup so player sees towers to add")
 	assert(hud.build_blaster_button.visible and hud.build_mortar_button.visible)
+	assert(hud.build_blaster_button.icon != null and hud.build_mortar_button.icon != null, "Tower buttons must have icons")
+	assert(hud.manip_upgrade_button.icon != null, "Manipulator button must have icon")
+	for k in hud._research_buttons.keys():
+		assert(hud._research_buttons[k].icon != null, "Research button %s must have icon" % k)
+	hud.build_blaster_button.mouse_entered.emit()
+	assert(hud.hover_info_label.text.contains("Piercing"), "Hovering Blaster button must show description")
+	hud.build_blaster_button.mouse_exited.emit()
 
 	# Verify Wave 1 PromptBanner is visible and NOT overlapping Pad P1 (220, 64+32=96)!
 	assert(hud.prompt_banner.visible and hud.prompt_label.text.contains("TIP (1/6)"))

@@ -16,6 +16,8 @@ signal start_wave_requested
 @onready var preview_body_label: Label = $RightPanel/Margin/VBox/PreviewBodyLabel
 @onready var preview_mutations_label: Label = $RightPanel/Margin/VBox/PreviewMutationsLabel
 @onready var wave_summary_label: Label = $RightPanel/Margin/VBox/WaveSummaryLabel
+@onready var hover_info_panel: PanelContainer = $RightPanel/Margin/VBox/HoverInfoPanel
+@onready var hover_info_label: Label = $RightPanel/Margin/VBox/HoverInfoPanel/HoverMargin/HoverInfoLabel
 
 @onready var build_menu_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox
 @onready var build_pad_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildPadLabel
@@ -84,6 +86,10 @@ var _research_buttons: Dictionary = {}
 var _event_feed: Array[String] = []
 var _banner_timer: float = 0.0
 var _pulse_accum: float = 0.0
+var _icons: Dictionary = {}
+var _hover_descriptions: Dictionary = {}
+var _hovered_button: Button = null
+var _armed_style_state: Dictionary = {"blaster": false, "mortar": false}
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -135,6 +141,7 @@ func _ready() -> void:
 	sell_button.pressed.connect(_on_sell_pressed)
 
 	_build_research_buttons()
+	_setup_right_panel_buttons()
 
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
@@ -154,8 +161,8 @@ func _exit_tree() -> void:
 func _build_research_buttons() -> void:
 	for key in RESEARCH_ORDER:
 		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(0, 30)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		btn.add_theme_font_size_override("font_size", 11)
 		btn.pressed.connect(func() -> void:
 			if economy_ref != null:
@@ -164,6 +171,68 @@ func _build_research_buttons() -> void:
 		)
 		research_list_box.add_child(btn)
 		_research_buttons[key] = btn
+
+
+func _setup_right_panel_buttons() -> void:
+	hover_info_panel.add_theme_stylebox_override("panel", UIIcons.make_button_style(Color(0.10, 0.13, 0.19), Color(0.32, 0.44, 0.62), 1))
+
+	var icon_keys: Array[String] = [
+		"blaster", "mortar", "damage", "range", "fire_rate", "sell", "manipulator",
+		"rapid_cycling", "reinforced_shots", "extended_optics", "efficient_manipulator", "hive_breaker",
+	]
+	for k in icon_keys:
+		_icons[k] = UIIcons.create_icon(k)
+
+	_init_styled_button(build_blaster_button, _icons["blaster"], Color(0.28, 0.62, 0.95))
+	_init_styled_button(build_mortar_button, _icons["mortar"], Color(0.32, 0.78, 0.54))
+	_init_styled_button(upg_dmg_button, _icons["damage"], Color(0.92, 0.48, 0.35))
+	_init_styled_button(upg_rng_button, _icons["range"], Color(0.35, 0.82, 0.95))
+	_init_styled_button(upg_spd_button, _icons["fire_rate"], Color(0.95, 0.82, 0.32))
+	_init_styled_button(sell_button, _icons["sell"], Color(0.88, 0.72, 0.25))
+	_init_styled_button(manip_upgrade_button, _icons["manipulator"], Color(0.68, 0.52, 0.95))
+
+	for key in RESEARCH_ORDER:
+		var btn: Button = _research_buttons[key]
+		_init_styled_button(btn, _icons[key], Color(0.42, 0.72, 0.92))
+
+	# Also style Bottom Bar buttons so every clickable button reads cleanly
+	UIIcons.apply_right_button_theme(rewind_button, Color(0.75, 0.58, 0.95))
+	UIIcons.apply_right_button_theme(pause_button, Color(0.42, 0.78, 0.98))
+	UIIcons.apply_right_button_theme(haste_button, Color(0.42, 0.92, 0.72))
+	UIIcons.apply_right_button_theme(refinery_button, Color(0.38, 0.82, 0.58))
+	UIIcons.apply_right_button_theme(charge_button, Color(0.95, 0.62, 0.28))
+	UIIcons.apply_right_button_theme(start_wave_button, Color(0.38, 0.78, 1.0))
+
+
+func _init_styled_button(btn: Button, icon_tex: Texture2D, accent: Color) -> void:
+	btn.icon = icon_tex
+	btn.expand_icon = false
+	UIIcons.apply_right_button_theme(btn, accent)
+	btn.mouse_entered.connect(func() -> void:
+		_hovered_button = btn
+		_refresh_hover_info()
+	)
+	btn.mouse_exited.connect(func() -> void:
+		if _hovered_button == btn:
+			_hovered_button = null
+			_refresh_hover_info()
+	)
+
+
+func _set_button_description(btn: Button, desc: String) -> void:
+	_hover_descriptions[btn] = desc
+	btn.tooltip_text = desc
+	if _hovered_button == btn:
+		_refresh_hover_info()
+
+
+func _refresh_hover_info() -> void:
+	if _hovered_button != null and _hover_descriptions.has(_hovered_button):
+		hover_info_label.text = _hover_descriptions[_hovered_button]
+		hover_info_label.modulate = Color(0.95, 0.98, 1.0)
+	else:
+		hover_info_label.text = "Hover any button below for its description."
+		hover_info_label.modulate = Color(0.68, 0.76, 0.88)
 
 
 func set_references(
@@ -342,35 +411,44 @@ func _refresh_manipulator_panel() -> void:
 			phase_note,
 		]
 		manip_status_label.modulate = Color(1.0, 0.78, 0.35)
-		manip_upgrade_button.text = "Upgrading (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
+		manip_upgrade_button.text = "Manipulator (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
 		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.75, 0.75, 0.75)
+		manip_upgrade_button.modulate = Color(0.85, 0.85, 0.88)
+		_set_button_description(manip_upgrade_button, "Upgrading Manipulator: all time powers are OFFLINE, Base is locked, and Surge is paused.")
 		return
 
 	if m.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
-		manip_status_label.text = "Manipulator Lv %d / %d (MAX)" % [m.manipulator_level, Balance.MANIPULATOR_MAX_LEVEL]
+		manip_status_label.text = "Manipulator Lv %d / %d" % [m.manipulator_level, Balance.MANIPULATOR_MAX_LEVEL]
 		manip_status_label.modulate = Color(0.55, 0.95, 0.65)
 		manip_upgrade_button.text = "Manipulator MAX"
 		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.75, 0.9, 0.75)
+		manip_upgrade_button.modulate = Color(0.75, 0.95, 0.78)
+		_set_button_description(manip_upgrade_button, "Manipulator is at maximum prototype level (Lv 5).")
 		return
 
 	var next_lvl: int = m.manipulator_level + 1
 	var cfg: Dictionary = Balance.MANIPULATOR_UPGRADES[next_lvl]
 	var cost: int = int(cfg["cost"])
 	var btime: int = int(cfg["build_time"])
-	manip_status_label.text = "Manipulator Lv %d -> %d: %s" % [m.manipulator_level, next_lvl, cfg["benefit_text"]]
+	manip_status_label.text = "Manipulator Lv %d" % m.manipulator_level
 	manip_status_label.modulate = Color(0.85, 0.9, 1.0)
+	_set_button_description(manip_upgrade_button, "Lv %d -> %d (%d$, %ds in wave): %s. Takes all powers OFFLINE & locks Base while building (Surge pauses)." % [
+		m.manipulator_level,
+		next_lvl,
+		cost,
+		btime,
+		cfg["benefit_text"],
+	])
 	if GameState.is_base_charging():
-		manip_upgrade_button.text = "Upgrade (%d$, %ds) [BASE BUSY]" % [cost, btime]
+		manip_upgrade_button.text = "Manipulator Lv%d (%d$) [BUSY]" % [next_lvl, cost]
 		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.72, 0.72, 0.72)
+		manip_upgrade_button.modulate = Color(0.78, 0.78, 0.82)
 		return
 
 	var can_buy: bool = time_powers_ref != null and time_powers_ref.can_upgrade_manipulator()
-	manip_upgrade_button.text = "Upgrade Manipulator (%d$, %ds downtime)" % [cost, btime]
+	manip_upgrade_button.text = "Manipulator Lv%d (%d$)" % [next_lvl, cost]
 	manip_upgrade_button.disabled = not can_buy
-	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.45, 0.45)
+	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.65, 0.65)
 
 
 func _refresh_preview_panel() -> void:
@@ -428,17 +506,22 @@ func _refresh_selection_panel() -> void:
 			tower_status_label.text = "Status: Active"
 			tower_status_label.modulate = Color(0.55, 0.95, 0.65)
 
-		_style_upgrade_button(upg_dmg_button, "Damage (+25%)", "damage", _selected_tower, money)
-		_style_upgrade_button(upg_rng_button, "Range (+12%)", "range", _selected_tower, money)
-		_style_upgrade_button(upg_spd_button, "Fire Rate (+15%)", "fire_rate", _selected_tower, money)
+		_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+25% damage per level")
+		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+12% range per level")
+		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+15% fire speed per level")
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
+		_set_button_description(sell_button, "Sell this tower for %d money (50%% of %d total spent) and free pad P%d." % [
+			refund,
+			_selected_tower.total_spent,
+			_selected_tower.pad_index + 1,
+		])
 		if _sell_confirm_armed:
-			sell_button.text = "CONFIRM SELL (+%d money)" % refund
+			sell_button.text = "CONFIRM SELL (+%d$)" % refund
 			sell_button.modulate = Color(1.0, 0.55, 0.45)
 		else:
-			sell_button.text = "Sell Tower (+%d money, 50%%)" % refund
+			sell_button.text = "Sell Tower (+%d$)" % refund
 			sell_button.modulate = Color.WHITE
 	elif _selected_pad_idx >= 0:
 		build_menu_box.visible = true
@@ -451,9 +534,9 @@ func _refresh_selection_panel() -> void:
 		tower_panel_box.visible = false
 		var pending: String = map_ref.pending_build_type if map_ref != null else ""
 		if pending != "":
-			build_pad_label.text = "CLICK AN EMPTY PAD (P1-P14) TO PLACE %s (right-click cancels)" % Balance.TOWERS[pending]["name"].to_upper()
+			build_pad_label.text = "CLICK PAD P1-P14 TO PLACE %s" % Balance.TOWERS[pending]["name"].to_upper()
 		else:
-			build_pad_label.text = "BUILD TOWERS (click a tower or pad P1-P14)"
+			build_pad_label.text = "BUILD TOWERS"
 		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
 		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
 
@@ -465,15 +548,20 @@ func _refresh_research_panel() -> void:
 		var cfg: Dictionary = Balance.RESEARCH_NODES[key]
 		var cost: int = int(cfg["cost"])
 		var owned: bool = GameState.mission.owned_research.get(key, false)
+		_set_button_description(btn, "%s (%d Research): %s (applies globally, instant)." % [
+			cfg["name"],
+			cost,
+			cfg["description"],
+		])
 		if owned:
-			btn.text = "[OWNED] %s (%s)" % [cfg["name"], cfg["description"]]
+			btn.text = "%s [OWNED]" % cfg["name"]
 			btn.disabled = true
-			btn.modulate = Color(0.55, 0.95, 0.65)
+			btn.modulate = Color(0.62, 0.95, 0.72)
 		else:
-			btn.text = "%s (%d R) - %s" % [cfg["name"], cost, cfg["description"]]
+			btn.text = "%s (%d R)" % [cfg["name"], cost]
 			var affordable: bool = res >= cost and not GameState.mission.is_over
 			btn.disabled = not affordable
-			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.65, 0.65)
 
 
 func _refresh_charge_button() -> void:
@@ -541,23 +629,33 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	var cost: int = int(cfg["cost"])
 	var affordable: bool = money >= cost and not GameState.mission.is_over
 	var armed_prefix: String = "[CLICK PAD] " if is_armed else ""
-	btn.text = "%s%s (%d$, %ds)\n%s - Dmg: %s, Spd: %s" % [
-		armed_prefix,
+	btn.text = "%s%s (%d$)" % [armed_prefix, cfg["name"], cost]
+	btn.disabled = not affordable
+	if _armed_style_state.get(tower_type, false) != is_armed:
+		_armed_style_state[tower_type] = is_armed
+		var accent := Color(0.28, 0.62, 0.95) if tower_type == "blaster" else Color(0.32, 0.78, 0.54)
+		UIIcons.apply_right_button_theme(btn, accent, is_armed)
+
+	var desc: String = "%s (%d$, %ds build): %s. %s - Damage: %s, Speed: %s." % [
 		cfg["name"],
 		cost,
 		int(cfg["build_time"]),
+		cfg["role"],
 		cfg["damage_type_label"],
 		cfg["damage_rating"],
 		cfg["speed_rating"],
 	]
-	btn.disabled = not affordable
+	if tower_type == "mortar":
+		desc += " 60 px min blind spot."
+	_set_button_description(btn, desc)
+
 	if is_armed:
-		btn.modulate = Color(0.55, 0.95, 1.0)
+		btn.modulate = Color(0.75, 0.98, 1.0)
 	else:
-		btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+		btn.modulate = Color.WHITE if affordable else Color(1.0, 0.65, 0.65)
 
 
-func _style_upgrade_button(btn: Button, title: String, key: String, tower: TowerUnit, money: int) -> void:
+func _style_upgrade_button(btn: Button, title: String, key: String, tower: TowerUnit, money: int, desc_detail: String) -> void:
 	var lvl: int = int(tower.levels.get(key, 0))
 	var pips: String = ""
 	for i in range(Balance.TOWER_UPGRADE_MAX_LEVEL):
@@ -565,17 +663,25 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 	if lvl >= Balance.TOWER_UPGRADE_MAX_LEVEL:
 		btn.text = "%s %s MAX" % [title, pips]
 		btn.disabled = true
-		btn.modulate = Color(0.75, 0.9, 0.75)
+		btn.modulate = Color(0.75, 0.92, 0.78)
+		_set_button_description(btn, "%s is at maximum level (3/3): %s." % [title, desc_detail])
 		return
 	var cost: int = Balance.TOWER_UPGRADE_COSTS[lvl]
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
-	btn.text = "%s %s - %d$ (%ds)" % [title, pips, cost, btime]
+	btn.text = "%s %s (%d$)" % [title, pips, cost]
 	btn.disabled = not can_buy
+	_set_button_description(btn, "Upgrade %s to Lvl %d/3 (%d$, %ds in wave): %s. Tower cannot fire while upgrading." % [
+		title,
+		lvl + 1,
+		cost,
+		btime,
+		desc_detail,
+	])
 	if money < cost:
-		btn.modulate = Color(1.0, 0.45, 0.45)
+		btn.modulate = Color(1.0, 0.65, 0.65)
 	elif not can_buy:
-		btn.modulate = Color(0.7, 0.7, 0.7)
+		btn.modulate = Color(0.8, 0.8, 0.85)
 	else:
 		btn.modulate = Color.WHITE
 
