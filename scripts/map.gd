@@ -61,6 +61,21 @@ var selected_tower: TowerUnit = null
 var preview_tower_type: String = ""
 var pad_occupancy: Array[TowerUnit] = []
 var floating_texts: Array[Dictionary] = []
+var economy_ref: Node = null
+
+
+func set_economy_ref(p_econ: Node) -> void:
+	economy_ref = p_econ
+
+
+func show_refinery_tick_floaters(owned_count: int) -> void:
+	for i in range(owned_count):
+		var col: int = i % 2
+		var row: int = i / 2
+		var rx: float = REFINERY_ANNEX_RECT.position.x + 24.0 + float(col) * 56.0
+		var ry: float = REFINERY_ANNEX_RECT.position.y + 32.0 + float(row) * 44.0
+		if ry <= REFINERY_ANNEX_RECT.end.y:
+			spawn_floater(Vector2(rx, ry), "+%d$" % Balance.REFINERY_INCOME_PER_TICK, Color(0.55, 0.95, 0.65))
 
 
 func _ready() -> void:
@@ -326,6 +341,20 @@ func _draw() -> void:
 			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.24, 0.55, 0.45))
 			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.5, 0.9, 0.75), false, 1.5)
 			draw_string(font, Vector2(rx + 10, ry + 21), "REF", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.95, 1.0, 0.95))
+
+	if economy_ref != null and economy_ref.refinery_job != null:
+		var i: int = ref_count
+		var col: int = i % 2
+		var row: int = i / 2
+		var rx: float = REFINERY_ANNEX_RECT.position.x + 16.0 + float(col) * 56.0
+		var ry: float = REFINERY_ANNEX_RECT.position.y + 32.0 + float(row) * 44.0
+		if ry + 32.0 <= REFINERY_ANNEX_RECT.end.y:
+			var center := Vector2(rx + 22.0, ry + 16.0)
+			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.32, 0.35, 0.22))
+			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.95, 0.82, 0.32), false, 1.5)
+			var prog: float = economy_ref.refinery_job.get_progress()
+			draw_arc(center, 14.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 24, Color(0.45, 0.95, 0.65), 2.5)
+			draw_string(font, Vector2(rx + 6, ry + 21), "%.1fs" % economy_ref.refinery_job.remaining_time, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 
 	# Draw S-path
 	if enemy_path != null and enemy_path.curve != null:

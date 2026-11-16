@@ -186,3 +186,8 @@ func get_construction_speed_multiplier() -> float:
 	if is_haste_active:
 		return float(Balance.TIME_POWERS["haste"]["construction_speed_multiplier"])
 	return 1.0
+
+
+func is_base_locked() -> bool:
+	return mission.manipulator_upgrading_remaining > 0.0
+

@@ -47,7 +47,7 @@ text = "Research: 0"
 [node name="RefineriesLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Refineries: 1"
+text = "Refineries: 1 (+8$/5s)"
 
 [node name="ClockLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
@@ -68,85 +68,121 @@ theme_override_constants/margin_bottom = 8
 
 [node name="VBox" type="VBoxContainer" parent="RightPanel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 4
 
 [node name="PreviewTitleLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 13
 text = "PRE-WAVE PREVIEW - Wave 1 / 15"
 
 [node name="PreviewBodyLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "Incoming: 8 Runners"
 autowrap_mode = 3
 
 [node name="PreviewMutationsLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "Mutations: No mutations"
 autowrap_mode = 3
 
 [node name="WaveSummaryLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = ""
 autowrap_mode = 3
 
 [node name="HSeparator" type="HSeparator" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
 
-[node name="BuildMenuBox" type="VBoxContainer" parent="RightPanel/Margin/VBox"]
-visible = false
+[node name="Scroll" type="ScrollContainer" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ContentVBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+[node name="BuildMenuBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
+visible = false
 layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "BUILD ON PAD"
 
-[node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+[node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Blaster Turret (75$)"
 alignment = 0
 
-[node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/BuildMenuBox"]
+[node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Cluster Mortar (110$)"
 alignment = 0
 
-[node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox"]
+[node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 visible = false
 layout_mode = 2
-theme_override_constants/separation = 5
+theme_override_constants/separation = 4
 
-[node name="TowerHeaderLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="TowerHeaderLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "Tower"
 
-[node name="TowerRatingsLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="TowerRatingsLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Piercing - Damage: Medium, Speed: High"
 autowrap_mode = 3
 
-[node name="TowerStatusLabel" type="Label" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="TowerStatusLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Status: Active"
 
-[node name="UpgradeDmgButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="UpgradeDmgButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Damage"
 alignment = 0
 
-[node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Range"
 alignment = 0
 
-[node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Fire Rate"
 alignment = 0
 
-[node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/TowerPanelBox"]
+[node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 11
 text = "Sell Tower"
+
+[node name="ResearchBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ResearchTitle" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "GLOBAL RESEARCH (kills only)"
+
+[node name="ResearchButtons" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox"]
+layout_mode = 2
+theme_override_constants/separation = 3
 
 [node name="BottomBar" type="PanelContainer" parent="."]
 offset_top = 544.0
@@ -163,15 +199,20 @@ text = "SURGE BAR (active from Step 5)"
 
 [node name="Row2" type="HBoxContainer" parent="BottomBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 12
 
 [node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "POWER BAR & EVENT FEED (Steps 4-8)"
+text = "POWER BAR (Step 6)"
+
+[node name="RefineryButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(210, 44)
+layout_mode = 2
+text = "Build Refinery (100$, 6s)"
 
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(200, 44)
+custom_minimum_size = Vector2(180, 44)
 layout_mode = 2
 text = "START WAVE 1"
 

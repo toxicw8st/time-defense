@@ -1,13 +1,16 @@
 extends Node2D
 
 @onready var map: GameMap = $Map
-@onready var hud: CanvasLayer = $HUD
 @onready var wave_manager: WaveManager = $WaveManager
+@onready var economy_manager: EconomyManager = $EconomyManager
+@onready var hud: CanvasLayer = $HUD
 
 
 func _ready() -> void:
 	wave_manager.setup(map)
-	hud.set_references(map, wave_manager)
+	economy_manager.setup(map)
+	map.set_economy_ref(economy_manager)
+	hud.set_references(map, wave_manager, economy_manager)
 	hud.start_wave_requested.connect(_on_start_wave_requested)
 	hud.restart_requested.connect(_on_restart_requested)
 

@@ -26,5 +26,13 @@
 - [x] Sell refunds exact `floor(50% of total_spent)` (`75->37`, `125->62`) and frees the pad
 - [x] Kill earnings (`+money`, `+research`) appear as floating text and update economy totals
 
+## Step 4 — Economy, Refineries and Research Tree
+- [x] Refinery prices follow curve: `100, 135, 180, 245, 330` (`tests/test_step4.tscn` -> `STEP4_TEST_PASS no_ref_w5=596 ref_w5=736 w6_leaks=0`)
+- [x] Buying Rapid Cycling raises fire rate on F1 debug overlay (`1.00x -> 1.05x`)
+- [x] Currency separation enforced: Research cannot buy towers; Money cannot buy research
+- [x] No-refinery (`596`) vs refinery-first (`736`) reach Wave 5 with visibly different money totals
+- [x] First Balance Sanity Check (Waves 1-6, no powers): Waves 1-2 clean (0 leaks), Wave 6 held cleanly (`0` leaks with reasonable build)
+
+
 
  (`Step 0: project skeleton + balance data + F1 debug overlay`)

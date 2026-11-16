@@ -16,22 +16,25 @@ signal start_wave_requested
 @onready var preview_mutations_label: Label = $RightPanel/Margin/VBox/PreviewMutationsLabel
 @onready var wave_summary_label: Label = $RightPanel/Margin/VBox/WaveSummaryLabel
 
-@onready var build_menu_box: VBoxContainer = $RightPanel/Margin/VBox/BuildMenuBox
-@onready var build_pad_label: Label = $RightPanel/Margin/VBox/BuildMenuBox/BuildPadLabel
-@onready var build_blaster_button: Button = $RightPanel/Margin/VBox/BuildMenuBox/BuildBlasterButton
-@onready var build_mortar_button: Button = $RightPanel/Margin/VBox/BuildMenuBox/BuildMortarButton
+@onready var build_menu_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox
+@onready var build_pad_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildPadLabel
+@onready var build_blaster_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildBlasterButton
+@onready var build_mortar_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildMortarButton
 
-@onready var tower_panel_box: VBoxContainer = $RightPanel/Margin/VBox/TowerPanelBox
-@onready var tower_header_label: Label = $RightPanel/Margin/VBox/TowerPanelBox/TowerHeaderLabel
-@onready var tower_ratings_label: Label = $RightPanel/Margin/VBox/TowerPanelBox/TowerRatingsLabel
-@onready var tower_status_label: Label = $RightPanel/Margin/VBox/TowerPanelBox/TowerStatusLabel
-@onready var upg_dmg_button: Button = $RightPanel/Margin/VBox/TowerPanelBox/UpgradeDmgButton
-@onready var upg_rng_button: Button = $RightPanel/Margin/VBox/TowerPanelBox/UpgradeRngButton
-@onready var upg_spd_button: Button = $RightPanel/Margin/VBox/TowerPanelBox/UpgradeSpdButton
-@onready var sell_button: Button = $RightPanel/Margin/VBox/TowerPanelBox/SellButton
+@onready var tower_panel_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox
+@onready var tower_header_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerHeaderLabel
+@onready var tower_ratings_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerRatingsLabel
+@onready var tower_status_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerStatusLabel
+@onready var upg_dmg_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeDmgButton
+@onready var upg_rng_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeRngButton
+@onready var upg_spd_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeSpdButton
+@onready var sell_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/SellButton
+
+@onready var research_list_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox/ResearchButtons
 
 @onready var surge_label: Label = $BottomBar/VBox/SurgeLabel
 @onready var power_placeholder_label: Label = $BottomBar/VBox/Row2/PowerPlaceholderLabel
+@onready var refinery_button: Button = $BottomBar/VBox/Row2/RefineryButton
 @onready var start_wave_button: Button = $BottomBar/VBox/Row2/StartWaveButton
 
 @onready var debug_panel: PanelContainer = $DebugPanel
@@ -44,10 +47,20 @@ signal start_wave_requested
 
 var map_ref: GameMap = null
 var wave_manager_ref: WaveManager = null
+var economy_ref: EconomyManager = null
 var _last_summary_text: String = ""
 var _selected_pad_idx: int = -1
 var _selected_tower: TowerUnit = null
 var _sell_confirm_armed: bool = false
+var _research_buttons: Dictionary = {}
+
+const RESEARCH_ORDER: Array[String] = [
+	"rapid_cycling",
+	"reinforced_shots",
+	"extended_optics",
+	"efficient_manipulator",
+	"hive_breaker",
+]
 
 
 func _ready() -> void:
@@ -59,6 +72,7 @@ func _ready() -> void:
 
 	restart_button.pressed.connect(_on_restart_pressed)
 	start_wave_button.pressed.connect(_on_start_wave_pressed)
+	refinery_button.pressed.connect(_on_refinery_button_pressed)
 
 	build_blaster_button.pressed.connect(func() -> void: _build_tower("blaster"))
 	build_mortar_button.pressed.connect(func() -> void: _build_tower("mortar"))
@@ -72,14 +86,31 @@ func _ready() -> void:
 	upg_spd_button.pressed.connect(func() -> void: _upgrade_selected("fire_rate"))
 	sell_button.pressed.connect(_on_sell_pressed)
 
+	_build_research_buttons()
+
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
 	_refresh_all()
 
 
-func set_references(p_map: GameMap, p_wm: WaveManager) -> void:
+func _build_research_buttons() -> void:
+	for key in RESEARCH_ORDER:
+		var btn := Button.new()
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.pressed.connect(func() -> void:
+			if economy_ref != null:
+				economy_ref.buy_research(key)
+				_refresh_all()
+		)
+		research_list_box.add_child(btn)
+		_research_buttons[key] = btn
+
+
+func set_references(p_map: GameMap, p_wm: WaveManager, p_econ: EconomyManager = null) -> void:
 	map_ref = p_map
 	wave_manager_ref = p_wm
+	economy_ref = p_econ
 	if map_ref != null:
 		map_ref.pad_selected.connect(_on_pad_selected)
 		map_ref.tower_selected.connect(_on_tower_selected)
@@ -109,7 +140,10 @@ func _refresh_all() -> void:
 	wave_label.text = "Wave %d / 15" % m.wave_number
 	money_label.text = "Money: %d" % m.economy["money"]
 	research_label.text = "Research: %d" % m.economy["research"]
-	refineries_label.text = "Refineries: %d" % m.economy["refineries_owned"]
+	refineries_label.text = "Refineries: %d (+%d$/5s)" % [
+		m.economy["refineries_owned"],
+		m.economy["refineries_owned"] * Balance.REFINERY_INCOME_PER_TICK,
+	]
 
 	var mins: int = int(GameState.mission_elapsed_seconds) / 60
 	var secs: int = int(GameState.mission_elapsed_seconds) % 60
@@ -117,6 +151,8 @@ func _refresh_all() -> void:
 
 	_refresh_preview_panel()
 	_refresh_selection_panel()
+	_refresh_research_panel()
+	_refresh_refinery_button()
 	_refresh_start_wave_button()
 
 	if debug_panel.visible:
@@ -200,6 +236,45 @@ func _refresh_selection_panel() -> void:
 		tower_panel_box.visible = false
 
 
+func _refresh_research_panel() -> void:
+	var res: int = GameState.mission.economy["research"]
+	for key in RESEARCH_ORDER:
+		var btn: Button = _research_buttons[key]
+		var cfg: Dictionary = Balance.RESEARCH_NODES[key]
+		var cost: int = int(cfg["cost"])
+		var owned: bool = GameState.mission.owned_research.get(key, false)
+		if owned:
+			btn.text = "[OWNED] %s (%s)" % [cfg["name"], cfg["description"]]
+			btn.disabled = true
+			btn.modulate = Color(0.55, 0.95, 0.65)
+		else:
+			btn.text = "%s (%d R) - %s" % [cfg["name"], cost, cfg["description"]]
+			var affordable: bool = res >= cost and not GameState.mission.is_over
+			btn.disabled = not affordable
+			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+
+
+func _refresh_refinery_button() -> void:
+	if economy_ref == null:
+		refinery_button.disabled = true
+		return
+	if economy_ref.refinery_job != null:
+		refinery_button.text = "Refinery Building (%.1fs)" % economy_ref.refinery_job.remaining_time
+		refinery_button.disabled = true
+		refinery_button.modulate = Color(1.0, 0.88, 0.4)
+		return
+	var cost: int = economy_ref.get_next_refinery_cost()
+	if GameState.is_base_locked():
+		refinery_button.text = "Refinery (%d$) [BASE LOCKED]" % cost
+		refinery_button.disabled = true
+		refinery_button.modulate = Color(0.7, 0.7, 0.7)
+		return
+	var affordable: bool = GameState.mission.economy["money"] >= cost and not GameState.mission.is_over
+	refinery_button.text = "Build Refinery (%d$, 6s)" % cost
+	refinery_button.disabled = not affordable
+	refinery_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+
+
 func _style_build_button(btn: Button, tower_type: String, money: int) -> void:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var cost: int = int(cfg["cost"])
@@ -278,6 +353,12 @@ func _refresh_debug_overlay() -> void:
 		],
 	]
 	debug_label.text = "\n".join(lines)
+
+
+func _on_refinery_button_pressed() -> void:
+	if economy_ref != null:
+		economy_ref.start_build_refinery()
+		_refresh_all()
 
 
 func _build_tower(tower_type: String) -> void:
