@@ -56,9 +56,30 @@ theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="RightPanelLabel" type="Label" parent="RightPanel/Margin"]
+[node name="VBox" type="VBoxContainer" parent="RightPanel/Margin"]
 layout_mode = 2
-text = "RIGHT PANEL\n(Step 1: Map & Path check)\nWave preview & tower menus arrive in Steps 2-3."
+theme_override_constants/separation = 10
+
+[node name="PreviewTitleLabel" type="Label" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+text = "PRE-WAVE PREVIEW - Wave 1 / 15"
+
+[node name="PreviewBodyLabel" type="Label" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+text = "Incoming: 8 Runners"
+autowrap_mode = 3
+
+[node name="PreviewMutationsLabel" type="Label" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+text = "Mutations: No mutations"
+autowrap_mode = 3
+
+[node name="HSeparator" type="HSeparator" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="WaveSummaryLabel" type="Label" parent="RightPanel/Margin/VBox"]
+layout_mode = 2
+text = ""
 autowrap_mode = 3
 
 [node name="BottomBar" type="PanelContainer" parent="."]
@@ -68,15 +89,25 @@ offset_bottom = 720.0
 
 [node name="VBox" type="VBoxContainer" parent="BottomBar"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 12
 
 [node name="SurgeLabel" type="Label" parent="BottomBar/VBox"]
 layout_mode = 2
 text = "SURGE BAR (active from Step 5)"
 
-[node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox"]
+[node name="Row2" type="HBoxContainer" parent="BottomBar/VBox"]
 layout_mode = 2
-text = "POWER BAR & EVENT FEED (Steps 5-8)"
+theme_override_constants/separation = 16
+
+[node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox/Row2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "POWER BAR & EVENT FEED (Steps 3-8)"
+
+[node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(200, 44)
+layout_mode = 2
+text = "START WAVE 1"
 
 [node name="DebugPanel" type="PanelContainer" parent="."]
 visible = false

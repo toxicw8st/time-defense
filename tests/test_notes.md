@@ -11,4 +11,12 @@
 - [x] 20 Runners spawn and all leak in order (IDs 1..20)
 - [x] Lives go 20 -> 0 and Lose screen shows
 - [x] No alien leaves the path; speed in px/s matches `50.0` balance value on F1 overlay
+
+## Step 2 — Waves as Data
+- [x] Waves 1-15 encoded as pure data in `data/waves.gd`
+- [x] Waves 1-3 play end-to-end (`tests/test_step2.tscn` -> `STEP2_TEST_PASS waves_1_to_3_money=287`)
+- [x] Pre-wave preview shows `"No mutations"` on Wave 1
+- [x] Wave bonus (`25 + 2 * wave`) is paid exactly once per wave number (verified no double-pay on replay)
+- [x] Editing wave count in `data/waves.gd` changes spawned schedule with zero code edits
+
  (`Step 0: project skeleton + balance data + F1 debug overlay`)

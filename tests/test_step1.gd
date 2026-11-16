@@ -18,7 +18,6 @@ func _ready() -> void:
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	main_inst = main_scene.instantiate()
-	main_inst.step1_auto_spawn = false
 	add_child(main_inst)
 
 	map_node = main_inst.get_node("Map")

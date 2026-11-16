@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 signal restart_requested
+signal start_wave_requested
 
 @onready var top_status_label: Label = $TopBar/VBox/Row1/TopStatusLabel
 @onready var enemy_base_label: Label = $TopBar/VBox/Row1/EnemyBaseLabel
@@ -8,9 +9,14 @@ signal restart_requested
 @onready var economy_label: Label = $TopBar/VBox/Row2/EconomyLabel
 @onready var clock_label: Label = $TopBar/VBox/Row2/ClockLabel
 
-@onready var right_panel_label: Label = $RightPanel/Margin/RightPanelLabel
+@onready var preview_title_label: Label = $RightPanel/Margin/VBox/PreviewTitleLabel
+@onready var preview_body_label: Label = $RightPanel/Margin/VBox/PreviewBodyLabel
+@onready var preview_mutations_label: Label = $RightPanel/Margin/VBox/PreviewMutationsLabel
+@onready var wave_summary_label: Label = $RightPanel/Margin/VBox/WaveSummaryLabel
+
 @onready var surge_label: Label = $BottomBar/VBox/SurgeLabel
-@onready var power_placeholder_label: Label = $BottomBar/VBox/PowerPlaceholderLabel
+@onready var power_placeholder_label: Label = $BottomBar/VBox/Row2/PowerPlaceholderLabel
+@onready var start_wave_button: Button = $BottomBar/VBox/Row2/StartWaveButton
 
 @onready var debug_panel: PanelContainer = $DebugPanel
 @onready var debug_label: Label = $DebugPanel/MarginContainer/DebugLabel
@@ -21,6 +27,8 @@ signal restart_requested
 @onready var restart_button: Button = $EndOverlay/Margin/VBox/RestartButton
 
 var map_ref: GameMap = null
+var wave_manager_ref: WaveManager = null
+var _last_summary_text: String = ""
 
 
 func _ready() -> void:
@@ -28,13 +36,19 @@ func _ready() -> void:
 	debug_panel.visible = false
 	end_overlay.visible = false
 	restart_button.pressed.connect(_on_restart_pressed)
+	start_wave_button.pressed.connect(_on_start_wave_pressed)
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
 	_refresh_all()
 
 
-func set_map_ref(p_map: GameMap) -> void:
+func set_references(p_map: GameMap, p_wm: WaveManager) -> void:
 	map_ref = p_map
+	wave_manager_ref = p_wm
+	if wave_manager_ref != null:
+		wave_manager_ref.wave_summary_updated.connect(_on_wave_summary_updated)
+		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
+	_refresh_all()
 
 
 func _input(event: InputEvent) -> void:
@@ -63,8 +77,60 @@ func _refresh_all() -> void:
 	var secs: int = int(GameState.mission_elapsed_seconds) % 60
 	clock_label.text = "Mission Time: %02d:%02d" % [mins, secs]
 
+	_refresh_preview_panel()
+	_refresh_start_wave_button()
+
 	if debug_panel.visible:
 		_refresh_debug_overlay()
+
+
+func _refresh_preview_panel() -> void:
+	if wave_manager_ref == null:
+		return
+	var preview: Dictionary = wave_manager_ref.get_preview_data()
+	var wave_num: int = preview["wave_number"]
+	preview_title_label.text = "PRE-WAVE PREVIEW - Wave %d / 15" % wave_num
+
+	var counts: Dictionary = preview["counts"]
+	var unit_parts: PackedStringArray = []
+	if counts.has("runner"):
+		unit_parts.append("%d Runners (HP %d)" % [counts["runner"], GameState.get_enemy_wave_hp("runner", wave_num)])
+	if counts.has("brute"):
+		unit_parts.append("%d Brutes (HP %d)" % [counts["brute"], GameState.get_enemy_wave_hp("brute", wave_num)])
+	preview_body_label.text = "Incoming: " + ", ".join(unit_parts)
+
+	var muts: Array = preview["active_mutations"]
+	if muts.is_empty():
+		preview_mutations_label.text = "Mutations: No mutations"
+		preview_mutations_label.modulate = Color(0.75, 0.85, 0.95)
+	else:
+		var lines: PackedStringArray = ["Active Mutations (for the rest of this mission):"]
+		var has_new: bool = false
+		for item in muts:
+			var prefix: String = "[NEW] " if item["is_new"] else ""
+			if item["is_new"]:
+				has_new = true
+			lines.append("%s%s x%d - %s" % [prefix, item["label"], item["stacks"], item["effect"]])
+		preview_mutations_label.text = "\n".join(lines)
+		preview_mutations_label.modulate = Color(1.0, 0.78, 0.32) if has_new else Color(0.95, 0.58, 0.45)
+
+	wave_summary_label.text = _last_summary_text
+
+
+func _refresh_start_wave_button() -> void:
+	if wave_manager_ref == null:
+		start_wave_button.disabled = true
+		return
+	var can_start: bool = (wave_manager_ref.state == WaveManager.State.BUILD) and not GameState.mission.is_over
+	start_wave_button.disabled = not can_start
+	if can_start:
+		start_wave_button.text = "START WAVE %d" % GameState.mission.wave_number
+	elif wave_manager_ref.state == WaveManager.State.SPAWNING:
+		start_wave_button.text = "SPAWNING..."
+	elif wave_manager_ref.state == WaveManager.State.FIGHTING:
+		start_wave_button.text = "WAVE IN PROGRESS"
+	else:
+		start_wave_button.text = "WAVE COMPLETE"
 
 
 func _refresh_debug_overlay() -> void:
@@ -90,6 +156,14 @@ func _refresh_debug_overlay() -> void:
 		],
 	]
 	debug_label.text = "\n".join(lines)
+
+
+func _on_wave_summary_updated(summary_text: String) -> void:
+	_last_summary_text = summary_text
+
+
+func _on_wave_state_changed(_new_state: int) -> void:
+	_refresh_all()
 
 
 func _on_mission_ended(outcome: String, reason: String) -> void:
@@ -121,6 +195,11 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 
 func _on_mission_reset() -> void:
 	end_overlay.visible = false
+	_last_summary_text = ""
+
+
+func _on_start_wave_pressed() -> void:
+	start_wave_requested.emit()
 
 
 func _on_restart_pressed() -> void:
