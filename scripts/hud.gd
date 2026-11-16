@@ -32,10 +32,16 @@ signal start_wave_requested
 
 @onready var research_list_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox/ResearchButtons
 
-@onready var surge_label: Label = $BottomBar/VBox/SurgeLabel
-@onready var power_placeholder_label: Label = $BottomBar/VBox/Row2/PowerPlaceholderLabel
+@onready var surge_bar: ProgressBar = $BottomBar/VBox/SurgeRow/SurgeBar
+@onready var surge_label: Label = $BottomBar/VBox/SurgeRow/SurgeLabel
+@onready var surge_penalty_label: Label = $BottomBar/VBox/SurgeRow/SurgePenaltyLabel
+@onready var test_power_button: Button = $BottomBar/VBox/Row2/TestPowerButton
 @onready var refinery_button: Button = $BottomBar/VBox/Row2/RefineryButton
 @onready var start_wave_button: Button = $BottomBar/VBox/Row2/StartWaveButton
+@onready var event_feed_label: Label = $BottomBar/VBox/EventFeedLabel
+
+@onready var surge_banner: PanelContainer = $SurgeBanner
+@onready var surge_banner_label: Label = $SurgeBanner/BannerLabel
 
 @onready var debug_panel: PanelContainer = $DebugPanel
 @onready var debug_label: Label = $DebugPanel/MarginContainer/DebugLabel
@@ -48,11 +54,16 @@ signal start_wave_requested
 var map_ref: GameMap = null
 var wave_manager_ref: WaveManager = null
 var economy_ref: EconomyManager = null
+var surge_ref: SurgeManager = null
+
 var _last_summary_text: String = ""
 var _selected_pad_idx: int = -1
 var _selected_tower: TowerUnit = null
 var _sell_confirm_armed: bool = false
 var _research_buttons: Dictionary = {}
+var _event_feed: Array[String] = []
+var _banner_timer: float = 0.0
+var _pulse_accum: float = 0.0
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -67,12 +78,14 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	debug_panel.visible = false
 	end_overlay.visible = false
+	surge_banner.visible = false
 	build_menu_box.visible = false
 	tower_panel_box.visible = false
 
 	restart_button.pressed.connect(_on_restart_pressed)
 	start_wave_button.pressed.connect(_on_start_wave_pressed)
 	refinery_button.pressed.connect(_on_refinery_button_pressed)
+	test_power_button.pressed.connect(_on_test_power_pressed)
 
 	build_blaster_button.pressed.connect(func() -> void: _build_tower("blaster"))
 	build_mortar_button.pressed.connect(func() -> void: _build_tower("mortar"))
@@ -90,6 +103,7 @@ func _ready() -> void:
 
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
+	GameState.event_logged.connect(_on_event_logged)
 	_refresh_all()
 
 
@@ -107,10 +121,11 @@ func _build_research_buttons() -> void:
 		_research_buttons[key] = btn
 
 
-func set_references(p_map: GameMap, p_wm: WaveManager, p_econ: EconomyManager = null) -> void:
+func set_references(p_map: GameMap, p_wm: WaveManager, p_econ: EconomyManager = null, p_surge: SurgeManager = null) -> void:
 	map_ref = p_map
 	wave_manager_ref = p_wm
 	economy_ref = p_econ
+	surge_ref = p_surge
 	if map_ref != null:
 		map_ref.pad_selected.connect(_on_pad_selected)
 		map_ref.tower_selected.connect(_on_tower_selected)
@@ -118,6 +133,8 @@ func set_references(p_map: GameMap, p_wm: WaveManager, p_econ: EconomyManager = 
 	if wave_manager_ref != null:
 		wave_manager_ref.wave_summary_updated.connect(_on_wave_summary_updated)
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
+	if surge_ref != null:
+		surge_ref.surge_banner_triggered.connect(_on_surge_banner_triggered)
 	_refresh_all()
 
 
@@ -128,7 +145,12 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_pulse_accum += delta
+	if _banner_timer > 0.0:
+		_banner_timer = maxf(0.0, _banner_timer - delta)
+		if _banner_timer <= 0.0:
+			surge_banner.visible = false
 	_refresh_all()
 
 
@@ -152,11 +174,45 @@ func _refresh_all() -> void:
 	_refresh_preview_panel()
 	_refresh_selection_panel()
 	_refresh_research_panel()
+	_refresh_surge_bar()
 	_refresh_refinery_button()
 	_refresh_start_wave_button()
 
 	if debug_panel.visible:
 		_refresh_debug_overlay()
+
+
+func _refresh_surge_bar() -> void:
+	var m := GameState.mission
+	var win: float = surge_ref.get_surge_window() if surge_ref != null else Balance.SURGE_BASE_WINDOW
+	surge_bar.max_value = win
+	surge_bar.value = clampf(m.surge_timer_seconds, 0.0, win)
+
+	var paused: bool = surge_ref.is_surge_paused() if surge_ref != null else false
+	var pause_tag: String = " [PAUSED]" if paused else ""
+	surge_label.text = "SURGE - use a time power or all towers slow down: %.1f s%s" % [maxf(0.0, m.surge_timer_seconds), pause_tag]
+
+	if m.surge_count > 0:
+		var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
+		surge_penalty_label.text = "Towers at %d%% speed - %d surge%s (rest of mission)" % [
+			pct,
+			m.surge_count,
+			"s" if m.surge_count > 1 else "",
+		]
+	else:
+		surge_penalty_label.text = "0 surges"
+
+	var rem: float = m.surge_timer_seconds
+	if rem <= Balance.SURGE_WARNING_RED:
+		var pulse: float = 0.6 + 0.4 * sin(_pulse_accum * 10.0)
+		surge_bar.modulate = Color(1.0, 0.25, 0.25, pulse)
+		surge_label.modulate = Color(1.0, 0.35, 0.35)
+	elif rem <= Balance.SURGE_WARNING_AMBER:
+		surge_bar.modulate = Color(1.0, 0.72, 0.22)
+		surge_label.modulate = Color(1.0, 0.8, 0.32)
+	else:
+		surge_bar.modulate = Color(0.35, 0.78, 0.95)
+		surge_label.modulate = Color(0.85, 0.92, 1.0)
 
 
 func _refresh_preview_panel() -> void:
@@ -355,6 +411,24 @@ func _refresh_debug_overlay() -> void:
 	debug_label.text = "\n".join(lines)
 
 
+func _on_test_power_pressed() -> void:
+	if not GameState.mission.is_over and not GameState.is_base_locked():
+		GameState.time_power_used.emit("test")
+
+
+func _on_surge_banner_triggered(banner_text: String) -> void:
+	surge_banner_label.text = banner_text
+	surge_banner.visible = true
+	_banner_timer = 3.5
+
+
+func _on_event_logged(message: String) -> void:
+	_event_feed.push_front(message)
+	if _event_feed.size() > 5:
+		_event_feed.resize(5)
+	event_feed_label.text = "Events: " + "  |  ".join(_event_feed)
+
+
 func _on_refinery_button_pressed() -> void:
 	if economy_ref != null:
 		economy_ref.start_build_refinery()
@@ -448,10 +522,14 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 
 func _on_mission_reset() -> void:
 	end_overlay.visible = false
+	surge_banner.visible = false
+	_banner_timer = 0.0
 	_last_summary_text = ""
 	_selected_pad_idx = -1
 	_selected_tower = null
 	_sell_confirm_armed = false
+	_event_feed.clear()
+	event_feed_label.text = "Events: (none yet)"
 
 
 func _on_start_wave_pressed() -> void:

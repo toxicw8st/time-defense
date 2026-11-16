@@ -33,6 +33,13 @@
 - [x] No-refinery (`596`) vs refinery-first (`736`) reach Wave 5 with visibly different money totals
 - [x] First Balance Sanity Check (Waves 1-6, no powers): Waves 1-2 clean (0 leaks), Wave 6 held cleanly (`0` leaks with reasonable build)
 
+## Step 5 — Surge (Isolated)
+- [x] Ignoring surge bar fires surges at 45 s intervals with stacking penalties (`95%`, `90%`, `86%`)
+- [x] Warning states fire at 15 s (amber) and 7 s (red pulse) before every surge
+- [x] Test button resets surge timer and prevents surge
+- [x] Surge pauses during `BUILD` phase and while Manipulator upgrades; resets cleanly on new mission (`tests/test_step5.tscn` -> `STEP5_TEST_PASS`)
+
+
 
 
  (`Step 0: project skeleton + balance data + F1 debug overlay`)

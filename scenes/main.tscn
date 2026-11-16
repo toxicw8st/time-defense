@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/map.tscn" id="2_map"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_hud"]
 [ext_resource type="Script" path="res://scripts/wave_manager.gd" id="4_wm"]
 [ext_resource type="Script" path="res://scripts/economy.gd" id="5_econ"]
+[ext_resource type="Script" path="res://scripts/surge.gd" id="6_surge"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -21,5 +22,8 @@ script = ExtResource("4_wm")
 
 [node name="EconomyManager" type="Node" parent="."]
 script = ExtResource("5_econ")
+
+[node name="SurgeManager" type="Node" parent="."]
+script = ExtResource("6_surge")
 
 [node name="HUD" parent="." instance=ExtResource("3_hud")]

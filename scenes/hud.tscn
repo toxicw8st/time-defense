@@ -191,20 +191,42 @@ offset_bottom = 720.0
 
 [node name="VBox" type="VBoxContainer" parent="BottomBar"]
 layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="SurgeRow" type="HBoxContainer" parent="BottomBar/VBox"]
+layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="SurgeLabel" type="Label" parent="BottomBar/VBox"]
+[node name="SurgeBar" type="ProgressBar" parent="BottomBar/VBox/SurgeRow"]
+custom_minimum_size = Vector2(360, 22)
 layout_mode = 2
-text = "SURGE BAR (active from Step 5)"
+max_value = 45.0
+value = 45.0
+show_percentage = false
+
+[node name="SurgeLabel" type="Label" parent="BottomBar/VBox/SurgeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "SURGE - use a time power or all towers slow down: 45.0 s"
+
+[node name="SurgePenaltyLabel" type="Label" parent="BottomBar/VBox/SurgeRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "0 surges"
 
 [node name="Row2" type="HBoxContainer" parent="BottomBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
-[node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox/Row2"]
+[node name="TestPowerButton" type="Button" parent="BottomBar/VBox/Row2"]
+custom_minimum_size = Vector2(180, 44)
+layout_mode = 2
+text = "Use power (test)"
+
+[node name="ControlSpacer" type="Control" parent="BottomBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "POWER BAR (Step 6)"
 
 [node name="RefineryButton" type="Button" parent="BottomBar/VBox/Row2"]
 custom_minimum_size = Vector2(210, 44)
@@ -215,6 +237,25 @@ text = "Build Refinery (100$, 6s)"
 custom_minimum_size = Vector2(180, 44)
 layout_mode = 2
 text = "START WAVE 1"
+
+[node name="EventFeedLabel" type="Label" parent="BottomBar/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Events: (none yet)"
+clip_text = true
+
+[node name="SurgeBanner" type="PanelContainer" parent="."]
+visible = false
+offset_left = 120.0
+offset_top = 74.0
+offset_right = 820.0
+offset_bottom = 118.0
+
+[node name="BannerLabel" type="Label" parent="SurgeBanner"]
+layout_mode = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "SURGE!"
 
 [node name="DebugPanel" type="PanelContainer" parent="."]
 visible = false
