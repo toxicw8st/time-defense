@@ -36,6 +36,7 @@ class MissionState:
 	}
 	var owned_research: Dictionary = {}
 	var cleared_waves: Dictionary = {}
+	var shown_prompts: Dictionary = {}
 	var towers: Array[Dictionary] = []
 	var is_over: bool = false
 	var outcome: String = "" # "won", "lost", "stalled"
@@ -55,6 +56,7 @@ var is_clock_paused: bool = false
 var is_enemies_frozen: bool = false
 var is_haste_active: bool = false
 var base_attack_charging_active: bool = false
+var prompts_muted: bool = false
 
 
 func _ready() -> void:

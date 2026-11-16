@@ -93,6 +93,15 @@ func _ready() -> void:
 	GameState.enemy_killed.connect(_on_enemy_killed)
 
 
+func _exit_tree() -> void:
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
+	if GameState.enemy_leaked.is_connected(_on_enemy_leaked):
+		GameState.enemy_leaked.disconnect(_on_enemy_leaked)
+	if GameState.enemy_killed.is_connected(_on_enemy_killed):
+		GameState.enemy_killed.disconnect(_on_enemy_killed)
+
+
 func _process(delta: float) -> void:
 	var needs_redraw: bool = false
 	if leak_flash_timer > 0.0:

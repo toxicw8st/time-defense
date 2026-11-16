@@ -20,6 +20,13 @@ func setup(p_wm: WaveManager) -> void:
 	_reset_state()
 
 
+func _exit_tree() -> void:
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
+	if GameState.time_power_used.is_connected(_on_time_power_used):
+		GameState.time_power_used.disconnect(_on_time_power_used)
+
+
 func _on_mission_reset() -> void:
 	_reset_state()
 

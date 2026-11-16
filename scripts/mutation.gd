@@ -9,6 +9,11 @@ func setup() -> void:
 		GameState.time_power_used.connect(_on_time_power_used)
 
 
+func _exit_tree() -> void:
+	if GameState.time_power_used.is_connected(_on_time_power_used):
+		GameState.time_power_used.disconnect(_on_time_power_used)
+
+
 func _on_time_power_used(power_name: String) -> void:
 	var m := GameState.mission
 	match power_name:

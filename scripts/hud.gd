@@ -50,6 +50,17 @@ signal start_wave_requested
 @onready var surge_banner: PanelContainer = $SurgeBanner
 @onready var surge_banner_label: Label = $SurgeBanner/BannerLabel
 
+@onready var prompt_banner: PanelContainer = $PromptBanner
+@onready var prompt_label: Label = $PromptBanner/HBox/PromptLabel
+@onready var prompt_dismiss_button: Button = $PromptBanner/HBox/PromptDismissButton
+@onready var prompt_mute_button: Button = $PromptBanner/HBox/PromptMuteButton
+
+@onready var pause_overlay: PanelContainer = $PauseOverlay
+@onready var pause_resume_button: Button = $PauseOverlay/Margin/VBox/PauseButtons/PauseResumeButton
+@onready var pause_restart_button: Button = $PauseOverlay/Margin/VBox/PauseButtons/PauseRestartButton
+@onready var pause_mute_check: CheckBox = $PauseOverlay/Margin/VBox/PauseMuteCheck
+@onready var how_time_works_label: Label = $PauseOverlay/Margin/VBox/HowTimeWorksLabel
+
 @onready var debug_panel: PanelContainer = $DebugPanel
 @onready var debug_label: Label = $DebugPanel/MarginContainer/DebugLabel
 
@@ -88,6 +99,8 @@ func _ready() -> void:
 	debug_panel.visible = false
 	end_overlay.visible = false
 	surge_banner.visible = false
+	prompt_banner.visible = false
+	pause_overlay.visible = false
 	build_menu_box.visible = false
 	tower_panel_box.visible = false
 
@@ -96,6 +109,14 @@ func _ready() -> void:
 	refinery_button.pressed.connect(_on_refinery_button_pressed)
 	charge_button.pressed.connect(_on_charge_button_pressed)
 	manip_upgrade_button.pressed.connect(_on_manip_upgrade_pressed)
+
+	prompt_dismiss_button.pressed.connect(_on_prompt_dismiss_pressed)
+	prompt_mute_button.pressed.connect(_on_prompt_mute_pressed)
+	pause_resume_button.pressed.connect(_toggle_pause_menu)
+	pause_restart_button.pressed.connect(_on_pause_restart_pressed)
+	pause_mute_check.toggled.connect(_on_pause_mute_toggled)
+	pause_mute_check.button_pressed = GameState.prompts_muted
+	_populate_how_time_works()
 
 	rewind_button.pressed.connect(func() -> void: _activate_power("rewind"))
 	pause_button.pressed.connect(func() -> void: _activate_power("pause"))
@@ -119,6 +140,15 @@ func _ready() -> void:
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.event_logged.connect(_on_event_logged)
 	_refresh_all()
+
+
+func _exit_tree() -> void:
+	if GameState.mission_ended.is_connected(_on_mission_ended):
+		GameState.mission_ended.disconnect(_on_mission_ended)
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
+	if GameState.event_logged.is_connected(_on_event_logged):
+		GameState.event_logged.disconnect(_on_event_logged)
 
 
 func _build_research_buttons() -> void:
@@ -158,6 +188,7 @@ func set_references(
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
 	if surge_ref != null:
 		surge_ref.surge_banner_triggered.connect(_on_surge_banner_triggered)
+	_check_teaching_prompt()
 	_refresh_all()
 
 
@@ -165,6 +196,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1:
 			debug_panel.visible = not debug_panel.visible
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_ESCAPE:
+			_toggle_pause_menu()
 			get_viewport().set_input_as_handled()
 
 
@@ -648,7 +682,87 @@ func _on_wave_summary_updated(summary_text: String) -> void:
 
 
 func _on_wave_state_changed(_new_state: int) -> void:
+	_check_teaching_prompt()
 	_refresh_all()
+
+
+func _populate_how_time_works() -> void:
+	how_time_works_label.text = "\n".join([
+		"HOW TIME WORKS:",
+		"1. REWIND: Replay the current wave to farm money & research. Cost: Armoured (+15% alien HP for the rest of this mission).",
+		"2. PAUSE: Freeze aliens while towers keep firing. Cost: Thaw-hardened (-10% frozen damage for the rest of this mission).",
+		"3. HASTE: Build & upgrade towers/refineries 3x faster. Cost: Swift (+8% alien speed for the rest of this mission).",
+		"4. SURGE: Wait too long without using a power and all towers lose 5% attack speed for the rest of this mission.",
+		"5. MANIPULATOR: Upgrading pauses Surge & locks powers/Base while building.",
+		"6. WIN: Charge the Hive Destroyer (Haste cannot speed it up) to destroy the Enemy Base.",
+	])
+
+
+func _check_teaching_prompt() -> void:
+	if GameState.prompts_muted or GameState.mission.is_over or wave_manager_ref == null:
+		return
+	var w: int = GameState.mission.wave_number
+	var st: int = wave_manager_ref.state
+	var prompt_id: String = ""
+	var text: String = ""
+
+	if w == 1 and st == WaveManager.State.BUILD:
+		prompt_id = "wave_1"
+		text = "TIP (1/6): Click a build pad beside the path to build a Blaster, then press Start Wave."
+	elif w == 2 and st == WaveManager.State.SPAWNING:
+		prompt_id = "wave_2"
+		text = "TIP (2/6): PAUSE freezes aliens only while towers keep firing - try it. (Cost: Thaw-hardened for the rest of this mission.)"
+	elif w == 3 and st == WaveManager.State.BUILD:
+		prompt_id = "wave_3"
+		text = "TIP (3/6): SURGE BAR - if it empties, all towers slow down permanently for this mission. Using any power refills it."
+	elif w == 4 and st == WaveManager.State.BUILD:
+		prompt_id = "wave_4"
+		text = "TIP (4/6): HASTE speeds up tower/refinery construction 3x. Great for Cluster Mortars vs bunched waves (Cost: Swift)."
+	elif w == 5 and st == WaveManager.State.BUILD:
+		prompt_id = "wave_5"
+		text = "TIP (5/6): REWIND replays a wave to farm Money & Research (Cost: Armoured). Spend Research on global upgrades; Refineries tick income."
+	elif w == 6 and st == WaveManager.State.BUILD:
+		prompt_id = "wave_6"
+		text = "TIP (6/6): You win by destroying their base. Charge the Hive Destroyer (150$, 30s) - Haste cannot speed it up."
+
+	if prompt_id != "" and not GameState.mission.shown_prompts.get(prompt_id, false):
+		GameState.mission.shown_prompts[prompt_id] = true
+		prompt_label.text = text
+		prompt_banner.visible = true
+
+
+func _on_prompt_dismiss_pressed() -> void:
+	prompt_banner.visible = false
+
+
+func _on_prompt_mute_pressed() -> void:
+	set_prompts_muted(true)
+
+
+func _on_pause_mute_toggled(toggled_on: bool) -> void:
+	set_prompts_muted(toggled_on)
+
+
+func set_prompts_muted(muted: bool) -> void:
+	GameState.prompts_muted = muted
+	if pause_mute_check.button_pressed != muted:
+		pause_mute_check.button_pressed = muted
+	if muted:
+		prompt_banner.visible = false
+
+
+func _toggle_pause_menu() -> void:
+	if GameState.mission.is_over:
+		return
+	var next_paused: bool = not pause_overlay.visible
+	pause_overlay.visible = next_paused
+	get_tree().paused = next_paused
+
+
+func _on_pause_restart_pressed() -> void:
+	pause_overlay.visible = false
+	get_tree().paused = false
+	_on_restart_pressed()
 
 
 func _on_mission_ended(outcome: String, reason: String) -> void:
@@ -691,6 +805,9 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 func _on_mission_reset() -> void:
 	end_overlay.visible = false
 	surge_banner.visible = false
+	prompt_banner.visible = false
+	pause_overlay.visible = false
+	get_tree().paused = false
 	_banner_timer = 0.0
 	_last_summary_text = ""
 	_selected_pad_idx = -1
@@ -698,6 +815,7 @@ func _on_mission_reset() -> void:
 	_sell_confirm_armed = false
 	_event_feed.clear()
 	event_feed_label.text = "Events: (none yet)"
+	_check_teaching_prompt()
 
 
 func _on_start_wave_pressed() -> void:

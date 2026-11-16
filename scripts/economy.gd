@@ -14,8 +14,14 @@ var _tick_accum: float = 0.0
 
 func setup(p_map: GameMap) -> void:
 	map_ref = p_map
-	GameState.mission_reset.connect(_on_mission_reset)
+	if not GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.connect(_on_mission_reset)
 	_reset_state()
+
+
+func _exit_tree() -> void:
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
 
 
 func _on_mission_reset() -> void:

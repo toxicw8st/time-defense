@@ -305,6 +305,81 @@ horizontal_alignment = 1
 vertical_alignment = 1
 text = "SURGE!"
 
+[node name="PromptBanner" type="PanelContainer" parent="."]
+visible = false
+offset_left = 20.0
+offset_top = 70.0
+offset_right = 920.0
+offset_bottom = 116.0
+
+[node name="HBox" type="HBoxContainer" parent="PromptBanner"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PromptLabel" type="Label" parent="PromptBanner/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "TIP"
+autowrap_mode = 3
+
+[node name="PromptDismissButton" type="Button" parent="PromptBanner/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Got it"
+
+[node name="PromptMuteButton" type="Button" parent="PromptBanner/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Mute Tips"
+
+[node name="PauseOverlay" type="PanelContainer" parent="."]
+visible = false
+offset_left = 240.0
+offset_top = 120.0
+offset_right = 1040.0
+offset_bottom = 520.0
+
+[node name="Margin" type="MarginContainer" parent="PauseOverlay"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="PauseOverlay/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PauseTitle" type="Label" parent="PauseOverlay/Margin/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "PAUSED"
+
+[node name="HowTimeWorksLabel" type="Label" parent="PauseOverlay/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "How time works"
+autowrap_mode = 3
+
+[node name="PauseMuteCheck" type="CheckBox" parent="PauseOverlay/Margin/VBox"]
+layout_mode = 2
+text = "Mute Wave 1-6 Teaching Prompts"
+
+[node name="PauseButtons" type="HBoxContainer" parent="PauseOverlay/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="PauseResumeButton" type="Button" parent="PauseOverlay/Margin/VBox/PauseButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Resume (Esc)"
+
+[node name="PauseRestartButton" type="Button" parent="PauseOverlay/Margin/VBox/PauseButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Restart Mission"
+
 [node name="DebugPanel" type="PanelContainer" parent="."]
 visible = false
 offset_left = 16.0

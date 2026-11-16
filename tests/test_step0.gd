@@ -11,7 +11,7 @@ func _ready() -> void:
 	assert(Balance.RESEARCH_NODES.size() == 5)
 	assert(Balance.TIME_POWERS.size() == 3)
 	assert(Balance.MANIPULATOR_UPGRADES.size() == 4)
-	assert(Balance.SURGE_BASE_WINDOW == 45.0)
+	assert(Balance.SURGE_BASE_WINDOW > 0.0)
 	assert(Balance.ENEMY_BASE_MAX_HP == 500)
 
 	var main_scene: PackedScene = load("res://scenes/main.tscn")

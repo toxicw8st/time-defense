@@ -32,6 +32,15 @@ func setup(p_map: GameMap, p_wm: WaveManager) -> void:
 	_reset_state()
 
 
+func _exit_tree() -> void:
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
+	if GameState.wave_started.is_connected(_on_wave_started):
+		GameState.wave_started.disconnect(_on_wave_started)
+	if GameState.wave_cleared.is_connected(_on_wave_cleared):
+		GameState.wave_cleared.disconnect(_on_wave_cleared)
+
+
 func _on_mission_reset() -> void:
 	_reset_state()
 

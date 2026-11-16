@@ -20,6 +20,11 @@ func setup(p_map: GameMap) -> void:
 	_reset_state()
 
 
+func _exit_tree() -> void:
+	if GameState.mission_reset.is_connected(_on_mission_reset):
+		GameState.mission_reset.disconnect(_on_mission_reset)
+
+
 func _on_mission_reset() -> void:
 	_reset_state()
 

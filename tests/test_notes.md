@@ -53,3 +53,11 @@
 - [x] Win triggers mid-wave the instant the 3rd hit lands
 - [x] Manipulator upgrade & Hive Destroyer charge mutually respect the Base lock
 - [x] Restart after loss zeroes mutations, surges, resets money=200, research=0, refineries=1, manipulator=1, wave=1
+
+## Step 8 — Readability, Teaching Pass & Definition of Done
+- [x] Staged teaching prompts (Waves 1-6) appear once each, never repeat (verified across Rewind)
+- [x] Mute toggle hides prompts without hiding Surge bar, Pre-wave Preview, or Event Feed
+- [x] Esc Pause menu includes Resume, Restart, Mute Tips, and <=9-line `"How time works"` summary naming Armoured, Thaw-hardened, Swift, and Surge
+- [x] No-powers 15-wave run wins at Wave 13 with 6 surges (first surge at Wave 3, `w1_w2_s=51.0`)
+- [x] Heavy-powers 15-wave run (11 powers: Armoured x2, Thaw x5, Swift x4) wins at Wave 13 with exact 1:1 mutation counts
+- [x] Wave 15 stall check verified (`outcome == "stalled"`) (`tests/test_step8.tscn` -> `STEP8_AND_FULL_RUN_PASS`)

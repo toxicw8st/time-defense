@@ -166,7 +166,7 @@ const TIME_POWERS: Dictionary = {
 }
 
 # --- Surge (STARTER timing, LOCKED behaviour) ---
-const SURGE_BASE_WINDOW: float = 45.0
+const SURGE_BASE_WINDOW: float = 52.0
 const SURGE_WARNING_AMBER: float = 15.0
 const SURGE_WARNING_RED: float = 7.0
 const SURGE_ATTACK_SPEED_FACTOR: float = 0.95 # -5% per surge, multiplicative
