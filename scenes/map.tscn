@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/map.gd" id="1_map"]
+
+[node name="Map" type="Node2D"]
+position = Vector2(0, 64)
+script = ExtResource("1_map")
+
+[node name="EnemyPath" type="Path2D" parent="."]
+
+[node name="TowersContainer" type="Node2D" parent="."]
+
+[node name="EnemiesContainer" type="Node2D" parent="."]

@@ -4,12 +4,17 @@ extends Node
 ## Missions reset cleanly via reset_mission().
 
 signal mission_reset
+signal mission_ended(outcome: String, reason: String)
+signal lives_changed(new_lives: int)
+signal enemy_base_hp_changed(new_hp: int)
+signal economy_changed
 signal enemy_killed(enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2)
-signal enemy_leaked(enemy_type: String, lives_lost: int)
+signal enemy_leaked(enemy_type: String, lives_lost: int, world_pos: Vector2)
 signal wave_started(wave_number: int)
 signal wave_cleared(wave_number: int)
 signal time_power_used(power_name: String)
 signal surge_triggered(surge_count: int)
+signal event_logged(message: String)
 
 class MissionState:
 	var wave_number: int = 1
@@ -32,11 +37,22 @@ class MissionState:
 	var owned_research: Dictionary = {}
 	var cleared_waves: Dictionary = {}
 	var towers: Array[Dictionary] = []
-	var snapshot: Dictionary = {}
+	var is_over: bool = false
+	var outcome: String = "" # "won", "lost", "stalled"
+	var end_reason: String = ""
+	var stats: Dictionary = {
+		"waves_completed": 0,
+		"powers_used": {"rewind": 0, "pause": 0, "haste": 0},
+		"surges_suffered": 0,
+		"charges_fired": 0,
+		"money_earned": 0,
+		"research_earned": 0,
+	}
 
 var mission: MissionState = MissionState.new()
 var mission_elapsed_seconds: float = 0.0
 var is_clock_paused: bool = false
+var is_enemies_frozen: bool = false
 
 
 func _ready() -> void:
@@ -44,7 +60,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_clock_paused:
+	if not is_clock_paused and not mission.is_over:
 		mission_elapsed_seconds += delta
 
 
@@ -52,7 +68,28 @@ func reset_mission() -> void:
 	mission = MissionState.new()
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
+	is_enemies_frozen = false
 	mission_reset.emit()
+
+
+func lose_lives(amount: int, enemy_type: String = "runner", world_pos: Vector2 = Vector2.ZERO) -> void:
+	if mission.is_over:
+		return
+	mission.lives = max(0, mission.lives - amount)
+	lives_changed.emit(mission.lives)
+	enemy_leaked.emit(enemy_type, amount, world_pos)
+	if mission.lives <= 0:
+		end_mission("lost", "Player base fell (0 lives remaining)")
+
+
+func end_mission(outcome: String, reason: String) -> void:
+	if mission.is_over:
+		return
+	mission.is_over = true
+	mission.outcome = outcome
+	mission.end_reason = reason
+	is_clock_paused = true
+	mission_ended.emit(outcome, reason)
 
 
 func get_enemy_hp_multiplier() -> float:
@@ -61,8 +98,25 @@ func get_enemy_hp_multiplier() -> float:
 
 
 func get_enemy_speed_multiplier() -> float:
+	if is_enemies_frozen:
+		return 0.0
 	var stacks: int = mission.mutations.get("swift_stacks", 0)
 	return pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], stacks)
+
+
+func get_effective_enemy_speed(enemy_type: String) -> float:
+	var base_speed: float = Balance.ENEMIES[enemy_type]["speed"]
+	return base_speed * get_enemy_speed_multiplier()
+
+
+func get_enemy_wave_hp(enemy_type: String, wave_num: int) -> int:
+	var cfg: Dictionary = Balance.ENEMIES[enemy_type]
+	var base_hp: float = cfg["base_hp"]
+	var growth: float = cfg["hp_growth_per_wave"]
+	var first_wave: int = cfg.get("first_wave", 1)
+	var steps: int = max(0, wave_num - first_wave)
+	var scaled: float = base_hp * pow(1.0 + growth, steps) * get_enemy_hp_multiplier()
+	return int(round(scaled))
 
 
 func get_tower_attack_speed_multiplier() -> float:

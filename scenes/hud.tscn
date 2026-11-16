@@ -5,11 +5,85 @@
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
+[node name="TopBar" type="PanelContainer" parent="."]
+offset_right = 1280.0
+offset_bottom = 64.0
+
+[node name="VBox" type="VBoxContainer" parent="TopBar"]
+layout_mode = 2
+
+[node name="Row1" type="HBoxContainer" parent="TopBar/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="TopStatusLabel" type="Label" parent="TopBar/VBox/Row1"]
+layout_mode = 2
+text = "Lives: 20 / 20"
+
+[node name="EnemyBaseLabel" type="Label" parent="TopBar/VBox/Row1"]
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_alignment = 1
+text = "Enemy Base: 500 / 500 HP (Shots to kill: 3)"
+
+[node name="WaveLabel" type="Label" parent="TopBar/VBox/Row1"]
+layout_mode = 2
+text = "Wave 1 / 15"
+
+[node name="Row2" type="HBoxContainer" parent="TopBar/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="EconomyLabel" type="Label" parent="TopBar/VBox/Row2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Money: 200 | Research: 0 | Refineries: 1"
+
+[node name="ClockLabel" type="Label" parent="TopBar/VBox/Row2"]
+layout_mode = 2
+text = "Mission Time: 00:00"
+
+[node name="RightPanel" type="PanelContainer" parent="."]
+offset_left = 940.0
+offset_top = 64.0
+offset_right = 1280.0
+offset_bottom = 544.0
+
+[node name="Margin" type="MarginContainer" parent="RightPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="RightPanelLabel" type="Label" parent="RightPanel/Margin"]
+layout_mode = 2
+text = "RIGHT PANEL\n(Step 1: Map & Path check)\nWave preview & tower menus arrive in Steps 2-3."
+autowrap_mode = 3
+
+[node name="BottomBar" type="PanelContainer" parent="."]
+offset_top = 544.0
+offset_right = 1280.0
+offset_bottom = 720.0
+
+[node name="VBox" type="VBoxContainer" parent="BottomBar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SurgeLabel" type="Label" parent="BottomBar/VBox"]
+layout_mode = 2
+text = "SURGE BAR (active from Step 5)"
+
+[node name="PowerPlaceholderLabel" type="Label" parent="BottomBar/VBox"]
+layout_mode = 2
+text = "POWER BAR & EVENT FEED (Steps 5-8)"
+
 [node name="DebugPanel" type="PanelContainer" parent="."]
+visible = false
 offset_left = 16.0
-offset_top = 16.0
-offset_right = 440.0
-offset_bottom = 200.0
+offset_top = 74.0
+offset_right = 500.0
+offset_bottom = 260.0
 
 [node name="MarginContainer" type="MarginContainer" parent="DebugPanel"]
 layout_mode = 2
@@ -21,3 +95,35 @@ theme_override_constants/margin_bottom = 8
 [node name="DebugLabel" type="Label" parent="DebugPanel/MarginContainer"]
 layout_mode = 2
 text = "Debug"
+
+[node name="EndOverlay" type="PanelContainer" parent="."]
+visible = false
+offset_left = 340.0
+offset_top = 170.0
+offset_right = 940.0
+offset_bottom = 490.0
+
+[node name="Margin" type="MarginContainer" parent="EndOverlay"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="EndOverlay/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="EndTitleLabel" type="Label" parent="EndOverlay/Margin/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "DEFEAT - BASE LOST"
+
+[node name="EndStatsLabel" type="Label" parent="EndOverlay/Margin/VBox"]
+layout_mode = 2
+text = "Stats"
+autowrap_mode = 3
+
+[node name="RestartButton" type="Button" parent="EndOverlay/Margin/VBox"]
+layout_mode = 2
+text = "Restart Mission"
