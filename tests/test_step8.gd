@@ -85,16 +85,33 @@ func _test_real_ui_clicks_and_prompts() -> void:
 			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] + map.position
 			assert(not r.has_point(pad_screen), "%s overlaps Pad P%d at %s! rect=%s" % [ctrl_name, i + 1, str(pad_screen), str(r)])
 
-	# Verify BuildMenuBox is IMMEDIATELY visible on startup with icons, button styles & hover descriptions
+	# Verify BuildMenuBox is IMMEDIATELY visible, buttons have icons, and hover panel stays rigid!
 	assert(hud.build_menu_box.visible, "BuildMenuBox must be visible on startup so player sees towers to add")
 	assert(hud.build_blaster_button.visible and hud.build_mortar_button.visible)
 	assert(hud.build_blaster_button.icon != null and hud.build_mortar_button.icon != null, "Tower buttons must have icons")
 	assert(hud.manip_upgrade_button.icon != null, "Manipulator button must have icon")
 	for k in hud._research_buttons.keys():
 		assert(hud._research_buttons[k].icon != null, "Research button %s must have icon" % k)
-	hud.build_blaster_button.mouse_entered.emit()
-	assert(hud.hover_info_label.text.contains("Piercing"), "Hovering Blaster button must show description")
-	hud.build_blaster_button.mouse_exited.emit()
+
+	var base_right_size: Vector2 = hud.right_panel.size
+	var base_hover_size: Vector2 = hud.hover_info_panel.size
+	assert(base_right_size == Vector2(340, 480), "RightPanel must stay fixed 340x480, got %s" % str(base_right_size))
+
+	var buttons_to_hover: Array[Button] = [
+		hud.build_blaster_button,
+		hud.build_mortar_button,
+		hud.manip_upgrade_button,
+	]
+	for k in hud._research_buttons.keys():
+		buttons_to_hover.append(hud._research_buttons[k])
+	for b in buttons_to_hover:
+		b.mouse_entered.emit()
+		await get_tree().process_frame
+		assert(hud.right_panel.size == base_right_size, "Hovering must NOT resize RightPanel!")
+		assert(hud.hover_info_panel.size == base_hover_size, "Hovering must NOT resize HoverInfoPanel!")
+		assert(hud.hover_info_label.get_line_count() <= 2, "Description too long (>2 lines): %s" % hud.hover_info_label.text)
+		b.mouse_exited.emit()
+		await get_tree().process_frame
 
 	# Verify Wave 1 PromptBanner is visible and NOT overlapping Pad P1 (220, 64+32=96)!
 	assert(hud.prompt_banner.visible and hud.prompt_label.text.contains("TIP (1/6)"))
@@ -110,6 +127,15 @@ func _test_real_ui_clicks_and_prompts() -> void:
 	hud.build_blaster_button.pressed.emit()
 	await get_tree().process_frame
 	assert(map.pad_occupancy[0] != null and map.pad_occupancy[0].tower_type == "blaster")
+
+	for tb in [hud.upg_dmg_button, hud.upg_rng_button, hud.upg_spd_button, hud.sell_button]:
+		tb.mouse_entered.emit()
+		await get_tree().process_frame
+		assert(hud.right_panel.size == base_right_size, "Hovering tower btn must NOT resize RightPanel!")
+		assert(hud.hover_info_panel.size == base_hover_size, "Hovering tower btn must NOT resize HoverInfoPanel!")
+		assert(hud.hover_info_label.get_line_count() <= 2, "Tower btn description >2 lines: %s" % hud.hover_info_label.text)
+		tb.mouse_exited.emit()
+		await get_tree().process_frame
 
 	# Click empty map space -> clears selection -> BuildMenuBox STILL visible, click Mortar button FIRST -> click P11!
 	await _send_left_click(map, Vector2(100.0, 200.0))

@@ -66,10 +66,12 @@ layout_mode = 2
 text = "Mission Time: 00:00"
 
 [node name="RightPanel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(340, 480)
 offset_left = 940.0
 offset_top = 64.0
 offset_right = 1280.0
 offset_bottom = 544.0
+clip_contents = true
 
 [node name="Margin" type="MarginContainer" parent="RightPanel"]
 layout_mode = 2
@@ -109,7 +111,9 @@ autowrap_mode = 3
 layout_mode = 2
 
 [node name="HoverInfoPanel" type="PanelContainer" parent="RightPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
+size_flags_vertical = 0
 
 [node name="HoverMargin" type="MarginContainer" parent="RightPanel/Margin/VBox/HoverInfoPanel"]
 layout_mode = 2
@@ -118,12 +122,22 @@ theme_override_constants/margin_top = 4
 theme_override_constants/margin_right = 6
 theme_override_constants/margin_bottom = 4
 
-[node name="HoverInfoLabel" type="Label" parent="RightPanel/Margin/VBox/HoverInfoPanel/HoverMargin"]
+[node name="HoverClip" type="Control" parent="RightPanel/Margin/VBox/HoverInfoPanel/HoverMargin"]
 custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
+clip_contents = true
+
+[node name="HoverInfoLabel" type="Label" parent="RightPanel/Margin/VBox/HoverInfoPanel/HoverMargin/HoverClip"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_font_sizes/font_size = 11
-text = "Hover any button below for its description."
+text = "Hover any button below for details."
 autowrap_mode = 3
+clip_text = true
 
 [node name="Scroll" type="ScrollContainer" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
