@@ -43,6 +43,7 @@ const PLAYER_BASE_POS: Vector2 = Vector2(842, 405)
 const REFINERY_ANNEX_RECT: Rect2 = Rect2(16, 195, 134, 268)
 const PAD_SIZE: float = 36.0
 
+@onready var map_click_area: Control = $MapClickArea
 @onready var enemy_path: Path2D = $EnemyPath
 @onready var towers_container: Node2D = $TowersContainer
 @onready var enemies_container: Node2D = $EnemiesContainer
@@ -60,6 +61,7 @@ var hovered_pad_index: int = -1
 var selected_pad_index: int = -1
 var selected_tower: TowerUnit = null
 var preview_tower_type: String = ""
+var pending_build_type: String = ""
 var pad_occupancy: Array[TowerUnit] = []
 var floating_texts: Array[Dictionary] = []
 var economy_ref: Node = null
@@ -67,6 +69,11 @@ var economy_ref: Node = null
 
 func set_economy_ref(p_econ: Node) -> void:
 	economy_ref = p_econ
+
+
+func set_pending_build_type(tower_type: String) -> void:
+	pending_build_type = tower_type
+	queue_redraw()
 
 
 func show_refinery_tick_floaters(owned_count: int) -> void:
@@ -79,15 +86,17 @@ func show_refinery_tick_floaters(owned_count: int) -> void:
 			spawn_floater(Vector2(rx, ry), "+%d$" % Balance.REFINERY_INCOME_PER_TICK, Color(0.55, 0.95, 0.65))
 
 
-func trigger_hive_beam_effect() -> void:
+func trigger_hive_beam_effect(dmg: int = Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE) -> void:
 	hive_beam_timer = 0.85
-	spawn_floater(ENEMY_BASE_POS + Vector2(-20, -45), "-%d HP!" % Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE, Color(1.0, 0.72, 0.25))
+	spawn_floater(ENEMY_BASE_POS + Vector2(-20, -45), "-%d HP!" % dmg, Color(1.0, 0.72, 0.25))
 	queue_redraw()
 
 
 func _ready() -> void:
 	_build_path_curve()
 	_reset_pad_occupancy()
+	if map_click_area != null:
+		map_click_area.gui_input.connect(_on_map_gui_input)
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.enemy_leaked.connect(_on_enemy_leaked)
 	GameState.enemy_killed.connect(_on_enemy_killed)
@@ -123,10 +132,12 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _on_map_gui_input(event: InputEvent) -> void:
 	if GameState.mission.is_over:
 		return
-	var local_pos: Vector2 = get_local_mouse_position()
+	if not (event is InputEventMouse):
+		return
+	var local_pos: Vector2 = event.position
 	var in_map: bool = Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)).has_point(local_pos)
 
 	if event is InputEventMouseMotion:
@@ -134,15 +145,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		if new_hover != hovered_pad_index:
 			hovered_pad_index = new_hover
 			queue_redraw()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if pending_build_type != "":
+			pending_build_type = ""
+			clear_selection()
+			map_click_area.accept_event()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if not in_map:
 			return
 		var clicked_pad: int = _find_pad_at(local_pos)
 		if clicked_pad != -1:
-			select_pad(clicked_pad)
-			get_viewport().set_input_as_handled()
+			if pending_build_type != "" and pad_occupancy[clicked_pad] == null:
+				build_tower_on_pad(clicked_pad, pending_build_type)
+				pending_build_type = ""
+			else:
+				pending_build_type = ""
+				select_pad(clicked_pad)
+			map_click_area.accept_event()
 		else:
+			pending_build_type = ""
 			clear_selection()
+			map_click_area.accept_event()
 
 
 func select_pad(pad_idx: int) -> void:
@@ -245,9 +268,11 @@ func _on_mission_reset() -> void:
 	clear_all_projectiles()
 	floating_texts.clear()
 	leak_flash_timer = 0.0
+	hive_beam_timer = 0.0
 	selected_pad_index = -1
 	selected_tower = null
 	preview_tower_type = ""
+	pending_build_type = ""
 	next_enemy_id = 1
 	next_tower_id = 1
 	queue_redraw()
@@ -403,10 +428,16 @@ func _draw() -> void:
 		draw_rect(rect, border_col, false, 2.0)
 		draw_string(font, p + Vector2(-7, 4), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.78, 0.92))
 
-	# Range ring preview during placement hover
-	if preview_tower_type != "" and selected_pad_index >= 0 and selected_pad_index < BUILD_PAD_POSITIONS.size():
-		var center: Vector2 = BUILD_PAD_POSITIONS[selected_pad_index]
-		var cfg: Dictionary = Balance.TOWERS[preview_tower_type]
+	# Range ring preview during placement hover or pending placement mode
+	var active_preview_type: String = pending_build_type if pending_build_type != "" else preview_tower_type
+	var preview_pad: int = -1
+	if pending_build_type != "" and hovered_pad_index >= 0 and pad_occupancy[hovered_pad_index] == null:
+		preview_pad = hovered_pad_index
+	elif active_preview_type != "" and selected_pad_index >= 0 and selected_pad_index < BUILD_PAD_POSITIONS.size():
+		preview_pad = selected_pad_index
+	if active_preview_type != "" and preview_pad >= 0:
+		var center: Vector2 = BUILD_PAD_POSITIONS[preview_pad]
+		var cfg: Dictionary = Balance.TOWERS[active_preview_type]
 		var r: float = float(cfg["range"]) * GameState.get_tower_range_research_multiplier()
 		var min_r: float = float(cfg.get("min_range", 0.0))
 		draw_circle(center, r, Color(0.4, 0.85, 1.0, 0.08))

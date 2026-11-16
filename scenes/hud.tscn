@@ -118,26 +118,28 @@ size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
 [node name="BuildMenuBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
-visible = false
 layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
-text = "BUILD ON PAD"
+theme_override_font_sizes/font_size = 11
+text = "BUILD TOWERS (click a tower or pad P1-P14)"
+autowrap_mode = 3
 
 [node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Blaster Turret (75$)"
 alignment = 0
+autowrap_mode = 3
 
 [node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Cluster Mortar (110$)"
 alignment = 0
+autowrap_mode = 3
 
 [node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 visible = false
@@ -165,23 +167,27 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Damage"
 alignment = 0
+autowrap_mode = 3
 
 [node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Range"
 alignment = 0
+autowrap_mode = 3
 
 [node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Fire Rate"
 alignment = 0
+autowrap_mode = 3
 
 [node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Sell Tower"
+autowrap_mode = 3
 
 [node name="ManipulatorBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
@@ -198,6 +204,7 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Upgrade Manipulator (150$, 10s)"
 alignment = 0
+autowrap_mode = 3
 
 [node name="ResearchBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
@@ -248,41 +255,46 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="RewindButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(185, 48)
+custom_minimum_size = Vector2(185, 56)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 10
 text = "REWIND"
+autowrap_mode = 3
 
 [node name="PauseButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(185, 48)
+custom_minimum_size = Vector2(185, 56)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 10
 text = "PAUSE"
+autowrap_mode = 3
 
 [node name="HasteButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(185, 48)
+custom_minimum_size = Vector2(185, 56)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 10
 text = "HASTE"
+autowrap_mode = 3
 
 [node name="ControlSpacer" type="Control" parent="BottomBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="RefineryButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(170, 48)
+custom_minimum_size = Vector2(170, 56)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 10
 text = "Build Refinery (100$, 6s)"
+autowrap_mode = 3
 
 [node name="ChargeButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(195, 48)
+custom_minimum_size = Vector2(195, 56)
 layout_mode = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 10
 text = "Hive Destroyer (150$, 30s)"
+autowrap_mode = 3
 
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
-custom_minimum_size = Vector2(145, 48)
+custom_minimum_size = Vector2(145, 56)
 layout_mode = 2
 text = "START WAVE 1"
 
@@ -294,23 +306,26 @@ clip_text = true
 
 [node name="SurgeBanner" type="PanelContainer" parent="."]
 visible = false
-offset_left = 120.0
-offset_top = 74.0
-offset_right = 820.0
-offset_bottom = 118.0
+offset_left = 150.0
+offset_top = 68.0
+offset_right = 560.0
+offset_bottom = 110.0
+mouse_filter = 2
 
 [node name="BannerLabel" type="Label" parent="SurgeBanner"]
 layout_mode = 2
+mouse_filter = 2
 horizontal_alignment = 1
 vertical_alignment = 1
 text = "SURGE!"
+autowrap_mode = 3
 
 [node name="PromptBanner" type="PanelContainer" parent="."]
 visible = false
-offset_left = 20.0
-offset_top = 70.0
-offset_right = 920.0
-offset_bottom = 116.0
+offset_left = 572.0
+offset_top = 68.0
+offset_right = 934.0
+offset_bottom = 122.0
 
 [node name="HBox" type="HBoxContainer" parent="PromptBanner"]
 layout_mode = 2

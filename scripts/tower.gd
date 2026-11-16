@@ -103,6 +103,8 @@ func advance_tower(delta: float) -> void:
 		return
 
 	if current_job != null:
+		if not GameState.is_wave_active:
+			return
 		var finished: bool = current_job.advance(delta, GameState.get_construction_speed_multiplier())
 		queue_redraw()
 		if finished:

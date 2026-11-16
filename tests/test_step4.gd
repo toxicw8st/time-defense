@@ -1,14 +1,14 @@
 extends Node
 
-## Headless Step 4 acceptance + First Balance Sanity Check (Waves 1-6, no powers):
+## Headless Step 4 acceptance + First Balance Sanity Check:
 ## - Refinery prices match curve: 100, 135, 180, 245, 330
+## - Anti-exploit: waiting in BUILD phase generates ZERO money from Refineries!
 ## - Buying Rapid Cycling raises fire-rate multiplier on debug overlay & towers
 ## - Currency separation: research cannot buy towers, money cannot buy research
 ## - No-refinery vs refinery-first reach Wave 5 with visibly different money totals
 ## - Sanity check Waves 1-6: Wave 1-2 clean, Wave 6 Runner surge leaks 0-3 lives
 
 func _ready() -> void:
-	# 1) Refinery cost curve check
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main1: Node = main_scene.instantiate()
@@ -16,13 +16,17 @@ func _ready() -> void:
 	var econ1: EconomyManager = main1.get_node("EconomyManager")
 	var hud1: CanvasLayer = main1.get_node("HUD")
 
+	# Anti-exploit: idling 60 s in BUILD must yield 0 passive refinery money!
+	var start_m: int = GameState.mission.economy["money"]
+	econ1.step_economy(60.0)
+	assert(GameState.mission.economy["money"] == start_m, "Refineries MUST NOT generate money when not in a wave!")
+
 	var expected_costs: Array[int] = [100, 135, 180, 245, 330]
 	for owned_count in range(1, 6):
 		GameState.mission.economy["refineries_owned"] = owned_count
 		var c: int = econ1.get_next_refinery_cost()
 		assert(c == expected_costs[owned_count - 1], "Refinery #%d expected %d, got %d" % [owned_count, expected_costs[owned_count - 1], c])
 
-	# 2) Rapid Cycling raises tower attack-speed multiplier on debug overlay
 	GameState.reset_mission()
 	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.0))
 	assert(not econ1.buy_research("rapid_cycling"), "Cannot buy research with 0 R")
@@ -35,9 +39,9 @@ func _ready() -> void:
 	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.05))
 	hud1._refresh_debug_overlay()
 	assert(hud1.debug_label.text.contains("1.05x"), "Debug overlay must show 1.05x attack-speed multiplier")
+	main1.remove_child(main1) if false else null
 	main1.queue_free()
 
-	# 3) Compare no-refinery vs refinery-first through Wave 5 + Sanity Check Waves 1-6
 	var no_ref_result: Dictionary = _simulate_waves_1_to_6(false)
 	var ref_first_result: Dictionary = _simulate_waves_1_to_6(true)
 	assert(no_ref_result["w5_money"] != ref_first_result["w5_money"], "No-refinery and refinery-first must differ at Wave 5")
@@ -66,34 +70,25 @@ func _simulate_waves_1_to_6(buy_early_refinery: bool) -> Dictionary:
 	var w5_money: int = 0
 	var w1_2_leaks: int = 0
 
-	# Build opening Blaster on P5 (380, 157) covering upper + middle lanes
 	var blaster1: TowerUnit = map.build_tower_on_pad(4, "blaster")
 	assert(blaster1 != null)
 	if buy_early_refinery:
 		econ.start_build_refinery()
 	else:
-		# No-refinery spends on Mortar on P11 (430, 322)
 		map.build_tower_on_pad(10, "mortar")
-
-	_advance_sim(map, wm, econ, 8.0, dt)
 
 	for w in range(1, 7):
 		if w == 5:
 			w5_money = GameState.mission.economy["money"]
 
-		# Reasonable mid-run build decisions in BUILD phase
 		if w == 3 and map.pad_occupancy[10] == null and GameState.mission.economy["money"] >= 110:
 			map.build_tower_on_pad(10, "mortar")
-			_advance_sim(map, wm, econ, 7.5, dt)
 		if w >= 4 and map.pad_occupancy[5] == null and GameState.mission.economy["money"] >= 75:
 			map.build_tower_on_pad(5, "blaster")
-			_advance_sim(map, wm, econ, 4.5, dt)
 		if w >= 5 and blaster1 != null and blaster1.can_start_upgrade("damage"):
 			blaster1.start_upgrade("damage")
-			_advance_sim(map, wm, econ, 3.5, dt)
 		if w == 6 and blaster1 != null and blaster1.can_start_upgrade("fire_rate"):
 			blaster1.start_upgrade("fire_rate")
-			_advance_sim(map, wm, econ, 3.5, dt)
 		if econ.can_buy_research("rapid_cycling"):
 			econ.buy_research("rapid_cycling")
 

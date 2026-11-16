@@ -1,22 +1,24 @@
 extends Node
 
-## Headless Step 8 + Definition-of-Done Full-15-Wave Verification:
-## 1. Prompts Wave 1-6 appear once each, never duplicate (even across Rewind)
-## 2. Muting prompts does NOT hide Surge bar, Pre-wave Preview, or Event feed
-## 3. "How time works" is <= 9 lines and names Armoured, Thaw-hardened, Swift, Surge
-## 4. No-powers 15-wave run is clearable (reaching Wave 13+ / winning via 3 charges) AND suffers surges (first surge right around Wave 3 start!)
-## 5. Heavy-powers (6+ uses) 15-wave run is clearable despite stacked mutations, with exact 1:1 mutation-to-power counts
-## 6. Stall check: surviving all 15 waves with Enemy Base HP > 0 triggers "stalled" debrief
+## Headless Step 8 + Real UI Input + Full 15-Wave Verification:
+## 1. Real mouse click on build pad (not blocked by Background/PromptBanner) opens Build Menu & places tower
+## 2. Towers are ALWAYS visible to build on startup; clicking tower button then pad also builds!
+## 3. Prompts Wave 1-6 appear once each, never duplicate; Mute keeps Surge/Preview/Feed visible
+## 4. "How time works" <= 9 lines naming Armoured, Thaw-hardened, Swift, Surge
+## 5. No-powers 15-wave run wins & suffers surges (first surge Wave 3)
+## 6. Heavy-powers (6+ uses) 15-wave run wins with exact 1:1 mutation counts
+## 7. Wave 15 stall check verified
 
 func _ready() -> void:
-	_test_step8_prompts_and_ui()
+	await _test_real_ui_clicks_and_prompts()
 	var no_pow: Dictionary = _simulate_15_waves(false)
 	var heavy_pow: Dictionary = _simulate_15_waves(true)
 	var stall_res: Dictionary = _test_wave15_stall()
 
 	assert(no_pow["outcome"] == "won", "No-powers run must win via 3 base charges, got %s at wave %d (lives=%d)" % [no_pow["outcome"], no_pow["wave"], no_pow["lives"]])
 	assert(no_pow["surges"] >= 3, "No-powers run must visibly suffer surges, got %d" % no_pow["surges"])
-	assert(no_pow["first_surge_wave"] == 3, "With 52 s window, skipping powers in W1-2 must trigger Surge at Wave 3, got Wave %d" % no_pow["first_surge_wave"])
+	print("OBSERVED_W1_W2_ACTIVE_SECONDS=", no_pow["w1_w2_active_seconds"], " first_surge_wave=", no_pow["first_surge_wave"])
+	assert(no_pow["first_surge_wave"] == 3, "Skipping powers in W1-2 must trigger Surge at Wave 3, got Wave %d (w1_w2_s=%.1f)" % [no_pow["first_surge_wave"], no_pow["w1_w2_active_seconds"]])
 
 	assert(heavy_pow["outcome"] == "won", "Heavy-powers run must win despite stacked mutations, got %s at wave %d (lives=%d)" % [heavy_pow["outcome"], heavy_pow["wave"], heavy_pow["lives"]])
 	assert(heavy_pow["powers_total"] >= 6, "Heavy-powers run must use >=6 powers, used %d" % heavy_pow["powers_total"])
@@ -25,7 +27,7 @@ func _ready() -> void:
 
 	assert(stall_res["outcome"] == "stalled", "Surviving Wave 15 without killing base must trigger stalled state")
 
-	print("STEP8_AND_FULL_RUN_PASS no_pow=(w%d,surges=%d,first_surge_w=%d,w1_w2_s=%.1f) heavy_pow=(w%d,powers=%d,muts=%s) stall=%s" % [
+	print("STEP8_AND_FULL_RUN_PASS real_ui_clicks=ok no_pow=(w%d,surges=%d,first_surge_w=%d,w1_w2_s=%.1f) heavy_pow=(w%d,powers=%d,muts=%s) stall=%s" % [
 		no_pow["wave"],
 		no_pow["surges"],
 		no_pow["first_surge_wave"],
@@ -38,26 +40,86 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
-func _test_step8_prompts_and_ui() -> void:
+func _send_left_click(map: GameMap, screen_pos: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	if DisplayServer.get_name() == "headless":
+		# Dummy headless display has 0x0 OS window; route directly to MapClickArea in map-local coords
+		down.position = screen_pos - map.position
+		down.global_position = screen_pos
+		map.map_click_area.gui_input.emit(down)
+		await get_tree().process_frame
+		return
+	down.position = screen_pos
+	down.global_position = screen_pos
+	get_viewport().push_input(down)
+	await get_tree().process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = screen_pos
+	up.global_position = screen_pos
+	get_viewport().push_input(up)
+	await get_tree().process_frame
+
+
+func _test_real_ui_clicks_and_prompts() -> void:
 	GameState.prompts_muted = false
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var inst: Node = main_scene.instantiate()
 	add_child(inst)
+	await get_tree().process_frame
 
 	var map: GameMap = inst.get_node("Map")
 	var wm: WaveManager = inst.get_node("WaveManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	assert(hud.prompt_banner.visible and hud.prompt_label.text.contains("TIP (1/6)"))
-	hud._on_prompt_dismiss_pressed()
-	assert(not hud.prompt_banner.visible)
+	# Verify NO visible mouse-blocking HUD Control covers ANY of the 14 build pads or leaks outside 1280x720!
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "PromptBanner"]:
+		var ctrl: Control = hud.get_node(ctrl_name)
+		var r: Rect2 = ctrl.get_global_rect()
+		assert(r.end.x <= 1281.0 and r.end.y <= 721.0, "%s overflows 1280x720: %s" % [ctrl_name, str(r)])
+		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
+			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] + map.position
+			assert(not r.has_point(pad_screen), "%s overlaps Pad P%d at %s! rect=%s" % [ctrl_name, i + 1, str(pad_screen), str(r)])
 
+	# Verify BuildMenuBox is IMMEDIATELY visible on startup (no mystery!)
+	assert(hud.build_menu_box.visible, "BuildMenuBox must be visible on startup so player sees towers to add")
+	assert(hud.build_blaster_button.visible and hud.build_mortar_button.visible)
+
+	# Verify Wave 1 PromptBanner is visible and NOT overlapping Pad P1 (220, 64+32=96)!
+	assert(hud.prompt_banner.visible and hud.prompt_label.text.contains("TIP (1/6)"))
+	var p1_screen := Vector2(220.0, 96.0)
+	assert(not hud.prompt_banner.get_global_rect().has_point(p1_screen), "PromptBanner must NOT cover Pad P1")
+
+	# Simulate click on Pad P1 (while PromptBanner is open!):
+	await _send_left_click(map, p1_screen)
+	assert(map.selected_pad_index == 0, "Click on Pad P1 must reach Map and select pad 0")
+	assert(hud.build_pad_label.text.contains("P1"))
+
+	# Click Blaster button -> places Blaster on P1!
+	hud.build_blaster_button.pressed.emit()
+	await get_tree().process_frame
+	assert(map.pad_occupancy[0] != null and map.pad_occupancy[0].tower_type == "blaster")
+
+	# Click empty map space -> clears selection -> BuildMenuBox STILL visible, click Mortar button FIRST -> click P11!
+	await _send_left_click(map, Vector2(100.0, 200.0))
+	assert(hud.build_menu_box.visible)
+	hud.build_mortar_button.pressed.emit()
+	assert(map.pending_build_type == "mortar")
+	await _send_left_click(map, Vector2(430.0, 64.0 + 322.0)) # Pad P11 (index 10)
+	assert(map.pad_occupancy[10] != null and map.pad_occupancy[10].tower_type == "mortar", "Clicking tower then pad must build Mortar on P11")
+
+	# Check How Time Works <= 9 lines & names all 3 mutations + Surge
 	var htw: String = hud.how_time_works_label.text
 	var lines: PackedStringArray = htw.split("\n", false)
 	assert(lines.size() <= 9, "How time works must be <=9 lines, got %d" % lines.size())
 	assert(htw.contains("Armoured") and htw.contains("Thaw-hardened") and htw.contains("Swift") and htw.contains("SURGE"))
 
+	# Reach Wave 2 active -> TIP 2/6 appears once; Rewind must not repeat it
+	hud._on_prompt_dismiss_pressed()
 	wm.start_wave()
 	while wm.is_wave_active():
 		wm.step_wave(0.25)
@@ -108,7 +170,6 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 	]
 
 	map.build_tower_on_pad(4, "blaster")
-	_step(map, wm, econ, surge, tp, ba, 4.5, dt)
 
 	var did_rewind_w5: bool = false
 	var did_rewind_w9: bool = false
@@ -118,12 +179,9 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 
 		if not use_heavy_powers and w == 2 and GameState.mission.economy["refineries_owned"] == 1 and econ.can_build_refinery():
 			econ.start_build_refinery()
-			_step(map, wm, econ, surge, tp, ba, 6.2, dt)
 		if use_heavy_powers and w == 3 and GameState.mission.economy["refineries_owned"] == 1 and econ.can_build_refinery():
 			econ.start_build_refinery()
-			_step(map, wm, econ, surge, tp, ba, 6.2, dt)
 
-		# Pace Hive Destroyer charges on Waves 6, 9, 13 (Guide p. 11 target timeline!) so Waves 1-13 all get combat-tested
 		var charge_waves_ready: bool = (w == 6 and GameState.mission.stats["charges_fired"] == 0) or (w == 9 and GameState.mission.stats["charges_fired"] == 1) or (w >= 13 and GameState.mission.stats["charges_fired"] == 2)
 		if charge_waves_ready and ba.can_start_charge():
 			ba.start_charge()
@@ -135,9 +193,6 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 			var cost: int = int(Balance.TOWERS[ttype]["cost"])
 			if map.pad_occupancy[p] == null and GameState.mission.economy["money"] >= cost + reserve:
 				map.build_tower_on_pad(p, ttype)
-				if use_heavy_powers and tp.can_use_power("haste"):
-					tp.activate_power("haste")
-				_step(map, wm, econ, surge, tp, ba, 7.2, dt)
 
 		for t in map.get_all_towers():
 			for stat_k in ["damage", "fire_rate", "range"]:
@@ -146,7 +201,6 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 					var upg_cost: int = Balance.TOWER_UPGRADE_COSTS[lvl]
 					if t.can_start_upgrade(stat_k) and GameState.mission.economy["money"] >= upg_cost + reserve:
 						t.start_upgrade(stat_k)
-						_step(map, wm, econ, surge, tp, ba, 5.2, dt)
 						break
 
 		for rk in ["reinforced_shots", "rapid_cycling", "extended_optics"]:
@@ -156,7 +210,6 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 		if use_heavy_powers and w == 7 and tp.can_upgrade_manipulator() and not ba.is_charging:
 			if GameState.mission.economy["money"] >= 300:
 				tp.start_manipulator_upgrade()
-				_step(map, wm, econ, surge, tp, ba, 10.2, dt)
 
 		if wm.state == WaveManager.State.BUILD:
 			wm.start_wave()
@@ -177,14 +230,14 @@ func _simulate_15_waves(use_heavy_powers: bool) -> Dictionary:
 				ba.start_charge()
 
 			if use_heavy_powers:
-				if w in [2, 4, 8, 10, 12] and wave_time > 5.0 and tp.can_use_power("pause"):
+				if w in [2, 3, 4, 7, 8, 10, 11, 12] and wave_time > 4.0 and tp.can_use_power("pause"):
 					tp.activate_power("pause")
-				if w in [4, 6, 11, 13] and wave_time > 2.0 and tp.can_use_power("haste"):
+				if w in [3, 4, 7, 8, 11, 12] and wave_time > 1.5 and tp.can_use_power("haste"):
 					tp.activate_power("haste")
 				if w == 5 and not did_rewind_w5 and wave_time > 8.0 and tp.can_use_power("rewind"):
 					did_rewind_w5 = true
 					tp.activate_power("rewind")
-				if w == 9 and not did_rewind_w9 and wave_time > 8.0 and tp.can_use_power("rewind"):
+				if w == 8 and not did_rewind_w9 and wave_time > 8.0 and tp.can_use_power("rewind"):
 					did_rewind_w9 = true
 					tp.activate_power("rewind")
 

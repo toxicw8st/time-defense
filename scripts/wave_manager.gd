@@ -41,6 +41,7 @@ func _on_mission_reset() -> void:
 
 func _reset_state() -> void:
 	state = State.BUILD
+	GameState.is_wave_active = false
 	_schedule.clear()
 	_spawn_index = 0
 	_wave_elapsed = 0.0
@@ -111,12 +112,14 @@ func _begin_wave_internal(wave_num: int, is_replay: bool) -> void:
 	_spawn_index = 0
 	_wave_elapsed = 0.0
 	state = State.SPAWNING
+	GameState.is_wave_active = true
 	state_changed.emit(state)
 	GameState.wave_started.emit(wave_num)
 
 
 func _complete_current_wave() -> void:
 	state = State.CLEARED
+	GameState.is_wave_active = false
 	state_changed.emit(state)
 
 	var wave_num: int = GameState.mission.wave_number

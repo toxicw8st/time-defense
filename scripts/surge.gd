@@ -47,7 +47,9 @@ func get_surge_window() -> float:
 func is_surge_paused() -> bool:
 	if GameState.mission.is_over:
 		return true
-	if GameState.is_base_locked():
+	if not GameState.is_wave_active:
+		return true
+	if GameState.is_base_locked() or GameState.is_base_charging():
 		return true
 	if wave_manager_ref != null and not wave_manager_ref.is_wave_active():
 		return true

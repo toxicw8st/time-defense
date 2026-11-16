@@ -41,7 +41,7 @@ func _process(delta: float) -> void:
 
 
 func step_base_attack(delta: float) -> void:
-	if GameState.mission.is_over or not is_charging:
+	if GameState.mission.is_over or not is_charging or not GameState.is_wave_active:
 		return
 	# Haste NEVER accelerates charge_remaining! Always 1.0x mission time.
 	charge_remaining = maxf(0.0, charge_remaining - delta)
@@ -114,7 +114,7 @@ func _fire_hive_destroyer() -> void:
 	GameState.enemy_base_hp_changed.emit(m.enemy_base_hp)
 
 	if map_ref != null:
-		map_ref.trigger_hive_beam_effect()
+		map_ref.trigger_hive_beam_effect(dmg)
 
 	var msg: String = "Hive destroyer hit - %d damage" % dmg
 	GameState.event_logged.emit(msg)

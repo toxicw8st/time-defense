@@ -14,3 +14,9 @@ Log of unspecified design choices and creator overrides made during prototype im
   - Time power cooldowns raised to ~1.5 waves (`Pause 55 s`, `Haste 50 s`, `Rewind 65 s` post-replay; Rewind is also locked during an active replay so nested rewinds cannot happen).
   - Surge window targets ~1.5 waves of pressure so ignoring time powers through Wave 2 triggers a Surge by the start of Wave 3 (verified during Step 5/balance pass).
   - If Wave 15 clears with lives > 0 and enemy base HP > 0, end the run in a `"Stalled"` debrief screen per Guide p. 11.
+
+## Post-Playtest Bug Fixes & Creator Rules
+- **BUILD Phase Universal Pause**: Between waves (`BUILD` phase), ALL progression timers — Refineries, tower/refinery/manipulator construction timers, Hive Destroyer charge timer, time-ability cooldowns, Surge countdown, and Mission Clock — pause so players can think calmly without being able to wait between waves for infinite money, cooldowns, or risk-free charging.
+- **Hive Destroyer Charge Pauses Time Abilities & Surge**: While Hive Destroyer is charging, all 3 time abilities (`Rewind`, `Pause`, `Haste`) are locked (`PAUSED (HIVE)`), active Pause/Haste effects and power cooldowns pause, and the Surge countdown pauses.
+- **Always-Visible Build Menu & Dual Placement Flow**: Build menu stays visible when no tower is selected; players can either click a pad then click a tower, OR click a tower first (`pending_build_type`) and click any open pad.
+- **Surge Reset Confirmed**: Using any time ability resets the Surge countdown (`52.0 s` / `60.0 s` at Lv4).

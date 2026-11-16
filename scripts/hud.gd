@@ -101,7 +101,7 @@ func _ready() -> void:
 	surge_banner.visible = false
 	prompt_banner.visible = false
 	pause_overlay.visible = false
-	build_menu_box.visible = false
+	build_menu_box.visible = true
 	tower_panel_box.visible = false
 
 	restart_button.pressed.connect(_on_restart_pressed)
@@ -155,6 +155,7 @@ func _build_research_buttons() -> void:
 	for key in RESEARCH_ORDER:
 		var btn := Button.new()
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		btn.add_theme_font_size_override("font_size", 11)
 		btn.pressed.connect(func() -> void:
 			if economy_ref != null:
@@ -203,11 +204,12 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	_pulse_accum += delta
-	if _banner_timer > 0.0:
-		_banner_timer = maxf(0.0, _banner_timer - delta)
-		if _banner_timer <= 0.0:
-			surge_banner.visible = false
+	if not get_tree().paused:
+		_pulse_accum += delta
+		if _banner_timer > 0.0:
+			_banner_timer = maxf(0.0, _banner_timer - delta)
+			if _banner_timer <= 0.0:
+				surge_banner.visible = false
 	_refresh_all()
 
 
@@ -282,12 +284,13 @@ func _refresh_power_buttons() -> void:
 		return
 	var offline: bool = GameState.is_base_locked()
 	var offline_str: String = _format_mmss(GameState.mission.manipulator_upgrading_remaining)
-	_style_power_button(rewind_button, "rewind", offline, offline_str)
-	_style_power_button(pause_button, "pause", offline, offline_str)
-	_style_power_button(haste_button, "haste", offline, offline_str)
+	var hive_charging: bool = GameState.is_base_charging()
+	_style_power_button(rewind_button, "rewind", offline, offline_str, hive_charging)
+	_style_power_button(pause_button, "pause", offline, offline_str, hive_charging)
+	_style_power_button(haste_button, "haste", offline, offline_str, hive_charging)
 
 
-func _style_power_button(btn: Button, power_name: String, offline: bool, offline_str: String) -> void:
+func _style_power_button(btn: Button, power_name: String, offline: bool, offline_str: String, hive_charging: bool) -> void:
 	var cfg: Dictionary = Balance.TIME_POWERS[power_name]
 	var title: String = cfg["name"].to_upper()
 	var effect: String = cfg["short_effect"]
@@ -295,22 +298,24 @@ func _style_power_button(btn: Button, power_name: String, offline: bool, offline
 	var status_line: String = "READY"
 
 	if offline:
-		status_line = "OFFLINE - %s" % offline_str
+		status_line = "OFFLINE %s" % offline_str
+	elif hive_charging:
+		status_line = "PAUSED (HIVE)"
 	elif power_name == "pause" and time_powers_ref.pause_remaining > 0.0:
-		status_line = "ACTIVE: %.1fs" % time_powers_ref.pause_remaining
+		status_line = "ACTIVE %.1fs" % time_powers_ref.pause_remaining
 	elif power_name == "haste" and time_powers_ref.haste_remaining > 0.0:
-		status_line = "ACTIVE: %.1fs" % time_powers_ref.haste_remaining
+		status_line = "ACTIVE %.1fs" % time_powers_ref.haste_remaining
 	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.is_replaying_wave():
-		status_line = "REPLAYING WAVE"
+		status_line = "REPLAYING"
 	elif time_powers_ref.cooldowns.get(power_name, 0.0) > 0.0:
-		status_line = "CD: %.0fs" % ceilf(time_powers_ref.cooldowns[power_name])
-	elif power_name == "rewind" and not time_powers_ref.can_use_power("rewind"):
+		status_line = "CD %.0fs" % ceilf(time_powers_ref.cooldowns[power_name])
+	elif not time_powers_ref.can_use_power(power_name):
 		status_line = "WAIT FOR WAVE"
 
-	btn.text = "%s [%s]\n%s | %s" % [title, status_line, effect, cost]
+	btn.text = "%s [%s]\n%s\n%s" % [title, status_line, effect, cost]
 	var usable: bool = time_powers_ref.can_use_power(power_name)
 	btn.disabled = not usable
-	if offline:
+	if offline or hive_charging:
 		btn.modulate = Color(0.55, 0.55, 0.6)
 	elif (power_name == "pause" and time_powers_ref.pause_remaining > 0.0) or (power_name == "haste" and time_powers_ref.haste_remaining > 0.0):
 		btn.modulate = Color(0.45, 0.95, 1.0)
@@ -328,10 +333,13 @@ func _format_mmss(seconds: float) -> String:
 func _refresh_manipulator_panel() -> void:
 	var m := GameState.mission
 	if m.manipulator_upgrading_remaining > 0.0:
-		manip_status_label.text = "Manipulator Lv %d -> %d | OFFLINE %.1fs (Surge paused, Base locked)" % [
+		var phase_note: String = "OFFLINE %.1fs (Surge paused, Base locked)" % m.manipulator_upgrading_remaining
+		if not GameState.is_wave_active:
+			phase_note = "QUEUED %.1fs (builds in wave; powers OFFLINE)" % m.manipulator_upgrading_remaining
+		manip_status_label.text = "Manipulator Lv %d -> %d | %s" % [
 			m.manipulator_level,
 			m.manipulator_level + 1,
-			m.manipulator_upgrading_remaining,
+			phase_note,
 		]
 		manip_status_label.modulate = Color(1.0, 0.78, 0.35)
 		manip_upgrade_button.text = "Upgrading (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
@@ -413,7 +421,8 @@ func _refresh_selection_panel() -> void:
 		]
 		if _selected_tower.current_job != null:
 			var kind_txt: String = "Building" if not _selected_tower.is_built else "Upgrading %s" % _selected_tower.current_job.target_key.capitalize()
-			tower_status_label.text = "%s: %.1f s left (cannot fire)" % [kind_txt, _selected_tower.current_job.remaining_time]
+			var wave_tag: String = "" if GameState.is_wave_active else " [starts in wave]"
+			tower_status_label.text = "%s: %.1f s left (cannot fire)%s" % [kind_txt, _selected_tower.current_job.remaining_time, wave_tag]
 			tower_status_label.modulate = Color(1.0, 0.85, 0.35)
 		else:
 			tower_status_label.text = "Status: Active"
@@ -435,11 +444,18 @@ func _refresh_selection_panel() -> void:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
 		build_pad_label.text = "BUILD ON PAD P%d" % (_selected_pad_idx + 1)
-		_style_build_button(build_blaster_button, "blaster", money)
-		_style_build_button(build_mortar_button, "mortar", money)
+		_style_build_button(build_blaster_button, "blaster", money, false)
+		_style_build_button(build_mortar_button, "mortar", money, false)
 	else:
-		build_menu_box.visible = false
+		build_menu_box.visible = true
 		tower_panel_box.visible = false
+		var pending: String = map_ref.pending_build_type if map_ref != null else ""
+		if pending != "":
+			build_pad_label.text = "CLICK AN EMPTY PAD (P1-P14) TO PLACE %s (right-click cancels)" % Balance.TOWERS[pending]["name"].to_upper()
+		else:
+			build_pad_label.text = "BUILD TOWERS (click a tower or pad P1-P14)"
+		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
+		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
 
 
 func _refresh_research_panel() -> void:
@@ -466,7 +482,10 @@ func _refresh_charge_button() -> void:
 		return
 	if base_attack_ref.is_charging:
 		var pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0))
-		if base_attack_ref.is_in_firing_warning():
+		if not GameState.is_wave_active:
+			charge_button.text = "HIVE DESTROYER\nARMED (%.1fs in wave)" % base_attack_ref.charge_remaining
+			charge_button.modulate = Color(0.7, 0.9, 1.0)
+		elif base_attack_ref.is_in_firing_warning():
 			var flash: float = 0.65 + 0.35 * sin(_pulse_accum * 16.0)
 			charge_button.text = "HIVE DESTROYER\nREADY - firing (%.1fs)" % base_attack_ref.charge_remaining
 			charge_button.modulate = Color(1.0, 0.85, 0.25, flash)
@@ -500,7 +519,8 @@ func _refresh_refinery_button() -> void:
 		refinery_button.disabled = true
 		return
 	if economy_ref.refinery_job != null:
-		refinery_button.text = "Refinery Building (%.1fs)" % economy_ref.refinery_job.remaining_time
+		var suffix: String = "" if GameState.is_wave_active else " [in wave]"
+		refinery_button.text = "Refinery (%.1fs)%s" % [economy_ref.refinery_job.remaining_time, suffix]
 		refinery_button.disabled = true
 		refinery_button.modulate = Color(1.0, 0.88, 0.4)
 		return
@@ -516,11 +536,13 @@ func _refresh_refinery_button() -> void:
 	refinery_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
 
-func _style_build_button(btn: Button, tower_type: String, money: int) -> void:
+func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: bool = false) -> void:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var cost: int = int(cfg["cost"])
 	var affordable: bool = money >= cost and not GameState.mission.is_over
-	btn.text = "%s (%d$, %ds)\n%s - Dmg: %s, Spd: %s" % [
+	var armed_prefix: String = "[CLICK PAD] " if is_armed else ""
+	btn.text = "%s%s (%d$, %ds)\n%s - Dmg: %s, Spd: %s" % [
+		armed_prefix,
 		cfg["name"],
 		cost,
 		int(cfg["build_time"]),
@@ -529,7 +551,10 @@ func _style_build_button(btn: Button, tower_type: String, money: int) -> void:
 		cfg["speed_rating"],
 	]
 	btn.disabled = not affordable
-	btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+	if is_armed:
+		btn.modulate = Color(0.55, 0.95, 1.0)
+	else:
+		btn.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
 
 func _style_upgrade_button(btn: Button, title: String, key: String, tower: TowerUnit, money: int) -> void:
@@ -628,8 +653,16 @@ func _on_refinery_button_pressed() -> void:
 
 
 func _build_tower(tower_type: String) -> void:
-	if map_ref != null and _selected_pad_idx >= 0:
+	if map_ref == null:
+		return
+	if _selected_pad_idx >= 0 and map_ref.pad_occupancy[_selected_pad_idx] == null:
 		map_ref.build_tower_on_pad(_selected_pad_idx, tower_type)
+	else:
+		if map_ref.pending_build_type == tower_type:
+			map_ref.set_pending_build_type("")
+		else:
+			map_ref.set_pending_build_type(tower_type)
+		_refresh_selection_panel()
 
 
 func _set_preview_type(tower_type: String) -> void:

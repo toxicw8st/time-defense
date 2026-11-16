@@ -53,6 +53,7 @@ class MissionState:
 var mission: MissionState = MissionState.new()
 var mission_elapsed_seconds: float = 0.0
 var is_clock_paused: bool = false
+var is_wave_active: bool = false
 var is_enemies_frozen: bool = false
 var is_haste_active: bool = false
 var base_attack_charging_active: bool = false
@@ -64,7 +65,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_clock_paused and not mission.is_over:
+	if is_wave_active and not is_clock_paused and not mission.is_over:
 		mission_elapsed_seconds += delta
 
 
@@ -72,6 +73,7 @@ func reset_mission() -> void:
 	mission = MissionState.new()
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
+	is_wave_active = false
 	is_enemies_frozen = false
 	is_haste_active = false
 	base_attack_charging_active = false

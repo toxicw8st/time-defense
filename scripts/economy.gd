@@ -38,7 +38,7 @@ func _process(delta: float) -> void:
 
 
 func step_economy(delta: float) -> void:
-	if GameState.mission.is_over:
+	if GameState.mission.is_over or not GameState.is_wave_active:
 		return
 
 	# Refinery income tick every 5.0 s of mission time

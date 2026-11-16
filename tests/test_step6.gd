@@ -1,12 +1,11 @@
 extends Node
 
-## Headless Step 6 acceptance verification (including creator-confirmed Rewind & Base-lock rules):
-## - Wave 1: all 3 powers ready
-## - Pause freezes enemy movement ONLY while towers keep firing, stacks Thaw-hardened (frozen damage drops up to 50%)
-## - Haste speeds 7 s Mortar build in ~2.33 s and adds Swift x1 (visible on next spawns)
-## - Rewind (creator rule): restarts current enemy wave, adds Armoured x1, keeps mid-wave towers, keeps money/research,
-##   keeps lost lives (lost lives stay lost!), preserves surge count, prevents double wave-clear bonus, locks nested Rewind until replay ends + 65 s cooldown
-## - Manipulator upgrade mid-wave disables all 3 powers ("OFFLINE"), locks Refineries, pauses Surge for exact build duration, then restores all
+## Headless Step 6 acceptance verification:
+## - Between waves (BUILD): time powers Pause/Haste cannot be activated and cooldowns/builds pause
+## - Pause freezes alien movement ONLY while towers keep firing, stacks Thaw-hardened
+## - Haste speeds 7 s Mortar build in ~2.33 s during wave and adds Swift x1
+## - Creator-confirmed Rewind restarts wave, keeps mid-wave towers/money/research/lost lives/surges, adds Armoured x1
+## - Manipulator upgrade mid-wave disables all 3 powers ("OFFLINE"), locks Refineries, pauses Surge, then restores all
 
 func _ready() -> void:
 	GameState.reset_mission()
@@ -21,24 +20,26 @@ func _ready() -> void:
 	var tp: TimePowersManager = inst.get_node("TimePowersManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	# 1) Three Pauses across mission stack Thaw-hardened to x3 and drop frozen damage to 70%
+	# Anti-exploit: Pause/Haste cannot be activated in BUILD phase
+	assert(not tp.can_use_power("pause") and not tp.can_use_power("haste"))
+
 	var blaster: TowerUnit = map.build_tower_on_pad(4, "blaster")
-	_step(map, wm, econ, surge, tp, 4.5)
-	assert(blaster.is_built)
 	wm.start_wave()
-	# Walk ~3.2 s so Runner #1 enters P5 Blaster range (x ~ 270)
-	_step(map, wm, econ, surge, tp, 3.2)
+	_step(map, wm, econ, surge, tp, 4.1) # 4.0 s Blaster build completes in wave
+	assert(blaster.is_built)
+	# Wait until Runner #1 walks into P5 Blaster range
+	_step(map, wm, econ, surge, tp, 2.5)
 	var active_e: EnemyUnit = map.get_active_enemies()[0]
 	var hp_before: float = active_e.hp
 
-	# Use Pause #1: verify enemy frozen while tower still fires!
+	# 1) Pause freezes enemy while tower keeps firing!
 	assert(tp.activate_power("pause"))
 	assert(GameState.mission.mutations["thaw_stacks"] == 1)
 	var pos_frozen: Vector2 = active_e.position
 	_step(map, wm, econ, surge, tp, 0.55)
 	assert(not is_instance_valid(active_e) or active_e.is_dead_or_leaked or (active_e.position.distance_to(pos_frozen) < 0.01 and active_e.hp < hp_before), "Frozen enemy must NOT move and tower MUST fire during Pause")
 
-	# Test Thaw-hardened x3 frozen damage reduction (30% reduction -> 70% taken)
+	# Thaw-hardened x3 frozen damage reduction (30% reduction -> 70% taken)
 	GameState.mission.mutations["thaw_stacks"] = 3
 	var dummy: EnemyUnit = map.spawn_enemy("brute", 8)
 	var brute_start_hp: float = dummy.hp
@@ -50,20 +51,17 @@ func _ready() -> void:
 	tp.pause_remaining = 0.0
 	tp.cooldowns["pause"] = 0.0
 
-	# 2) Haste finishes a 7 s Mortar in ~2.33 s of hasted time and adds Swift x1
+	# 2) Haste finishes a 7 s Mortar in ~2.33 s during active wave and adds Swift x1
 	var mortar: TowerUnit = map.build_tower_on_pad(10, "mortar")
 	assert(mortar != null and not mortar.is_built)
 	assert(tp.activate_power("haste"))
 	assert(GameState.mission.mutations["swift_stacks"] == 1)
-	_step(map, wm, econ, surge, tp, 2.4) # 2.4 * 3 = 7.2 s >= 7.0 s
+	_step(map, wm, econ, surge, tp, 2.4)
 	assert(mortar.is_built, "Haste 3x must finish 7 s Mortar in ~2.33 s")
 	tp.haste_remaining = 0.0
 	tp.cooldowns["haste"] = 0.0
 
-	# 3) Creator-confirmed Rewind test:
-	# Build a second Blaster MID-WAVE, lose 2 lives, suffer 1 surge, then Rewind.
-	# Verify: mid-wave tower STAYS, money/research STAY, lost lives STAY LOST (18), surge STAYS (1),
-	# Armoured stacks +1, nested Rewind blocked during replay, and replay clear doesn't double-pay bonus.
+	# 3) Creator-confirmed Rewind test
 	GameState.mission.surge_count = 1
 	GameState.mission.lives = 18
 	GameState.mission.economy["money"] = 300
@@ -85,7 +83,6 @@ func _ready() -> void:
 	assert(GameState.mission.economy["money"] == money_at_rewind)
 	assert(GameState.mission.economy["research"] == res_at_rewind)
 
-	# Clear the replayed wave and verify Armoured x1 HP (+15%) + Rewind cooldown starts after clear
 	_step(map, wm, econ, surge, tp, 0.1)
 	var first_armoured: EnemyUnit = map.get_active_enemies()[0]
 	assert(first_armoured.max_hp == 46.0, "Armoured x1 Wave 1 Runner must be round(40 * 1.15) = 46")
@@ -93,10 +90,15 @@ func _ready() -> void:
 		_step(map, wm, econ, surge, tp, 0.2)
 	assert(tp.cooldowns["rewind"] > 60.0, "Rewind 65 s cooldown starts after replayed wave ends")
 
-	# 4) Manipulator upgrade mid-wave: powers OFFLINE, Refineries locked, Surge paused for exact build time, then restored
+	# Verify cooldowns stay PAUSED during BUILD phase!
+	var cd_in_build: float = tp.cooldowns["rewind"]
+	_step(map, wm, econ, surge, tp, 30.0)
+	assert(is_equal_approx(tp.cooldowns["rewind"], cd_in_build), "Cooldowns must pause between waves!")
+
+	# 4) Manipulator upgrade mid-wave: powers OFFLINE, Refineries locked, Surge paused, then restored
 	wm.start_wave()
 	GameState.mission.economy["money"] = 500
-	assert(tp.start_manipulator_upgrade()) # 1->2 costs 150, 10 s
+	assert(tp.start_manipulator_upgrade())
 	assert(GameState.is_base_locked())
 	assert(not tp.can_use_power("pause") and not tp.can_use_power("haste") and not tp.can_use_power("rewind"))
 	assert(not econ.can_build_refinery(), "Refinery build must be locked during Manipulator upgrade")

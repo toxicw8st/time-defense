@@ -2,6 +2,7 @@ extends Node
 class_name TimePowersManager
 
 ## Owns Rewind, Pause, Haste (active durations, cooldowns, wave-1 readiness, manipulator downtime).
+## All time-ability timers pause between waves (BUILD) and while Hive Destroyer is charging.
 
 signal power_activated(power_name: String)
 signal manipulator_upgraded(new_level: int)
@@ -72,7 +73,17 @@ func step_powers(delta: float) -> void:
 	if GameState.mission.is_over:
 		return
 
-	# Manipulator upgrade construction (not hasted while offline)
+	# Keep effect flags off whenever wave is paused (BUILD) or Hive Destroyer is charging
+	var hive_charging: bool = GameState.is_base_charging()
+	var can_tick_wave_timers: bool = GameState.is_wave_active and not hive_charging
+	GameState.is_enemies_frozen = (pause_remaining > 0.0) and can_tick_wave_timers
+	GameState.is_haste_active = (haste_remaining > 0.0) and can_tick_wave_timers
+
+	# Between waves (BUILD): all ability timers, cooldowns, and manipulator upgrades pause
+	if not GameState.is_wave_active:
+		return
+
+	# Manipulator upgrade construction (pauses between waves, never hasted)
 	if GameState.mission.manipulator_upgrading_remaining > 0.0:
 		GameState.mission.manipulator_upgrading_remaining = maxf(0.0, GameState.mission.manipulator_upgrading_remaining - delta)
 		if GameState.mission.manipulator_upgrading_remaining <= 0.0:
@@ -80,6 +91,10 @@ func step_powers(delta: float) -> void:
 			var new_lvl: int = GameState.mission.manipulator_level
 			manipulator_upgraded.emit(new_lvl)
 			GameState.event_logged.emit("Manipulator upgraded to Level %d - powers online!" % new_lvl)
+
+	# Hive Destroyer charging pauses all time abilities (active durations + cooldown recovery)
+	if hive_charging:
+		return
 
 	# Active Pause effect
 	if pause_remaining > 0.0:
@@ -98,7 +113,7 @@ func step_powers(delta: float) -> void:
 			GameState.is_haste_active = false
 			cooldowns["haste"] = get_effective_cooldown("haste")
 
-	# Cooldowns tick down after effect ends (and Rewind ticks down after replayed wave ends)
+	# Cooldowns tick down only during active waves and when Hive Destroyer is NOT charging
 	for key in ["rewind", "pause", "haste"]:
 		if cooldowns[key] > 0.0:
 			cooldowns[key] = maxf(0.0, cooldowns[key] - delta)
@@ -131,16 +146,16 @@ func get_haste_duration() -> float:
 
 
 func can_use_power(power_name: String) -> bool:
-	if GameState.mission.is_over or GameState.is_base_locked():
+	if GameState.mission.is_over or GameState.is_base_locked() or GameState.is_base_charging():
 		return false
 	if cooldowns.get(power_name, 0.0) > 0.0:
 		return false
 
 	match power_name:
 		"pause":
-			return pause_remaining <= 0.0
+			return GameState.is_wave_active and pause_remaining <= 0.0
 		"haste":
-			return haste_remaining <= 0.0
+			return GameState.is_wave_active and haste_remaining <= 0.0
 		"rewind":
 			if _waiting_rewind_cooldown_after_replay:
 				return false
@@ -167,7 +182,6 @@ func activate_power(power_name: String) -> bool:
 			GameState.is_haste_active = true
 			GameState.event_logged.emit("HASTE activated (%.0fs) - Construction 3x faster." % haste_remaining)
 		"rewind":
-			# Cancel any active Pause when rewinding the wave cleanly
 			if pause_remaining > 0.0:
 				pause_remaining = 0.0
 				GameState.is_enemies_frozen = false
@@ -203,7 +217,7 @@ func start_manipulator_upgrade() -> bool:
 	if not GameState.spend_money(cost):
 		return false
 	GameState.mission.manipulator_upgrading_remaining = float(cfg["build_time"])
-	GameState.event_logged.emit("Manipulator upgrading to Lv%d (%.0fs) - Powers OFFLINE, Base locked, Surge paused." % [
+	GameState.event_logged.emit("Manipulator queued for Lv%d (%.0fs in wave) - Powers OFFLINE, Base locked, Surge paused." % [
 		next_lvl,
 		float(cfg["build_time"]),
 	])

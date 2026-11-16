@@ -6,6 +6,12 @@
 position = Vector2(0, 64)
 script = ExtResource("1_map")
 
+[node name="MapClickArea" type="Control" parent="."]
+offset_right = 940.0
+offset_bottom = 480.0
+focus_mode = 0
+mouse_filter = 0
+
 [node name="EnemyPath" type="Path2D" parent="."]
 
 [node name="TowersContainer" type="Node2D" parent="."]

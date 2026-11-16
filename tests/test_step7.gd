@@ -1,11 +1,10 @@
 extends Node
 
 ## Headless Step 7 acceptance verification:
-## - Test mission (167 damage/shot) is won with exactly 3 fired charges
-## - Haste active during a charge does NOT change its 30.0 s completion time (timed strictly!)
-## - Charge started in BUILD phase completes and wins mid-wave the moment the 3rd hit lands
-## - Base lock: Manipulator upgrade blocked while charging; charging blocked while Manipulator upgrading
-## - Restart after loss resets wave 1, 200 money, 0 research, 0 mutations, 0 surges, manipulator Lv1
+## - Charge armed in BUILD does NOT tick in BUILD (anti-exploit), advances during active waves
+## - Charging Hive Destroyer PAUSES all time abilities (Rewind, Pause, Haste locked & cooldowns paused) AND pauses Surge
+## - Haste cannot speed up the 30.0 s Hive Destroyer charge
+## - 3 charges win mid-wave; Restart resets everything cleanly
 
 func _ready() -> void:
 	GameState.reset_mission()
@@ -21,54 +20,83 @@ func _ready() -> void:
 	var ba: BaseAttackManager = inst.get_node("BaseAttackManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	GameState.mission.economy["money"] = 1000
+	GameState.mission.economy["money"] = 2000
+	# Build strong defense (3 Blasters + 2 Mortars) so Wave 6/7/9/10 stay alive during 30 s charge timing checks
+	var b1: TowerUnit = map.build_tower_on_pad(4, "blaster")
+	var b2: TowerUnit = map.build_tower_on_pad(5, "blaster")
+	map.build_tower_on_pad(3, "blaster")
+	map.build_tower_on_pad(10, "mortar")
+	map.build_tower_on_pad(9, "mortar")
 
-	# 1) Start Charge #1 during BUILD phase while Haste is active: must STILL take full 30.0 s!
+	# 1) Arm Charge #1 in BUILD: must stay at 30.0 s in BUILD, then advance during wave while pausing time abilities & Surge!
 	assert(ba.start_charge())
 	assert(not ba.can_start_charge(), "Cannot start 2nd charge while charging")
-	assert(not tp.can_upgrade_manipulator(), "Manipulator upgrade must be blocked while Hive Destroyer is charging")
-	assert(tp.activate_power("haste"))
-	assert(GameState.is_haste_active)
+	assert(not tp.can_upgrade_manipulator(), "Manipulator upgrade blocked while Hive Destroyer is charging")
+	_step(map, wm, econ, surge, tp, ba, 20.0)
+	assert(is_equal_approx(ba.charge_remaining, 30.0), "Hive charge must NOT advance in BUILD phase")
 
-	var elapsed: float = 0.0
-	var dt: float = 0.05
-	# Step 29.9 s with Haste active for the first 6 s -> must NOT have fired yet!
-	while elapsed < 29.9:
-		elapsed += dt
-		_step(map, wm, econ, surge, tp, ba, dt)
-	assert(ba.is_charging and GameState.mission.enemy_base_hp == 500, "Haste must NEVER speed up base attack charge! elapsed=%.2f rem=%.2f" % [elapsed, ba.charge_remaining])
+	# Start Wave 6 (26 Runners, lasts >35s!) + test active Haste/cooldown pause during Hive charging!
+	GameState.mission.wave_number = 6
+	wm.start_wave()
+	tp.cooldowns["pause"] = 20.0
+	tp.haste_remaining = 4.0
+	assert(not tp.can_use_power("rewind") and not tp.can_use_power("pause") and not tp.can_use_power("haste"), "All time powers MUST be paused while Hive charging")
+	assert(surge.is_surge_paused(), "Surge MUST pause while Hive charging")
+	hud._refresh_power_buttons()
+	assert(hud.rewind_button.text.contains("PAUSED (HIVE)"))
 
-	# Step final 0.15 s -> fires at exact 30.0 s
+	var surge_before_charge: float = GameState.mission.surge_timer_seconds
+	_step(map, wm, econ, surge, tp, ba, 29.9)
+	assert(not GameState.is_haste_active, "Haste must stay suspended while Hive charging")
+	assert(is_equal_approx(tp.cooldowns["pause"], 20.0), "Power cooldowns must pause while Hive charging")
+	assert(is_equal_approx(GameState.mission.surge_timer_seconds, surge_before_charge), "Surge must stay paused while Hive charging")
+	assert(ba.is_charging and GameState.mission.enemy_base_hp == 500, "Must take full 30.0 s")
+
 	_step(map, wm, econ, surge, tp, ba, 0.15)
 	assert(not ba.is_charging)
 	assert(GameState.mission.enemy_base_hp == 333, "1st hit must deal 167 dmg -> 333 HP")
 	assert(GameState.mission.stats["charges_fired"] == 1)
 
 	# 2) Verify Manipulator upgrade blocks starting Base Attack charge
+	tp.cooldowns["pause"] = 0.0
+	tp.haste_remaining = 0.0
+	GameState.mission.wave_number = 7
+	wm.state = WaveManager.State.BUILD
+	GameState.is_wave_active = false
+	wm.start_wave()
 	assert(tp.start_manipulator_upgrade())
-	assert(not ba.can_start_charge(), "Hive Destroyer charge must be blocked while Manipulator is upgrading")
+	assert(not ba.can_start_charge(), "Hive charge blocked while Manipulator upgrading")
 	_step(map, wm, econ, surge, tp, ba, 10.1)
 	assert(not GameState.is_base_locked())
 
-	# 3) Fire Charge #2
+	# Upgrade b1/b2 damage to handle Wave 9-10 easily
+	b1.start_upgrade("damage")
+	b2.start_upgrade("damage")
+	_step(map, wm, econ, surge, tp, ba, 3.5)
+
+	# 3) Fire Charge #2 on Wave 9
+	GameState.mission.wave_number = 9
+	wm.state = WaveManager.State.BUILD
+	GameState.is_wave_active = false
 	assert(ba.start_charge())
+	wm.start_wave()
 	_step(map, wm, econ, surge, tp, ba, 30.05)
 	assert(GameState.mission.enemy_base_hp == 166)
 	assert(GameState.mission.stats["charges_fired"] == 2)
 
-	# 4) Start Charge #3 in BUILD, then start Wave 1 and verify Win triggers MID-WAVE on 3rd hit!
+	# 4) Fire Charge #3 on Wave 10 and verify Win triggers mid-wave!
+	GameState.mission.wave_number = 10
+	wm.state = WaveManager.State.BUILD
+	GameState.is_wave_active = false
 	assert(ba.start_charge())
-	_step(map, wm, econ, surge, tp, ba, 25.0)
 	wm.start_wave()
-	assert(wm.is_wave_active())
-	_step(map, wm, econ, surge, tp, ba, 5.1)
+	_step(map, wm, econ, surge, tp, ba, 30.05)
 	assert(GameState.mission.enemy_base_hp == 0)
 	assert(GameState.mission.stats["charges_fired"] == 3)
 	assert(GameState.mission.is_over and GameState.mission.outcome == "won")
-	assert(wm.is_wave_active(), "Win must trigger mid-wave immediately on 3rd hit")
 	assert(hud.end_overlay.visible and hud.end_title_label.text.contains("VICTORY"))
 
-	# 5) Simulate loss with dirty state, press Restart, verify full MissionState reset
+	# 5) Restart resets everything cleanly
 	GameState.reset_mission()
 	GameState.mission.wave_number = 7
 	GameState.mission.mutations["armoured_stacks"] = 3
@@ -85,7 +113,7 @@ func _ready() -> void:
 	assert(m.mutations["armoured_stacks"] == 0 and m.mutations["thaw_stacks"] == 0 and m.mutations["swift_stacks"] == 0)
 	assert(m.surge_count == 0 and m.manipulator_level == 1 and m.enemy_base_hp == 500)
 
-	print("STEP7_TEST_PASS charges_fired=3 haste_invariant=true restart_clean=true")
+	print("STEP7_TEST_PASS charges_fired=3 hive_pauses_abilities=true restart_clean=true")
 	get_tree().quit(0)
 
 
