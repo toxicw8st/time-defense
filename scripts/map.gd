@@ -207,7 +207,7 @@ func build_tower_on_pad(pad_idx: int, tower_type: String) -> TowerUnit:
 	if pad_occupancy[pad_idx] != null:
 		return null
 	var cost: int = int(Balance.TOWERS[tower_type]["cost"])
-	if not GameState.spend_money(cost):
+	if not GameState.spend_money(cost, true):
 		return null
 
 	var tower: TowerUnit = tower_scene.instantiate()
@@ -327,7 +327,8 @@ func _on_unit_leaked(enemy: EnemyUnit) -> void:
 
 
 func _on_unit_died(enemy: EnemyUnit) -> void:
-	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position)
+	var is_replay: bool = GameState.mission.replay_count_this_wave > 0
+	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position, is_replay)
 
 
 func get_active_enemies() -> Array[EnemyUnit]:

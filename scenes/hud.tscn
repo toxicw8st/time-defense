@@ -11,22 +11,24 @@ offset_bottom = 64.0
 
 [node name="VBox" type="VBoxContainer" parent="TopBar"]
 layout_mode = 2
+theme_override_constants/separation = 2
 
 [node name="Row1" type="HBoxContainer" parent="TopBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 24
+theme_override_constants/separation = 16
 
 [node name="TopStatusLabel" type="Label" parent="TopBar/VBox/Row1"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
 text = "Lives: 20 / 20"
 
 [node name="EnemyBaseBox" type="VBoxContainer" parent="TopBar/VBox/Row1"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 2
+theme_override_constants/separation = 1
 
 [node name="EnemyBaseBar" type="ProgressBar" parent="TopBar/VBox/Row1/EnemyBaseBox"]
-custom_minimum_size = Vector2(360, 12)
+custom_minimum_size = Vector2(360, 10)
 layout_mode = 2
 max_value = 500.0
 value = 500.0
@@ -35,35 +37,74 @@ show_percentage = false
 [node name="EnemyBaseLabel" type="Label" parent="TopBar/VBox/Row1/EnemyBaseBox"]
 layout_mode = 2
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
-text = "Enemy Base: 500 / 500 HP | Shots to destroy: 3"
+theme_override_font_sizes/font_size = 11
+text = "Enemy Base: 500 / 500 HP | Charge: 0% | Cost: $450 | Dmg: 167/shot | Charges needed: 3"
 
 [node name="WaveLabel" type="Label" parent="TopBar/VBox/Row1"]
 layout_mode = 2
-text = "Wave 1 / 15"
+theme_override_font_sizes/font_size = 12
+text = "Wave 1 / 45"
 
 [node name="Row2" type="HBoxContainer" parent="TopBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 24
+theme_override_constants/separation = 14
 
 [node name="MoneyLabel" type="Label" parent="TopBar/VBox/Row2"]
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 layout_mode = 2
-text = "Money: 200"
+theme_override_font_sizes/font_size = 12
+text = "Money: $200"
 
 [node name="ResearchLabel" type="Label" parent="TopBar/VBox/Row2"]
 theme_override_colors/font_color = Color(0.45, 0.88, 1, 1)
 layout_mode = 2
-text = "Research: 0"
+theme_override_font_sizes/font_size = 12
+text = "Meta-Research: 0 R"
 
 [node name="RefineriesLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Refineries: 1 (+8$/5s)"
+theme_override_font_sizes/font_size = 12
+text = "Refineries: 0 (+$0.00/s)"
+
+[node name="SpeedBox" type="HBoxContainer" parent="TopBar/VBox/Row2"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SpeedPauseButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
+custom_minimum_size = Vector2(34, 22)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "||"
+
+[node name="Speed1xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
+custom_minimum_size = Vector2(34, 22)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "1x"
+
+[node name="Speed2xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
+custom_minimum_size = Vector2(34, 22)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "2x"
+
+[node name="Speed3xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
+custom_minimum_size = Vector2(34, 22)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "3x"
+
+[node name="LevelPickerButton" type="Button" parent="TopBar/VBox/Row2"]
+custom_minimum_size = Vector2(96, 22)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "Levels / Lab"
 
 [node name="ClockLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
-text = "Mission Time: 00:00"
+theme_override_font_sizes/font_size = 12
+text = "Time: 00:00"
 
 [node name="RightPanel" type="PanelContainer" parent="."]
 custom_minimum_size = Vector2(340, 480)
@@ -86,18 +127,18 @@ theme_override_constants/separation = 4
 
 [node name="PreviewTitleLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
-text = "PRE-WAVE PREVIEW - Wave 1 / 15"
+theme_override_font_sizes/font_size = 12
+text = "PRE-WAVE PREVIEW - Wave 1 / 45"
 
 [node name="PreviewBodyLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
-text = "Incoming: 8 Runners"
+theme_override_font_sizes/font_size = 11
+text = "Incoming: 20 Crawlers"
 autowrap_mode = 3
 
 [node name="PreviewMutationsLabel" type="Label" parent="RightPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 text = "Mutations: No mutations"
 autowrap_mode = 3
 
@@ -155,21 +196,28 @@ theme_override_constants/separation = 4
 [node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
-text = "BUILD TOWERS (click a tower or pad P1-P14)"
+text = "BUILD TOWERS"
 autowrap_mode = 3
 
 [node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
-text = "Blaster Turret (75$)"
+text = "Blaster Turret ($90)"
 alignment = 0
 
 [node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
-text = "Cluster Mortar (110$)"
+text = "Cluster Mortar ($110)"
+alignment = 0
+
+[node name="BuildLaserButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Laser Spire ($100)"
 alignment = 0
 
 [node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
@@ -228,28 +276,22 @@ theme_override_constants/separation = 3
 [node name="ManipStatusLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
-text = "Manipulator Lv 1 -> 2"
+text = "Manipulator Lv 1"
 autowrap_mode = 3
 
 [node name="ManipUpgradeButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox"]
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
-text = "Upgrade Manipulator (150$)"
+text = "Manipulator Lv2 ($150)"
 alignment = 0
 
-[node name="ResearchBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
+[node name="MetaHintLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="ResearchTitle" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 12
-text = "GLOBAL RESEARCH (kills only)"
-
-[node name="ResearchButtons" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox"]
-layout_mode = 2
-theme_override_constants/separation = 3
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.58, 0.78, 0.95, 1)
+text = "Research is spent between levels only (Levels / Lab)."
+autowrap_mode = 3
 
 [node name="BottomBar" type="PanelContainer" parent="."]
 offset_top = 544.0
@@ -267,15 +309,15 @@ theme_override_constants/separation = 12
 [node name="SurgeBar" type="ProgressBar" parent="BottomBar/VBox/SurgeRow"]
 custom_minimum_size = Vector2(360, 22)
 layout_mode = 2
-max_value = 45.0
-value = 45.0
+max_value = 950.0
+value = 950.0
 show_percentage = false
 
 [node name="SurgeLabel" type="Label" parent="BottomBar/VBox/SurgeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 12
-text = "SURGE - use a time power or all towers slow down: 45.0 s"
+text = "SURGE DEADLINE: Start of Wave 6 (use any time power to reset +5 waves)"
 
 [node name="SurgePenaltyLabel" type="Label" parent="BottomBar/VBox/SurgeRow"]
 layout_mode = 2
@@ -315,14 +357,14 @@ size_flags_horizontal = 3
 custom_minimum_size = Vector2(170, 56)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
-text = "Build Refinery (100$, 6s)"
+text = "Build Refinery ($250, 8s)"
 autowrap_mode = 3
 
 [node name="ChargeButton" type="Button" parent="BottomBar/VBox/Row2"]
 custom_minimum_size = Vector2(195, 56)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
-text = "Hive Destroyer (150$, 30s)"
+text = "Hive Destroyer ($450, 30s)"
 autowrap_mode = 3
 
 [node name="StartWaveButton" type="Button" parent="BottomBar/VBox/Row2"]
@@ -427,12 +469,89 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Restart Mission"
 
+[node name="BetweenLevelsOverlay" type="PanelContainer" parent="."]
+visible = false
+offset_left = 220.0
+offset_top = 86.0
+offset_right = 1060.0
+offset_bottom = 530.0
+
+[node name="Margin" type="MarginContainer" parent="BetweenLevelsOverlay"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="BetweenLevelsOverlay/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="BetweenLevelsOverlay/Margin/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 15
+text = "LEVEL PICKER & ROGUE-LIKE RESEARCH LAB (BETWEEN LEVELS ONLY)"
+
+[node name="MetaResearchStatusLabel" type="Label" parent="BetweenLevelsOverlay/Margin/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.45, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 12
+text = "Persistent Meta-Research: 0 R (Persists across levels; max 60 R earned per mission)"
+
+[node name="LevelRow" type="HBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="LevelSelectLabel" type="Label" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Select Level (1/N Base Shots):"
+
+[node name="Level1Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "Level 1 (1 Shot = 500 dmg)"
+
+[node name="Level2Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "Level 2 (2 Shots = 250 dmg)"
+
+[node name="Level3Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+text = "Level 3 (3 Shots = 167 dmg)"
+
+[node name="ResearchButtons" type="VBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
+layout_mode = 2
+ size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="BottomButtons" type="HBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="LaunchLevelButton" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/BottomButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Start Selected Level (Reset Mission, Keep Research)"
+
+[node name="CloseLabButton" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/BottomButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Close"
+
 [node name="DebugPanel" type="PanelContainer" parent="."]
 visible = false
 offset_left = 16.0
 offset_top = 74.0
-offset_right = 500.0
-offset_bottom = 260.0
+offset_right = 520.0
+offset_bottom = 268.0
 
 [node name="MarginContainer" type="MarginContainer" parent="DebugPanel"]
 layout_mode = 2
@@ -448,9 +567,9 @@ text = "Debug"
 [node name="EndOverlay" type="PanelContainer" parent="."]
 visible = false
 offset_left = 340.0
-offset_top = 170.0
+offset_top = 150.0
 offset_right = 940.0
-offset_bottom = 490.0
+offset_bottom = 510.0
 
 [node name="Margin" type="MarginContainer" parent="EndOverlay"]
 layout_mode = 2
@@ -461,7 +580,7 @@ theme_override_constants/margin_bottom = 20
 
 [node name="VBox" type="VBoxContainer" parent="EndOverlay/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
 [node name="EndTitleLabel" type="Label" parent="EndOverlay/Margin/VBox"]
 layout_mode = 2
@@ -472,6 +591,10 @@ text = "DEFEAT - BASE LOST"
 layout_mode = 2
 text = "Stats"
 autowrap_mode = 3
+
+[node name="EndLabButton" type="Button" parent="EndOverlay/Margin/VBox"]
+layout_mode = 2
+text = "Open Level Picker & Research Lab (Between Levels)"
 
 [node name="RestartButton" type="Button" parent="EndOverlay/Margin/VBox"]
 layout_mode = 2

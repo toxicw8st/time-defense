@@ -2,6 +2,9 @@ extends Node
 class_name MutationManager
 
 ## Listens to GameState.time_power_used and applies the single visible mutation per power.
+## Rewind -> Armoured (+15% alien HP).
+## Pause -> Thaw-hardened (+20% effective HP on subsequent waves, stacked x1.38 with Rewind; -10% frozen dmg).
+## Haste -> Swift (+8% alien speed).
 
 
 func setup() -> void:
@@ -26,7 +29,8 @@ func _on_time_power_used(power_name: String) -> void:
 			m.mutations["thaw_stacks"] += 1
 			var s: int = m.mutations["thaw_stacks"]
 			var red_pct: int = int(minf(50.0, float(s) * 10.0))
-			GameState.event_logged.emit("Mutation: Thaw-hardened x%d (-%d%% frozen damage for the rest of this mission)" % [s, red_pct])
+			var eff_pct: int = int(round((pow(1.20, s) - 1.0) * 100.0))
+			GameState.event_logged.emit("Mutation: Thaw-hardened x%d (+%d%% eff HP next wave, -%d%% frozen dmg)" % [s, eff_pct, red_pct])
 		"haste":
 			m.mutations["swift_stacks"] += 1
 			var s: int = m.mutations["swift_stacks"]

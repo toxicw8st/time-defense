@@ -9,6 +9,7 @@ signal wave_summary_updated(summary_text: String)
 var state: int = State.BUILD
 var map_ref: GameMap = null
 var custom_waves_override: Array[Dictionary] = []
+var max_waves_limit: int = WavesData.MISSION_TARGET_WAVE
 
 var _schedule: Array[Dictionary] = []
 var _spawn_index: int = 0
@@ -59,13 +60,16 @@ func _reset_state() -> void:
 func _process(delta: float) -> void:
 	if GameState.mission.is_over:
 		return
+	var sim_dt: float = GameState.get_sim_delta(delta)
+	if sim_dt <= 0.0:
+		return
 	if _post_wave_rewind_timer > 0.0:
-		_post_wave_rewind_timer = maxf(0.0, _post_wave_rewind_timer - delta)
-	step_wave(delta)
+		_post_wave_rewind_timer = maxf(0.0, _post_wave_rewind_timer - sim_dt)
+	step_wave(sim_dt)
 
 
 func step_wave(delta: float) -> void:
-	if GameState.mission.is_over:
+	if GameState.mission.is_over or delta <= 0.0:
 		return
 
 	if state == State.SPAWNING:
@@ -104,6 +108,13 @@ func restart_wave_for_rewind() -> void:
 
 func _begin_wave_internal(wave_num: int, is_replay: bool) -> void:
 	_is_replay_attempt = is_replay
+	if is_replay:
+		GameState.mission.replay_count_this_wave += 1
+	else:
+		GameState.mission.replay_count_this_wave = 0
+		# Apply any Pause (Thaw-hardened +20% effective HP) stacks accumulated on previous waves
+		GameState.mission.mutations["thaw_hp_stacks"] = GameState.mission.mutations.get("thaw_stacks", 0)
+
 	_post_wave_rewind_timer = 0.0
 	if custom_waves_override.is_empty():
 		_schedule = WavesData.build_spawn_schedule(wave_num)
@@ -120,6 +131,8 @@ func _begin_wave_internal(wave_num: int, is_replay: bool) -> void:
 func _complete_current_wave() -> void:
 	state = State.CLEARED
 	GameState.is_wave_active = false
+	# Activate any Pause HP stacks for the next wave immediately upon wave clear
+	GameState.mission.mutations["thaw_hp_stacks"] = GameState.mission.mutations.get("thaw_stacks", 0)
 	state_changed.emit(state)
 
 	var wave_num: int = GameState.mission.wave_number
@@ -127,29 +140,27 @@ func _complete_current_wave() -> void:
 	if not GameState.mission.cleared_waves.get(wave_num, false):
 		GameState.mission.cleared_waves[wave_num] = true
 		bonus = Balance.WAVE_CLEAR_BONUS_BASE + Balance.WAVE_CLEAR_BONUS_PER_WAVE * wave_num
-		GameState.mission.economy["money"] += bonus
-		GameState.mission.stats["money_earned"] += bonus
+		if bonus > 0:
+			GameState.mission.economy["money"] += bonus
+			GameState.mission.stats["money_earned"] += bonus
 		GameState.mission.stats["waves_completed"] += 1
 		GameState.economy_changed.emit()
 
-	var summary: String = "Wave %d cleared!" % wave_num
-	if bonus > 0:
-		summary += " +%d money bonus." % bonus
-	else:
-		summary += " (Replay: wave bonus already claimed)"
+	var stats: Dictionary = WavesData.compute_wave_stats(wave_num, GameState.get_enemy_hp_multiplier())
+	var summary: String = "Wave %d cleared! (s$%d, b$%d)" % [wave_num, stats["s_dollars"], stats["b_dollars"]]
+	if _is_replay_attempt:
+		summary += " [Rewind Replay]"
 	wave_summary_updated.emit(summary)
 	GameState.event_logged.emit(summary)
 	GameState.wave_cleared.emit(wave_num)
 
 	_last_cleared_wave = wave_num
 	_post_wave_rewind_timer = Balance.TIME_POWERS["rewind"]["post_wave_window"]
-
-	# Snapshot mutations seen at the end of the cleared wave so newly gained ones show NEW next preview.
 	_last_seen_mutations = GameState.mission.mutations.duplicate()
 
-	if wave_num >= WavesData.get_wave_count():
+	if wave_num >= max_waves_limit:
 		if not GameState.mission.is_over and GameState.mission.enemy_base_hp > 0:
-			GameState.end_mission("stalled", "Survived 15 waves, but the Enemy Base still stands.")
+			GameState.end_mission("stalled", "Survived %d waves, but the Enemy Base still stands." % max_waves_limit)
 		return
 
 	GameState.mission.wave_number = wave_num + 1
@@ -179,16 +190,21 @@ func get_preview_data() -> Dictionary:
 	var m := GameState.mission.mutations
 	var active_mutations: Array[Dictionary] = []
 
+	var arm_pct: int = int(round((pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], m.get("armoured_stacks", 0)) - 1.0) * 100.0))
+	var thaw_stacks: int = int(m.get("thaw_stacks", 0))
+	var thaw_hp_pct: int = int(round((pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_stacks) - 1.0) * 100.0))
+	var total_hp_pct: int = int(round((GameState.get_enemy_hp_multiplier() - 1.0) * 100.0))
+
 	var defs := [
 		{
 			"key": "armoured_stacks",
 			"label": "Armoured",
-			"effect": "+%d%% alien HP" % int(round((GameState.get_enemy_hp_multiplier() - 1.0) * 100.0)),
+			"effect": "+%d%% alien HP (total x%.2f)" % [arm_pct, GameState.get_enemy_hp_multiplier()],
 		},
 		{
 			"key": "thaw_stacks",
 			"label": "Thaw-hardened",
-			"effect": "-%d%% damage while frozen" % int(minf(50.0, float(m.get("thaw_stacks", 0)) * 10.0)),
+			"effect": "+%d%% eff HP (-%d%% frozen dmg, total +%d%% HP)" % [thaw_hp_pct, int(minf(50.0, float(thaw_stacks) * 10.0)), total_hp_pct],
 		},
 		{
 			"key": "swift_stacks",
@@ -207,9 +223,15 @@ func get_preview_data() -> Dictionary:
 				"is_new": stacks > _last_seen_mutations.get(d["key"], 0),
 			})
 
+	var stats: Dictionary = WavesData.compute_wave_stats(wave_num, GameState.get_enemy_hp_multiplier())
 	return {
 		"wave_number": wave_num,
 		"counts": counts,
+		"s_dollars": stats["s_dollars"],
+		"b_dollars": stats["b_dollars"],
+		"mutated_hp": stats["mutated_hp"],
+		"dps_needed": stats["dps_needed"],
+		"wave_length": stats["wave_length"],
 		"active_mutations": active_mutations,
 		"note": WavesData.get_wave_def(wave_num).get("note", ""),
 	}

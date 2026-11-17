@@ -1,66 +1,20 @@
-# Prototype Acceptance Test Notes
+# Prototype Acceptance & Overhaul Self-Test Notes
 
-## Step 0 — Project Skeleton
-- [x] Game launches to an empty 1280x720 scene (GL Compatibility, `canvas_items` / `expand`)
-- [x] F1 toggles debug overlay (`tests/test_step0.tscn` -> `STEP0_TEST_PASS`)
-- [x] All Implementation Guide pp. 4-5 values exist in `data/balance.gd`
-- [x] First git commit made (`eec7782`)
+## Overhaul Verification Suite (`tests/test_step8.tscn` -> `ALL_OVERHAUL_SELF_TESTS_PASSED`)
+- [x] **(a) 2 towers alone do NOT clear 5 waves**: Verified (`CHECK_A_PASS two_towers_alone_lost_on_wave=5`; 2 starting towers clear Wave 1 with 0 leaks at ratio `1.02`, leak on Waves 2–4, and lose all 20 lives before Wave 5 completes).
+- [x] **(b) 4th refinery is NOT affordable before Wave 5**: Verified (`CHECK_B_PASS max_refineries_before_wave_5=1`; exponential costs `$250, $450, $810, $1,460` require `$2,970` cumulative vs `~$745` max total economy in Waves 1–4).
+- [x] **(c) Research is NOT buyable in-game & NOT maxable in 1 mission**: Verified (`CHECK_C_PASS in_game_research_blocked=true mission_cap=60 rank_costs=[100, 250, 600, 1400, 3200]`; `ResearchBox` removed from `RightPanel`, moved to `BetweenLevelsOverlay`, persists across `reset_mission()`, and capped at `60 R` per mission with `0.25x` replay diminishing return).
+- [x] **(d) Enemy Base HUD & Multi-Wave Charge Cost**: Verified (`CHECK_D_PASS`; TopBar always displays `Enemy Base: 500 / 500 HP | Charge: 0% | Cost: $450 | Dmg: 167/shot | Charges needed: 3`, and `$450` cost takes multiple waves of income).
+- [x] **(e) Wave Length (`180s + 10s/wave`), Speed Toggle (`1x/2x/3x` + Pause), and Tight Wave 10**: Verified (`CHECK_E_PASS w1_len=180s speed_toggle=1x_2x_3x_pause w10_no_power_survived=false w10_with_power_survived=true(lives=15)`).
+- [x] **(f) `DPS needed` & Algorithmic Wave Table (Waves 1–10 + Wave 45 `s$393`)**: Verified (`CHECK_F_PASS dps_needed_w1_10=[27, 37, 46, 60, 104, 138, 121, 137, 179, 544] w10_ratio_no_farm=0.79 w10_ratio_farm=1.04 w45_s=393`).
 
-## Step 1 — Map, Path and Alien Movement
-- [x] S-path `Path2D` (`path_len=1891.1 px`), 14 non-overlapping build pads (>=37 px clear of path), Refinery Annex, Hive & Base markers (`tests/test_step1.tscn` -> `STEP1_TEST_PASS`)
-- [x] 20 Runners spawn and all leak in order (IDs 1..20)
-- [x] Lives go 20 -> 0 and Lose screen shows
-- [x] No alien leaves the path; speed in px/s matches `50.0` balance value on F1 overlay
-
-## Step 2 — Waves as Data
-- [x] Waves 1-15 encoded as pure data in `data/waves.gd`
-- [x] Waves 1-3 play end-to-end (`tests/test_step2.tscn` -> `STEP2_TEST_PASS`)
-- [x] Pre-wave preview shows `"No mutations"` on Wave 1
-- [x] Wave bonus (`25 + 2 * wave`) is paid exactly once per wave number (verified no double-pay on replay)
-- [x] Editing wave count in `data/waves.gd` changes spawned schedule with zero code edits
-
-## Step 3 — Towers and Combat
-- [x] Blaster alone holds Wave 1 with 0 leaks (`tests/test_step3.tscn` -> `STEP3_TEST_PASS w4_blaster_leaks=9 w4_mortar_leaks=3`)
-- [x] Mortar visibly outperforms Blaster on bunched Wave 4; respects 60 px min range; splash evaluates positions at landing
-- [x] Tower under construction or upgrade never fires (`scaffold + progress ring + seconds` visual)
-- [x] Sell refunds exact `floor(50% of total_spent)` (`75->37`, `125->62`) and frees the pad
-- [x] Kill earnings (`+money`, `+research`) appear as floating text and update economy totals
-
-## Step 4 — Economy, Refineries and Research Tree
-- [x] Refinery prices follow curve: `100, 135, 180, 245, 330` (`tests/test_step4.tscn` -> `STEP4_TEST_PASS no_ref_w5=596 ref_w5=736 w6_leaks=0`)
-- [x] Buying Rapid Cycling raises fire rate on F1 debug overlay (`1.00x -> 1.05x`)
-- [x] Currency separation enforced: Research cannot buy towers; Money cannot buy research
-- [x] No-refinery (`596`) vs refinery-first (`736`) reach Wave 5 with visibly different money totals
-- [x] First Balance Sanity Check (Waves 1-6, no powers): Waves 1-2 clean (0 leaks), Wave 6 held cleanly (`0` leaks with reasonable build)
-
-## Step 5 — Surge (Isolated)
-- [x] Ignoring surge bar fires surges at 45 s intervals with stacking penalties (`95%`, `90%`, `86%`)
-- [x] Warning states fire at 15 s (amber) and 7 s (red pulse) before every surge
-- [x] Test button resets surge timer and prevents surge
-- [x] Surge pauses during `BUILD` phase and while Manipulator upgrades; resets cleanly on new mission (`tests/test_step5.tscn` -> `STEP5_TEST_PASS`)
-
-## Step 6 — Time Powers, Mutation and Manipulator
-- [x] All 3 powers start ready on Wave 1; cooldowns span ~1.5 waves (`Rewind 65s`, `Pause 55s`, `Haste 50s`)
-- [x] Pause freezes alien movement while towers keep firing; Thaw-hardened x3 reduces frozen damage by 30% (floor 50%)
-- [x] Haste 3x finishes a 7 s Mortar in ~2.33 s and adds Swift x1
-- [x] Creator-confirmed Rewind restarts current enemy wave, keeps mid-wave towers/money/research/lost lives/surges, adds Armoured x1, locks nested Rewind, and starts 65 s cooldown after replay ends
-- [x] Manipulator upgrade disables all 3 powers (`OFFLINE`), locks Refineries, and pauses Surge for exact build duration (`tests/test_step6.tscn` -> `STEP6_TEST_PASS`)
-
-## Step 7 — Base Attack, Win and Lose
-- [x] Enemy Base HP bar + live shots-to-destroy always visible in Top Bar
-- [x] 3 charges (167 dmg/shot test override) destroy the 500 HP Enemy Base (`tests/test_step7.tscn` -> `STEP7_TEST_PASS`)
-- [x] Haste active during a charge does NOT affect its 30.0 s completion time
-- [x] Win triggers mid-wave the instant the 3rd hit lands
-- [x] Manipulator upgrade & Hive Destroyer charge mutually respect the Base lock
-- [x] Restart after loss zeroes mutations, surges, resets money=200, research=0, refineries=1, manipulator=1, wave=1
-
-## Step 8 — Readability, Teaching Pass & Definition of Done
-- [x] Real windowed viewport click test (`test_step8.tscn` on OpenGL 3.3 Compatibility): clicking pads works cleanly (not swallowed by `Background` or covered by `PromptBanner`/`SurgeBanner`), Build Menu stays always visible, and both `pad -> tower` and `tower -> pad` placement flows pass (`real_ui_clicks=ok`)
-- [x] Anti-exploit `BUILD`-phase pause verified across Refineries (`0$` idle), Tower/Refinery/Manipulator construction, Power Cooldowns, Hive Destroyer Charge, and Surge
-- [x] Charging Hive Destroyer pauses all 3 time abilities (`PAUSED (HIVE)`), suspends active effects/cooldowns, and pauses Surge (`hive_pauses_abilities=true`)
-- [x] Staged teaching prompts (Waves 1-6) appear once each, never repeat (verified across Rewind)
-- [x] Mute toggle hides prompts without hiding Surge bar, Pre-wave Preview, or Event Feed
-- [x] Esc Pause menu includes Resume, Restart, Mute Tips, and <=9-line `"How time works"` summary naming Armoured, Thaw-hardened, Swift, and Surge
-- [x] No-powers 15-wave run wins at Wave 11 with 3 surges (first surge at Wave 3, `w1_w2_s=52.2`)
-- [x] Heavy-powers 15-wave run (11 powers: Armoured x1, Thaw x5, Swift x5) wins at Wave 13 with exact 1:1 mutation counts
-- [x] Wave 15 stall check verified (`outcome == "stalled"`) (`STEP8_AND_FULL_RUN_PASS`)
+## Regression Suite (`test_step0.tscn` through `test_step8.tscn`)
+- [x] `tests/test_step0.tscn` -> `STEP0_TEST_PASS`
+- [x] `tests/test_step1.tscn` -> `STEP1_TEST_PASS path_len=1891.1 leaks=20`
+- [x] `tests/test_step2.tscn` -> `STEP2_TEST_PASS waves_1_to_3_money=510 w45_s=393`
+- [x] `tests/test_step3.tscn` -> `STEP3_TEST_PASS w1_kills=20 damage_matrix=ok`
+- [x] `tests/test_step4.tscn` -> `STEP4_TEST_PASS refinery_ramp=[250,450,810,1460,2625] meta_research=ok`
+- [x] `tests/test_step5.tscn` -> `STEP5_TEST_PASS surges=[1, 2, 3] warnings=[1, 2, 1, 2, 1, 2, 2, 2]`
+- [x] `tests/test_step6.tscn` -> `STEP6_TEST_PASS manip_lvl=2 arm=1 thaw=1 swift=1 hp_mult=1.38`
+- [x] `tests/test_step7.tscn` -> `STEP7_TEST_PASS charges_fired=3 1_over_N=ok restart_clean=true`
+- [x] `tests/test_step8.tscn` -> `ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok)`

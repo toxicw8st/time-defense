@@ -1,7 +1,8 @@
 extends Node
 class_name EconomyManager
 
-## Owns Refineries (build job + 5 s income ticks) and the 5-node Research Tree.
+## Owns Refineries ($250 * 1.8^owned exponential ramp, $0.25/sec = +$1 per 4s tick)
+## and Rogue-Like Meta-Research (spent ONLY on the Between-Levels / Level Picker screen, persists across missions).
 
 signal refinery_built(total_owned: int)
 signal refinery_ticked(total_income: int)
@@ -34,14 +35,14 @@ func _reset_state() -> void:
 
 
 func _process(delta: float) -> void:
-	step_economy(delta)
+	step_economy(GameState.get_sim_delta(delta))
 
 
 func step_economy(delta: float) -> void:
-	if GameState.mission.is_over or not GameState.is_wave_active:
+	if GameState.mission.is_over or not GameState.is_wave_active or delta <= 0.0:
 		return
 
-	# Refinery income tick every 5.0 s of mission time
+	# Refinery income tick every 4.0 s of active wave time ($1 per 4.0s = $0.25/sec per refinery)
 	_tick_accum += delta
 	while _tick_accum >= Balance.REFINERY_TICK_INTERVAL:
 		_tick_accum -= Balance.REFINERY_TICK_INTERVAL
@@ -62,14 +63,15 @@ func step_economy(delta: float) -> void:
 			var count: int = GameState.mission.economy["refineries_owned"]
 			GameState.economy_changed.emit()
 			refinery_built.emit(count)
-			GameState.event_logged.emit("Refinery #%d online (+%d/5s)" % [count, Balance.REFINERY_INCOME_PER_TICK])
+			GameState.event_logged.emit("Refinery #%d online (+$%.2f/s)" % [count, Balance.REFINERY_RATE_PER_SEC])
 			if map_ref != null:
 				map_ref.queue_redraw()
 
 
+## Exponential cost ramp: $250 * 1.8^(owned) rounded to nearest $5 -> $250, $450, $810, $1,460, $2,625
 func get_next_refinery_cost() -> int:
-	var owned: int = GameState.mission.economy["refineries_owned"]
-	var raw: float = Balance.REFINERY_BASE_COST * pow(Balance.REFINERY_COST_GROWTH, float(max(0, owned - 1)))
+	var owned: int = maxi(0, int(GameState.mission.economy["refineries_owned"]))
+	var raw: float = Balance.REFINERY_BASE_COST * pow(Balance.REFINERY_COST_GROWTH, float(owned))
 	var step: float = float(Balance.REFINERY_COST_ROUND_TO)
 	return int(round(raw / step)) * Balance.REFINERY_COST_ROUND_TO
 
@@ -86,7 +88,7 @@ func start_build_refinery() -> bool:
 	if not can_build_refinery():
 		return false
 	var cost: int = get_next_refinery_cost()
-	if not GameState.spend_money(cost):
+	if not GameState.spend_money(cost, true):
 		return false
 	refinery_job = ConstructionJob.new("refinery", Balance.REFINERY_BUILD_TIME)
 	if map_ref != null:
@@ -94,25 +96,34 @@ func start_build_refinery() -> bool:
 	return true
 
 
-func can_buy_research(node_key: String) -> bool:
-	if GameState.mission.is_over:
-		return false
+## Research cannot be bought mid-mission (during waves or after Wave 1 has started).
+## It can ONLY be bought on the Between-Levels / Level Picker screen (`from_between_levels = true` or before Wave 1 starts).
+func can_buy_research(node_key: String, from_between_levels: bool = false) -> bool:
 	if not Balance.RESEARCH_NODES.has(node_key):
 		return false
-	if GameState.mission.owned_research.get(node_key, false):
+	if not from_between_levels:
+		if GameState.is_wave_active or GameState.mission.wave_number > 1 or GameState.mission_elapsed_seconds > 0.0:
+			return false
+	var cost: int = GameState.get_next_research_cost(node_key)
+	if cost < 0:
 		return false
-	var cost: int = int(Balance.RESEARCH_NODES[node_key]["cost"])
-	return GameState.mission.economy["research"] >= cost
+	return GameState.meta_research >= cost
 
 
-func buy_research(node_key: String) -> bool:
-	if not can_buy_research(node_key):
+func buy_research(node_key: String, from_between_levels: bool = false) -> bool:
+	if not can_buy_research(node_key, from_between_levels):
 		return false
-	var cost: int = int(Balance.RESEARCH_NODES[node_key]["cost"])
+	var cost: int = GameState.get_next_research_cost(node_key)
 	if not GameState.spend_research(cost):
 		return false
-	GameState.mission.owned_research[node_key] = true
+	var new_rank: int = GameState.get_research_rank(node_key) + 1
+	GameState.meta_research_ranks[node_key] = new_rank
+	GameState._sync_mission_research_mirror()
 	GameState.economy_changed.emit()
 	research_purchased.emit(node_key)
-	GameState.event_logged.emit("Research unlocked: %s" % Balance.RESEARCH_NODES[node_key]["name"])
+	GameState.event_logged.emit("Meta-Research %s Rank %d unlocked (%d R)" % [
+		Balance.RESEARCH_NODES[node_key]["name"],
+		new_rank,
+		cost,
+	])
 	return true

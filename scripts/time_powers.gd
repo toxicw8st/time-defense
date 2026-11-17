@@ -66,7 +66,7 @@ func _on_wave_cleared(_wave_num: int) -> void:
 
 
 func _process(delta: float) -> void:
-	step_powers(delta)
+	step_powers(GameState.get_sim_delta(delta))
 
 
 func step_powers(delta: float) -> void:
@@ -79,8 +79,8 @@ func step_powers(delta: float) -> void:
 	GameState.is_enemies_frozen = (pause_remaining > 0.0) and can_tick_wave_timers
 	GameState.is_haste_active = (haste_remaining > 0.0) and can_tick_wave_timers
 
-	# Between waves (BUILD): all ability timers, cooldowns, and manipulator upgrades pause
-	if not GameState.is_wave_active:
+	# Between waves (BUILD) or paused: all ability timers, cooldowns, and manipulator upgrades pause
+	if not GameState.is_wave_active or delta <= 0.0:
 		return
 
 	# Manipulator upgrade construction (pauses between waves, never hasted)
@@ -123,8 +123,11 @@ func get_cooldown_multiplier() -> float:
 	var mult: float = 1.0
 	if GameState.mission.manipulator_level >= 2:
 		mult *= float(Balance.MANIPULATOR_UPGRADES[2]["cooldown_multiplier"])
-	if GameState.mission.owned_research.get("efficient_manipulator", false):
-		mult *= (1.0 - float(Balance.RESEARCH_NODES["efficient_manipulator"]["cooldown_reduction"]))
+	var ranks: int = GameState.get_research_rank("efficient_manipulator")
+	if ranks <= 0 and GameState.mission.owned_research.get("efficient_manipulator", false):
+		ranks = 1
+	if ranks > 0:
+		mult *= maxf(0.35, 1.0 - float(ranks) * float(Balance.RESEARCH_NODES["efficient_manipulator"]["cooldown_reduction"]))
 	return mult
 
 
@@ -214,11 +217,12 @@ func start_manipulator_upgrade() -> bool:
 	var next_lvl: int = GameState.mission.manipulator_level + 1
 	var cfg: Dictionary = Balance.MANIPULATOR_UPGRADES[next_lvl]
 	var cost: int = int(cfg["cost"])
-	if not GameState.spend_money(cost):
+	if not GameState.spend_money(cost, false):
 		return false
 	GameState.mission.manipulator_upgrading_remaining = float(cfg["build_time"])
-	GameState.event_logged.emit("Manipulator queued for Lv%d (%.0fs in wave) - Powers OFFLINE, Base locked, Surge paused." % [
+	GameState.event_logged.emit("Manipulator queued for Lv%d ($%d, %.0fs in wave) - Powers OFFLINE, Base locked, Surge paused." % [
 		next_lvl,
+		cost,
 		float(cfg["build_time"]),
 	])
 	return true

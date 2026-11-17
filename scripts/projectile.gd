@@ -1,15 +1,17 @@
 extends Node2D
 class_name ProjectileEffect
 
-## Handles both hitscan tracer beams (Blaster) and lobbed splash shells (Mortar).
+## Handles hitscan tracer beams (Blaster Piercing, Laser Spire) and lobbed splash shells (Mortar Normal).
 ## Mortar shells evaluate enemy positions AT LANDING, not at firing.
 
 var is_tracer: bool = false
+var tracer_color: Color = Color(0.45, 0.9, 1.0)
+var damage_type: String = "Normal"
 var start_pos: Vector2 = Vector2.ZERO
 var target_pos: Vector2 = Vector2.ZERO
 var flight_time: float = 0.55
 var elapsed: float = 0.0
-var damage: float = 30.0
+var damage: float = 22.0
 var splash_radius: float = 70.0
 var splash_edge_ratio: float = 0.5
 var map_ref: GameMap = null
@@ -17,8 +19,9 @@ var _exploded: bool = false
 var _explosion_flash_timer: float = 0.0
 
 
-func setup_tracer(p_start: Vector2, p_end: Vector2) -> void:
+func setup_tracer(p_start: Vector2, p_end: Vector2, p_color: Color = Color(0.45, 0.9, 1.0)) -> void:
 	is_tracer = true
+	tracer_color = p_color
 	start_pos = p_start
 	target_pos = p_end
 	elapsed = 0.0
@@ -27,8 +30,18 @@ func setup_tracer(p_start: Vector2, p_end: Vector2) -> void:
 	queue_redraw()
 
 
-func setup_mortar_shell(p_start: Vector2, p_target: Vector2, p_flight_time: float, p_damage: float, p_splash_radius: float, p_edge_ratio: float, p_map: GameMap) -> void:
+func setup_mortar_shell(
+	p_start: Vector2,
+	p_target: Vector2,
+	p_flight_time: float,
+	p_damage: float,
+	p_splash_radius: float,
+	p_edge_ratio: float,
+	p_map: GameMap,
+	p_damage_type: String = "Normal"
+) -> void:
 	is_tracer = false
+	damage_type = p_damage_type
 	start_pos = p_start
 	target_pos = p_target
 	flight_time = maxf(0.05, p_flight_time)
@@ -42,11 +55,11 @@ func setup_mortar_shell(p_start: Vector2, p_target: Vector2, p_flight_time: floa
 
 
 func _process(delta: float) -> void:
-	advance_projectile(delta)
+	advance_projectile(GameState.get_sim_delta(delta))
 
 
 func advance_projectile(delta: float) -> void:
-	if GameState.mission.is_over:
+	if GameState.mission.is_over or delta <= 0.0:
 		return
 	if is_tracer:
 		elapsed += delta
@@ -84,14 +97,16 @@ func _detonate() -> void:
 			var d: float = enemy.position.distance_to(target_pos)
 			if d <= splash_radius:
 				var falloff: float = lerpf(1.0, splash_edge_ratio, d / maxf(1.0, splash_radius))
-				enemy.take_damage(damage * falloff)
+				enemy.take_damage(damage * falloff, damage_type)
 	queue_redraw()
 
 
 func _draw() -> void:
 	if is_tracer:
 		var alpha: float = clampf(1.0 - (elapsed / flight_time), 0.0, 1.0)
-		draw_line(start_pos, target_pos, Color(0.45, 0.9, 1.0, alpha), 2.5)
+		var col := tracer_color
+		col.a = alpha
+		draw_line(start_pos, target_pos, col, 2.5)
 		return
 
 	if _exploded:

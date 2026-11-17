@@ -1,7 +1,7 @@
 extends Node
 class_name BaseAttackManager
 
-## Owns the Hive Destroyer base-attack charge & firing.
+## Owns the Hive Destroyer base-attack charge & firing ($450 per shot, 1/N rule by mission level).
 ## HARD RULE: Haste can NEVER speed up base-attack charging.
 
 signal charge_started
@@ -37,13 +37,13 @@ func _reset_state() -> void:
 
 
 func _process(delta: float) -> void:
-	step_base_attack(delta)
+	step_base_attack(GameState.get_sim_delta(delta))
 
 
 func step_base_attack(delta: float) -> void:
-	if GameState.mission.is_over or not is_charging or not GameState.is_wave_active:
+	if GameState.mission.is_over or not is_charging or not GameState.is_wave_active or delta <= 0.0:
 		return
-	# Haste NEVER accelerates charge_remaining! Always 1.0x mission time.
+	# Haste NEVER accelerates charge_remaining! Always 1.0x simulation delta.
 	charge_remaining = maxf(0.0, charge_remaining - delta)
 	if charge_remaining <= 0.0:
 		_fire_hive_destroyer()
@@ -56,10 +56,15 @@ func get_charge_duration() -> float:
 	return dur
 
 
+## 1/N rule: Level 1 = 1 shot (500 dmg), Level 2 = 2 shots (250 dmg), Level 3 = 3 shots (167 dmg).
 func get_shot_damage() -> int:
-	var base_dmg: float = float(Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE)
-	if GameState.mission.owned_research.get("hive_breaker", false):
-		base_dmg *= (1.0 + float(Balance.RESEARCH_NODES["hive_breaker"]["base_attack_bonus"]))
+	var level_n: int = maxi(1, GameState.selected_mission_level)
+	var base_dmg: float = ceilf(float(Balance.ENEMY_BASE_MAX_HP) / float(level_n))
+	var ranks: int = GameState.get_research_rank("hive_breaker")
+	if ranks <= 0 and GameState.mission.owned_research.get("hive_breaker", false):
+		ranks = 1
+	if ranks > 0:
+		base_dmg *= (1.0 + float(ranks) * float(Balance.RESEARCH_NODES["hive_breaker"]["base_attack_bonus"]))
 	return int(round(base_dmg))
 
 
@@ -81,14 +86,14 @@ func can_start_charge() -> bool:
 func start_charge() -> bool:
 	if not can_start_charge():
 		return false
-	if not GameState.spend_money(Balance.BASE_ATTACK_COST):
+	if not GameState.spend_money(Balance.BASE_ATTACK_COST, false):
 		return false
 	charge_total_time = get_charge_duration()
 	charge_remaining = charge_total_time
 	is_charging = true
 	GameState.base_attack_charging_active = true
 	charge_started.emit()
-	GameState.event_logged.emit("Hive Destroyer charging (%.0fs)" % charge_total_time)
+	GameState.event_logged.emit("Hive Destroyer charging (%.0fs, $%d)" % [charge_total_time, Balance.BASE_ATTACK_COST])
 	return true
 
 
@@ -116,7 +121,7 @@ func _fire_hive_destroyer() -> void:
 	if map_ref != null:
 		map_ref.trigger_hive_beam_effect(dmg)
 
-	var msg: String = "Hive destroyer hit - %d damage" % dmg
+	var msg: String = "Hive destroyer hit - %d damage (%d / %d HP)" % [dmg, m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP]
 	GameState.event_logged.emit(msg)
 	base_attack_fired.emit(dmg, m.enemy_base_hp)
 

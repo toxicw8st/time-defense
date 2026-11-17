@@ -2,7 +2,7 @@ extends Node
 
 ## Headless Step 1 acceptance verification:
 ## - Path length ~1900 px; 14 build pads none overlapping the path
-## - 20 Runners spawn and walk strictly on the Path2D curve at exact 50.0 px/s
+## - 20 Crawlers spawn and walk strictly on the Path2D curve at exact Balance.ENEMIES["crawler"]["speed"]
 ## - All 20 leak in exact spawn order (ID 1..20)
 ## - Lives go 20 -> 0 and Lose screen becomes visible
 
@@ -33,34 +33,35 @@ func _ready() -> void:
 		var closest: Vector2 = curve.get_closest_point(pad_pos)
 		assert(pad_pos.distance_to(closest) >= 37.0, "Pad too close to path: %.1f" % pad_pos.distance_to(closest))
 
-	# Spawn 20 Runners staggered along the path and step deterministically.
-	var runners: Array[EnemyUnit] = []
+	# Spawn 20 Crawlers staggered along the path and step deterministically.
+	var crawlers: Array[EnemyUnit] = []
+	var expected_speed: float = float(Balance.ENEMIES["crawler"]["speed"])
 	for i in range(20):
-		var e: EnemyUnit = map_node.spawn_enemy("runner", 1)
+		var e: EnemyUnit = map_node.spawn_enemy("crawler", 1)
 		e.set_process(false)
 		e.leaked.connect(func(unit: EnemyUnit) -> void: leaked_ids.append(unit.enemy_id))
-		runners.append(e)
+		crawlers.append(e)
 
 	var dt: float = 0.5
 	var spawned_active: int = 0
 	var spawn_accum: float = 0.0
 	var steps: int = 0
 
-	while not GameState.mission.is_over and steps < 400:
+	while not GameState.mission.is_over and steps < 800:
 		steps += 1
-		if spawned_active < runners.size():
+		if spawned_active < crawlers.size():
 			spawn_accum += dt
 			if spawn_accum >= 1.0 or spawned_active == 0:
 				spawn_accum = 0.0
 				spawned_active += 1
 
 		for idx in range(spawned_active):
-			var u: EnemyUnit = runners[idx]
+			var u: EnemyUnit = crawlers[idx]
 			if is_instance_valid(u) and not u.is_dead_or_leaked:
 				var d_before: float = u.distance_along_path
 				u.advance_along_path(dt)
 				if not u.is_dead_or_leaked:
-					var expected_d: float = d_before + 50.0 * dt
+					var expected_d: float = d_before + expected_speed * dt
 					if absf(u.distance_along_path - expected_d) > 0.01:
 						speed_errors += 1
 					var on_curve: Vector2 = curve.get_closest_point(u.position)

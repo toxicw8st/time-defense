@@ -52,6 +52,11 @@ static func create_icon(kind: String) -> ImageTexture:
 			_fill_circle(img, 12, 12, 5, Color(0.14, 0.32, 0.24))
 			_fill_circle(img, 17, 6, 3, Color(1.0, 0.75, 0.28))
 			_fill_circle(img, 20, 9, 2, Color(1.0, 0.52, 0.22))
+		"laser":
+			_fill_rect(img, 4, 8, 16, 20, Color(0.85, 0.28, 0.78))
+			_stroke_rect(img, 4, 8, 16, 20, Color(1.0, 0.75, 0.96))
+			_fill_triangle_up(img, 10, 2, 6, Color(0.95, 0.45, 0.90))
+			_fill_rect(img, 13, 5, 22, 8, Color(0.45, 0.96, 1.0))
 		"damage", "reinforced_shots":
 			_fill_rect(img, 10, 6, 14, 20, Color(0.96, 0.42, 0.32))
 			_fill_triangle_up(img, 12, 3, 8, Color(1.0, 0.68, 0.35))

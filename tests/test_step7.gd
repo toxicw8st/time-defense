@@ -1,12 +1,14 @@
 extends Node
 
 ## Headless Step 7 acceptance verification:
-## - Charge armed in BUILD does NOT tick in BUILD (anti-exploit), advances during active waves
+## - Charge ($450) armed in BUILD does NOT tick in BUILD (anti-exploit), advances during active waves
 ## - Charging Hive Destroyer PAUSES all time abilities (Rewind, Pause, Haste locked & cooldowns paused) AND pauses Surge
 ## - Haste cannot speed up the 30.0 s Hive Destroyer charge
-## - 3 charges win mid-wave; Restart resets everything cleanly
+## - 1/N rule verified (Level 1 = 1 shot/500 dmg, Level 2 = 2 shots/250 dmg, Level 3 = 3 shots/167 dmg)
+## - 3 charges on Level 3 win mid-wave; Restart resets mission state cleanly while preserving meta_research
 
 func _ready() -> void:
+	GameState.reset_meta_progression()
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var inst: Node = main_scene.instantiate()
@@ -20,10 +22,20 @@ func _ready() -> void:
 	var ba: BaseAttackManager = inst.get_node("BaseAttackManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	GameState.mission.economy["money"] = 2000
-	# Build strong defense (3 Blasters + 2 Mortars) so Wave 6/7/9/10 stay alive during 30 s charge timing checks
+	# Verify 1/N rule across Levels 1, 2, 3
+	GameState.selected_mission_level = 1
+	assert(ba.get_shot_damage() == 500 and ba.get_shots_to_destroy_remaining() == 1)
+	GameState.selected_mission_level = 2
+	assert(ba.get_shot_damage() == 250 and ba.get_shots_to_destroy_remaining() == 2)
+	GameState.selected_mission_level = 3
+	assert(ba.get_shot_damage() == 167 and ba.get_shots_to_destroy_remaining() == 3)
+
+	# Verify $200 starting money cannot afford $450 Hive Destroyer early
+	assert(not ba.can_start_charge(), "Starting $200 must NOT afford $450 Hive Destroyer")
+
+	GameState.mission.economy["money"] = 3000
 	var b1: TowerUnit = map.build_tower_on_pad(4, "blaster")
-	var b2: TowerUnit = map.build_tower_on_pad(5, "blaster")
+	var b2: TowerUnit = map.build_tower_on_pad(5, "laser")
 	map.build_tower_on_pad(3, "blaster")
 	map.build_tower_on_pad(10, "mortar")
 	map.build_tower_on_pad(9, "mortar")
@@ -35,7 +47,6 @@ func _ready() -> void:
 	_step(map, wm, econ, surge, tp, ba, 20.0)
 	assert(is_equal_approx(ba.charge_remaining, 30.0), "Hive charge must NOT advance in BUILD phase")
 
-	# Start Wave 6 (26 Runners, lasts >35s!) + test active Haste/cooldown pause during Hive charging!
 	GameState.mission.wave_number = 6
 	wm.start_wave()
 	tp.cooldowns["pause"] = 20.0
@@ -69,7 +80,6 @@ func _ready() -> void:
 	_step(map, wm, econ, surge, tp, ba, 10.1)
 	assert(not GameState.is_base_locked())
 
-	# Upgrade b1/b2 damage to handle Wave 9-10 easily
 	b1.start_upgrade("damage")
 	b2.start_upgrade("damage")
 	_step(map, wm, econ, surge, tp, ba, 3.5)
@@ -96,24 +106,28 @@ func _ready() -> void:
 	assert(GameState.mission.is_over and GameState.mission.outcome == "won")
 	assert(hud.end_overlay.visible and hud.end_title_label.text.contains("VICTORY"))
 
-	# 5) Restart resets everything cleanly
+	# 5) Restart resets mission state cleanly while preserving persistent meta_research
 	GameState.reset_mission()
+	GameState.add_research(40, false)
+	var expected_meta_res: int = GameState.meta_research
+	assert(expected_meta_res >= 40)
 	GameState.mission.wave_number = 7
 	GameState.mission.mutations["armoured_stacks"] = 3
 	GameState.mission.surge_count = 4
 	GameState.mission.manipulator_level = 3
 	GameState.mission.economy["money"] = 999
-	GameState.mission.economy["research"] = 85
 	GameState.lose_lives(20)
 	assert(GameState.mission.is_over and GameState.mission.outcome == "lost")
 	hud._on_restart_pressed()
 	var m := GameState.mission
 	assert(not m.is_over and m.wave_number == 1 and m.lives == 20)
-	assert(m.economy["money"] == 200 and m.economy["research"] == 0 and m.economy["refineries_owned"] == 1)
+	assert(m.economy["money"] == 200 and m.economy["refineries_owned"] == 0)
+	assert(GameState.meta_research == expected_meta_res, "Persistent meta_research must survive mission restart")
 	assert(m.mutations["armoured_stacks"] == 0 and m.mutations["thaw_stacks"] == 0 and m.mutations["swift_stacks"] == 0)
 	assert(m.surge_count == 0 and m.manipulator_level == 1 and m.enemy_base_hp == 500)
 
-	print("STEP7_TEST_PASS charges_fired=3 hive_pauses_abilities=true restart_clean=true")
+	GameState.reset_meta_progression()
+	print("STEP7_TEST_PASS charges_fired=3 1_over_N=ok restart_clean=true")
 	get_tree().quit(0)
 
 

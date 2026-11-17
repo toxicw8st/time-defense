@@ -1,18 +1,27 @@
 extends Node2D
 class_name EnemyUnit
 
+## Enemy unit on the Path2D curve with fixed base HP (scaled only by mutations) and 3x3 Damage Matrix armour tags.
+## Notation:
+## s$ = spawn_cost_s (threat cost to spawn)
+## b$ = bounty_b / money_on_kill (player $ earned on kill)
+
 signal leaked(enemy: EnemyUnit)
 signal died(enemy: EnemyUnit)
 
 var enemy_id: int = 0
-var enemy_type: String = "runner"
+var enemy_type: String = "crawler"
 var spawn_wave: int = 1
-var max_hp: float = 40.0
-var hp: float = 40.0
-var base_speed: float = 50.0
+var spawn_cost_s: int = 1 # s$
+var bounty_b: int = 4     # b$
+var max_hp: float = 50.0
+var hp: float = 50.0
+var base_speed: float = 28.5
 var leak_cost: int = 1
-var money_on_kill: int = 6
+var money_on_kill: int = 4
 var research_on_kill: int = 1
+var armour_label: String = "Standard"
+var armour_tags: Array = ["Standard"]
 
 var path_curve: Curve2D = null
 var path_length: float = 0.0
@@ -25,19 +34,24 @@ var speed_multiplier_at_spawn: float = 1.0
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 	enemy_id = p_id
-	enemy_type = p_type
+	enemy_type = GameState.normalize_enemy_type(p_type)
 	spawn_wave = p_wave
 	path_curve = p_curve
 	path_length = p_curve.get_baked_length()
 
-	var cfg: Dictionary = Balance.ENEMIES[p_type]
-	base_speed = cfg["speed"]
-	leak_cost = cfg["leak_cost"]
-	money_on_kill = cfg["money_on_kill"]
-	research_on_kill = cfg["research_on_kill"]
+	var cfg: Dictionary = Balance.ENEMIES[enemy_type]
+	spawn_cost_s = int(cfg["spawn_cost_s"])
+	bounty_b = int(cfg["bounty_b"])
+	base_speed = float(cfg["speed"])
+	leak_cost = int(cfg["leak_cost"])
+	money_on_kill = int(cfg["money_on_kill"])
+	research_on_kill = int(cfg["research_on_kill"])
+	armour_label = str(cfg.get("armour_label", "Standard"))
+	armour_tags = cfg.get("armour_tags", ["Standard"]).duplicate()
+
 	swift_stacks_at_spawn = GameState.mission.mutations.get("swift_stacks", 0)
 	speed_multiplier_at_spawn = pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], swift_stacks_at_spawn)
-	max_hp = float(GameState.get_enemy_wave_hp(p_type, p_wave))
+	max_hp = float(cfg["base_hp"]) * GameState.get_enemy_hp_multiplier()
 	hp = max_hp
 	distance_along_path = 0.0
 	is_dead_or_leaked = false
@@ -48,7 +62,7 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 func advance_along_path(delta: float) -> void:
 	if is_dead_or_leaked or path_curve == null or GameState.mission.is_over:
 		return
-	if GameState.is_enemies_frozen:
+	if GameState.is_enemies_frozen or delta <= 0.0:
 		return
 	var eff_speed: float = base_speed * speed_multiplier_at_spawn
 	if eff_speed <= 0.0:
@@ -65,7 +79,7 @@ func advance_along_path(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	advance_along_path(delta)
+	advance_along_path(GameState.get_sim_delta(delta))
 
 
 func _sync_transform_to_path() -> void:
@@ -80,10 +94,12 @@ func _sync_transform_to_path() -> void:
 		last_tangent = delta_vec.normalized()
 
 
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, damage_type: String = "") -> void:
 	if is_dead_or_leaked:
 		return
 	var dmg: float = amount
+	if damage_type != "":
+		dmg *= Balance.get_damage_multiplier(damage_type, armour_tags)
 	if GameState.is_enemies_frozen:
 		var thaw_stacks: int = GameState.mission.mutations.get("thaw_stacks", 0)
 		var reduction: float = minf(
@@ -102,14 +118,31 @@ func take_damage(amount: float) -> void:
 
 
 func _draw() -> void:
-	var radius: float = 10.0 if enemy_type == "runner" else 15.0
-	var fill_color: Color = Color(0.92, 0.25, 0.25) if enemy_type == "runner" else Color(0.75, 0.16, 0.35)
+	var radius: float = 9.5
+	var fill_color := Color(0.92, 0.30, 0.25)
+	match enemy_type:
+		"crawler":
+			radius = 9.5
+			fill_color = Color(0.92, 0.30, 0.25)
+		"rusher":
+			radius = 8.5
+			fill_color = Color(1.0, 0.65, 0.18)
+		"brute":
+			radius = 14.5
+			fill_color = Color(0.75, 0.16, 0.35)
+		"blitzer":
+			radius = 10.5
+			fill_color = Color(0.25, 0.90, 0.95)
+		"juggernaut":
+			radius = 18.0
+			fill_color = Color(0.58, 0.16, 0.72)
+
 	if GameState.is_enemies_frozen:
 		var thaw_stacks: int = GameState.mission.mutations.get("thaw_stacks", 0)
 		var frost_strength: float = clampf(0.35 + 0.12 * float(thaw_stacks), 0.35, 0.85)
 		fill_color = fill_color.lerp(Color(0.45, 0.85, 1.0), frost_strength)
 
-	# Armoured mutation visual cue: thicker bright shell outline
+	# Armoured mutation visual cue: thicker gold shell outline
 	var armoured_stacks: int = GameState.mission.mutations.get("armoured_stacks", 0)
 	if armoured_stacks > 0:
 		var shell_width: float = 2.0 + minf(4.0, float(armoured_stacks) * 1.2)
@@ -127,6 +160,12 @@ func _draw() -> void:
 
 	draw_circle(Vector2.ZERO, radius, fill_color)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, Color(0.12, 0.04, 0.04), 1.5)
+
+	# Armour-tag cues (Armored steel rim, Reflective cyan shimmer)
+	if armour_tags.has("Armored"):
+		draw_arc(Vector2.ZERO, radius - 2.0, 0.0, TAU, 20, Color(0.78, 0.82, 0.88, 0.85), 2.0)
+	if armour_tags.has("Reflective"):
+		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 20, Color(0.55, 0.98, 1.0, 0.85), 1.5)
 
 	# Mini HP bar
 	var bar_w: float = radius * 2.4

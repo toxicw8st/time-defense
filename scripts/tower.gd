@@ -1,6 +1,11 @@
 extends Node2D
 class_name TowerUnit
 
+## Tower unit supporting 3 damage types:
+## - Blaster Turret ($90): Piercing (75% vs Standard, 150% vs Armored, 120% vs Reflective)
+## - Cluster Mortar ($110): Normal AoE (100% vs Standard, 50% vs Armored, 110% vs Reflective)
+## - Laser Spire ($100): Laser beam (150% vs Standard, 85% vs Armored, 10% vs Reflective)
+
 signal construction_completed(tower: TowerUnit)
 
 var tower_id: int = 0
@@ -42,6 +47,10 @@ func is_constructing() -> bool:
 
 func can_fire() -> bool:
 	return is_built and current_job == null and not GameState.mission.is_over
+
+
+func get_damage_type() -> String:
+	return str(Balance.TOWERS[tower_type].get("damage_type", "Normal"))
 
 
 func get_effective_damage() -> float:
@@ -86,7 +95,7 @@ func start_upgrade(stat_key: String) -> bool:
 	var lvl: int = int(levels[stat_key])
 	var cost: int = Balance.TOWER_UPGRADE_COSTS[lvl]
 	var build_time: float = Balance.TOWER_UPGRADE_BUILD_TIMES[lvl]
-	if not GameState.spend_money(cost):
+	if not GameState.spend_money(cost, true):
 		return false
 	total_spent += cost
 	current_job = ConstructionJob.new("tower_upgrade", build_time, stat_key)
@@ -95,11 +104,11 @@ func start_upgrade(stat_key: String) -> bool:
 
 
 func _process(delta: float) -> void:
-	advance_tower(delta)
+	advance_tower(GameState.get_sim_delta(delta))
 
 
 func advance_tower(delta: float) -> void:
-	if GameState.mission.is_over:
+	if GameState.mission.is_over or delta <= 0.0:
 		return
 
 	if current_job != null:
@@ -174,12 +183,19 @@ func _pick_target() -> EnemyUnit:
 
 func _fire_at(target: EnemyUnit) -> void:
 	var dmg: float = get_effective_damage()
+	var dtype: String = get_damage_type()
 	if tower_type == "blaster":
 		if map_ref != null:
 			var tracer: ProjectileEffect = projectile_scene.instantiate()
 			map_ref.projectiles_container.add_child(tracer)
-			tracer.setup_tracer(position, target.position)
-		target.take_damage(dmg)
+			tracer.setup_tracer(position, target.position, Color(0.45, 0.9, 1.0))
+		target.take_damage(dmg, dtype)
+	elif tower_type == "laser":
+		if map_ref != null:
+			var beam: ProjectileEffect = projectile_scene.instantiate()
+			map_ref.projectiles_container.add_child(beam)
+			beam.setup_tracer(position, target.position, Color(1.0, 0.35, 0.85))
+		target.take_damage(dmg, dtype)
 	elif tower_type == "mortar":
 		if map_ref != null:
 			var shell: ProjectileEffect = projectile_scene.instantiate()
@@ -192,7 +208,8 @@ func _fire_at(target: EnemyUnit) -> void:
 				dmg,
 				float(cfg["splash_radius"]),
 				float(cfg["splash_edge_ratio"]),
-				map_ref
+				map_ref,
+				dtype
 			)
 
 
@@ -213,14 +230,12 @@ func _draw() -> void:
 	var rect := Rect2(Vector2(-half, -half), Vector2(half * 2.0, half * 2.0))
 
 	if current_job != null:
-		# Distinct scaffold visual while building or upgrading (never looks identical to active tower!)
 		var scaffold_col := Color(0.35, 0.35, 0.22) if not is_built else Color(0.28, 0.42, 0.55)
 		draw_rect(rect, scaffold_col)
 		draw_rect(rect, Color(0.95, 0.82, 0.32), false, 2.0)
 		draw_line(Vector2(-half, -half), Vector2(half, half), Color(0.95, 0.82, 0.32, 0.6), 1.5)
 		draw_line(Vector2(half, -half), Vector2(-half, half), Color(0.95, 0.82, 0.32, 0.6), 1.5)
 
-		# Progress ring + remaining seconds (highlighted cyan-green during Haste!)
 		var prog: float = current_job.get_progress()
 		var ring_col := Color(0.35, 1.0, 0.9) if GameState.is_haste_active else Color(0.35, 0.95, 0.65)
 		if GameState.is_haste_active:
@@ -229,14 +244,19 @@ func _draw() -> void:
 		var sec_text: String = "%.1fs" % current_job.remaining_time
 		draw_string(font, Vector2(-13, 28), sec_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 	else:
-		var fill_col := Color(0.22, 0.58, 0.95) if tower_type == "blaster" else Color(0.28, 0.78, 0.52)
+		var fill_col := Color(0.22, 0.58, 0.95)
+		var tag: String = "BL"
+		if tower_type == "mortar":
+			fill_col = Color(0.28, 0.78, 0.52)
+			tag = "MT"
+		elif tower_type == "laser":
+			fill_col = Color(0.85, 0.28, 0.78)
+			tag = "LS"
 		var border_col := Color(0.75, 0.92, 1.0) if is_selected else Color(0.1, 0.16, 0.24)
 		draw_rect(rect, fill_col)
 		draw_rect(rect, border_col, false, 2.5 if is_selected else 1.5)
-		var tag: String = "BL" if tower_type == "blaster" else "MT"
 		draw_string(font, Vector2(-8, 4), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 
-		# Compact upgrade pips along bottom of tower square
 		var total_lvl: int = int(levels["damage"]) + int(levels["range"]) + int(levels["fire_rate"])
 		if total_lvl > 0:
 			draw_string(font, Vector2(-14, -18), "+%d" % total_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.9, 0.4))

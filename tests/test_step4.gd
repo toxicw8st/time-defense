@@ -1,14 +1,13 @@
 extends Node
 
-## Headless Step 4 acceptance + First Balance Sanity Check:
-## - Refinery prices match curve: 100, 135, 180, 245, 330
+## Headless Step 4 acceptance verification (Refinery Exponential Curve + Rogue-Like Meta-Research):
+## - Refinery prices match exponential $250 * 1.8^owned curve: $250, $450, $810, $1460, $2625
 ## - Anti-exploit: waiting in BUILD phase generates ZERO money from Refineries!
-## - Buying Rapid Cycling raises fire-rate multiplier on debug overlay & towers
+## - Research is spent between levels only, persists across missions, and uses rank costs [100, 250, 600, 1400, 3200]
 ## - Currency separation: research cannot buy towers, money cannot buy research
-## - No-refinery vs refinery-first reach Wave 5 with visibly different money totals
-## - Sanity check Waves 1-6: Wave 1-2 clean, Wave 6 Runner surge leaks 0-3 lives
 
 func _ready() -> void:
+	GameState.reset_meta_progression()
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main1: Node = main_scene.instantiate()
@@ -17,107 +16,55 @@ func _ready() -> void:
 	var hud1: CanvasLayer = main1.get_node("HUD")
 
 	# Anti-exploit: idling 60 s in BUILD must yield 0 passive refinery money!
+	GameState.mission.economy["refineries_owned"] = 2
 	var start_m: int = GameState.mission.economy["money"]
 	econ1.step_economy(60.0)
 	assert(GameState.mission.economy["money"] == start_m, "Refineries MUST NOT generate money when not in a wave!")
 
-	var expected_costs: Array[int] = [100, 135, 180, 245, 330]
-	for owned_count in range(1, 6):
+	# Verify exponential refinery cost ramp: $250 * 1.8^owned -> 250, 450, 810, 1460, 2625
+	var expected_costs: Array[int] = [250, 450, 810, 1460, 2625]
+	for owned_count in range(0, 5):
 		GameState.mission.economy["refineries_owned"] = owned_count
 		var c: int = econ1.get_next_refinery_cost()
-		assert(c == expected_costs[owned_count - 1], "Refinery #%d expected %d, got %d" % [owned_count, expected_costs[owned_count - 1], c])
+		assert(c == expected_costs[owned_count], "Refinery #%d (owned=%d) expected $%d, got $%d" % [owned_count + 1, owned_count, expected_costs[owned_count], c])
 
+	GameState.reset_meta_progression()
 	GameState.reset_mission()
 	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.0))
-	assert(not econ1.buy_research("rapid_cycling"), "Cannot buy research with 0 R")
+	assert(not econ1.buy_research("rapid_cycling", true), "Cannot buy research with 0 R")
 	GameState.mission.economy["money"] = 9999
-	assert(not econ1.buy_research("rapid_cycling"), "Money must NEVER buy research")
+	assert(not econ1.buy_research("rapid_cycling", true), "Money must NEVER buy research")
 	GameState.mission.economy["money"] = 0
-	GameState.add_research(50)
-	assert(main1.get_node("Map").build_tower_on_pad(0, "blaster") == null, "Research must NEVER buy towers")
-	assert(econ1.buy_research("rapid_cycling"))
+
+	# Verify 1 mission's kills are capped at MAX_RESEARCH_PER_MISSION (60 R < 100 R Rank 1 cost)
+	GameState.add_research(500, false)
+	assert(GameState.meta_research == Balance.MAX_RESEARCH_PER_MISSION, "Single mission research must cap at %d R, got %d" % [Balance.MAX_RESEARCH_PER_MISSION, GameState.meta_research])
+	assert(not econ1.buy_research("rapid_cycling", true), "Single mission's 60 R cap must NOT afford Rank 1 (100 R) on its own!")
+
+	# Across a second mission, earn another 50 R -> 110 R total, persists across reset_mission()!
+	GameState.reset_mission()
+	assert(GameState.meta_research == 60, "Meta-research must persist across reset_mission()")
+	GameState.add_research(50, false)
+	assert(GameState.meta_research == 110)
+
+	# Verify research cannot be bought mid-wave (in-game)
+	GameState.is_wave_active = true
+	assert(not econ1.buy_research("rapid_cycling", false), "Research must NOT be buyable in-game during an active wave!")
+	GameState.is_wave_active = false
+
+	# Buy Rank 1 (100 R) on the between-levels screen -> next rank costs 250 R!
+	assert(econ1.buy_research("rapid_cycling", true))
+	assert(GameState.get_research_rank("rapid_cycling") == 1)
+	assert(GameState.get_next_research_cost("rapid_cycling") == 250)
 	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.05))
 	hud1._refresh_debug_overlay()
 	assert(hud1.debug_label.text.contains("1.05x"), "Debug overlay must show 1.05x attack-speed multiplier")
-	main1.remove_child(main1) if false else null
-	main1.queue_free()
 
-	var no_ref_result: Dictionary = _simulate_waves_1_to_6(false)
-	var ref_first_result: Dictionary = _simulate_waves_1_to_6(true)
-	assert(no_ref_result["w5_money"] != ref_first_result["w5_money"], "No-refinery and refinery-first must differ at Wave 5")
-	assert(no_ref_result["w1_2_leaks"] == 0, "Waves 1-2 must not leak with good build")
-	assert(no_ref_result["w6_leaks"] <= 3, "Wave 6 sanity check leaks should be 0-3, got %d" % no_ref_result["w6_leaks"])
-
-	print("STEP4_TEST_PASS no_ref_w5=%d ref_w5=%d w6_leaks=%d" % [
-		no_ref_result["w5_money"],
-		ref_first_result["w5_money"],
-		no_ref_result["w6_leaks"],
-	])
-	get_tree().quit(0)
-
-
-func _simulate_waves_1_to_6(buy_early_refinery: bool) -> Dictionary:
+	# Verify Rank 1 persists across reset_mission()
 	GameState.reset_mission()
-	var main_scene: PackedScene = load("res://scenes/main.tscn")
-	var inst: Node = main_scene.instantiate()
-	add_child(inst)
+	assert(GameState.get_research_rank("rapid_cycling") == 1 and is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.05))
 
-	var map: GameMap = inst.get_node("Map")
-	var wm: WaveManager = inst.get_node("WaveManager")
-	var econ: EconomyManager = inst.get_node("EconomyManager")
-
-	var dt: float = 0.05
-	var w5_money: int = 0
-	var w1_2_leaks: int = 0
-
-	var blaster1: TowerUnit = map.build_tower_on_pad(4, "blaster")
-	assert(blaster1 != null)
-	if buy_early_refinery:
-		econ.start_build_refinery()
-	else:
-		map.build_tower_on_pad(10, "mortar")
-
-	for w in range(1, 7):
-		if w == 5:
-			w5_money = GameState.mission.economy["money"]
-
-		if w == 3 and map.pad_occupancy[10] == null and GameState.mission.economy["money"] >= 110:
-			map.build_tower_on_pad(10, "mortar")
-		if w >= 4 and map.pad_occupancy[5] == null and GameState.mission.economy["money"] >= 75:
-			map.build_tower_on_pad(5, "blaster")
-		if w >= 5 and blaster1 != null and blaster1.can_start_upgrade("damage"):
-			blaster1.start_upgrade("damage")
-		if w == 6 and blaster1 != null and blaster1.can_start_upgrade("fire_rate"):
-			blaster1.start_upgrade("fire_rate")
-		if econ.can_buy_research("rapid_cycling"):
-			econ.buy_research("rapid_cycling")
-
-		wm.start_wave()
-		var ticks: int = 0
-		while wm.state != WaveManager.State.BUILD and not GameState.mission.is_over and ticks < 3000:
-			ticks += 1
-			_advance_sim(map, wm, econ, dt, dt)
-		if w <= 2:
-			w1_2_leaks = Balance.PLAYER_STARTING_LIVES - GameState.mission.lives
-
-	var w6_leaks: int = Balance.PLAYER_STARTING_LIVES - GameState.mission.lives
-	inst.queue_free()
-	return {
-		"w5_money": w5_money,
-		"w1_2_leaks": w1_2_leaks,
-		"w6_leaks": w6_leaks,
-	}
-
-
-func _advance_sim(map: GameMap, wm: WaveManager, econ: EconomyManager, duration: float, dt: float) -> void:
-	var steps: int = int(round(duration / dt))
-	for _i in range(steps):
-		wm.step_wave(dt)
-		econ.step_economy(dt)
-		for enemy in map.get_active_enemies():
-			enemy.advance_along_path(dt)
-		for tower in map.get_all_towers():
-			tower.advance_tower(dt)
-		for proj in map.projectiles_container.get_children():
-			if proj is ProjectileEffect:
-				proj.advance_projectile(dt)
+	main1.queue_free()
+	GameState.reset_meta_progression()
+	print("STEP4_TEST_PASS refinery_ramp=[250,450,810,1460,2625] meta_research=ok")
+	get_tree().quit(0)

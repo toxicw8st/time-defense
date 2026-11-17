@@ -10,6 +10,11 @@ signal start_wave_requested
 @onready var money_label: Label = $TopBar/VBox/Row2/MoneyLabel
 @onready var research_label: Label = $TopBar/VBox/Row2/ResearchLabel
 @onready var refineries_label: Label = $TopBar/VBox/Row2/RefineriesLabel
+@onready var speed_pause_button: Button = $TopBar/VBox/Row2/SpeedBox/SpeedPauseButton
+@onready var speed_1x_button: Button = $TopBar/VBox/Row2/SpeedBox/Speed1xButton
+@onready var speed_2x_button: Button = $TopBar/VBox/Row2/SpeedBox/Speed2xButton
+@onready var speed_3x_button: Button = $TopBar/VBox/Row2/SpeedBox/Speed3xButton
+@onready var level_picker_button: Button = $TopBar/VBox/Row2/LevelPickerButton
 @onready var clock_label: Label = $TopBar/VBox/Row2/ClockLabel
 
 @onready var right_panel: PanelContainer = $RightPanel
@@ -24,6 +29,7 @@ signal start_wave_requested
 @onready var build_pad_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildPadLabel
 @onready var build_blaster_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildBlasterButton
 @onready var build_mortar_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildMortarButton
+@onready var build_laser_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildLaserButton
 
 @onready var tower_panel_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox
 @onready var tower_header_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerHeaderLabel
@@ -37,7 +43,14 @@ signal start_wave_requested
 @onready var manip_status_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox/ManipStatusLabel
 @onready var manip_upgrade_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox/ManipUpgradeButton
 
-@onready var research_list_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/ResearchBox/ResearchButtons
+@onready var between_levels_overlay: PanelContainer = $BetweenLevelsOverlay
+@onready var meta_research_status_label: Label = $BetweenLevelsOverlay/Margin/VBox/MetaResearchStatusLabel
+@onready var level_1_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level1Button
+@onready var level_2_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level2Button
+@onready var level_3_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level3Button
+@onready var research_list_box: VBoxContainer = $BetweenLevelsOverlay/Margin/VBox/ResearchButtons
+@onready var launch_level_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/LaunchLevelButton
+@onready var close_lab_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/CloseLabButton
 
 @onready var surge_bar: ProgressBar = $BottomBar/VBox/SurgeRow/SurgeBar
 @onready var surge_label: Label = $BottomBar/VBox/SurgeRow/SurgeLabel
@@ -70,6 +83,7 @@ signal start_wave_requested
 @onready var end_overlay: PanelContainer = $EndOverlay
 @onready var end_title_label: Label = $EndOverlay/Margin/VBox/EndTitleLabel
 @onready var end_stats_label: Label = $EndOverlay/Margin/VBox/EndStatsLabel
+@onready var end_lab_button: Button = $EndOverlay/Margin/VBox/EndLabButton
 @onready var restart_button: Button = $EndOverlay/Margin/VBox/RestartButton
 
 var map_ref: GameMap = null
@@ -90,7 +104,7 @@ var _pulse_accum: float = 0.0
 var _icons: Dictionary = {}
 var _hover_descriptions: Dictionary = {}
 var _hovered_button: Button = null
-var _armed_style_state: Dictionary = {"blaster": false, "mortar": false}
+var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false}
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -108,14 +122,28 @@ func _ready() -> void:
 	surge_banner.visible = false
 	prompt_banner.visible = false
 	pause_overlay.visible = false
+	between_levels_overlay.visible = false
 	build_menu_box.visible = true
 	tower_panel_box.visible = false
 
 	restart_button.pressed.connect(_on_restart_pressed)
+	end_lab_button.pressed.connect(open_between_levels_screen)
 	start_wave_button.pressed.connect(_on_start_wave_pressed)
 	refinery_button.pressed.connect(_on_refinery_button_pressed)
 	charge_button.pressed.connect(_on_charge_button_pressed)
 	manip_upgrade_button.pressed.connect(_on_manip_upgrade_pressed)
+
+	speed_pause_button.pressed.connect(func() -> void: GameState.toggle_speed_pause())
+	speed_1x_button.pressed.connect(func() -> void: GameState.set_game_speed(1.0))
+	speed_2x_button.pressed.connect(func() -> void: GameState.set_game_speed(2.0))
+	speed_3x_button.pressed.connect(func() -> void: GameState.set_game_speed(3.0))
+	level_picker_button.pressed.connect(_toggle_between_levels_screen)
+
+	level_1_button.pressed.connect(func() -> void: _select_level(1))
+	level_2_button.pressed.connect(func() -> void: _select_level(2))
+	level_3_button.pressed.connect(func() -> void: _select_level(3))
+	launch_level_button.pressed.connect(_on_launch_level_pressed)
+	close_lab_button.pressed.connect(func() -> void: between_levels_overlay.visible = false)
 
 	prompt_dismiss_button.pressed.connect(_on_prompt_dismiss_pressed)
 	prompt_mute_button.pressed.connect(_on_prompt_mute_pressed)
@@ -131,10 +159,13 @@ func _ready() -> void:
 
 	build_blaster_button.pressed.connect(func() -> void: _build_tower("blaster"))
 	build_mortar_button.pressed.connect(func() -> void: _build_tower("mortar"))
+	build_laser_button.pressed.connect(func() -> void: _build_tower("laser"))
 	build_blaster_button.mouse_entered.connect(func() -> void: _set_preview_type("blaster"))
 	build_mortar_button.mouse_entered.connect(func() -> void: _set_preview_type("mortar"))
+	build_laser_button.mouse_entered.connect(func() -> void: _set_preview_type("laser"))
 	build_blaster_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_mortar_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
+	build_laser_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 
 	upg_dmg_button.pressed.connect(func() -> void: _upgrade_selected("damage"))
 	upg_rng_button.pressed.connect(func() -> void: _upgrade_selected("range"))
@@ -159,15 +190,37 @@ func _exit_tree() -> void:
 		GameState.event_logged.disconnect(_on_event_logged)
 
 
+func open_between_levels_screen() -> void:
+	end_overlay.visible = false
+	between_levels_overlay.visible = true
+	_refresh_all()
+
+
+func _toggle_between_levels_screen() -> void:
+	between_levels_overlay.visible = not between_levels_overlay.visible
+	_refresh_all()
+
+
+func _select_level(level_n: int) -> void:
+	GameState.selected_mission_level = clampi(level_n, 1, 3)
+	_refresh_all()
+
+
+func _on_launch_level_pressed() -> void:
+	between_levels_overlay.visible = false
+	GameState.reset_mission()
+	restart_requested.emit()
+
+
 func _build_research_buttons() -> void:
 	for key in RESEARCH_ORDER:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(0, 30)
+		btn.custom_minimum_size = Vector2(0, 32)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 11)
 		btn.pressed.connect(func() -> void:
 			if economy_ref != null:
-				economy_ref.buy_research(key)
+				economy_ref.buy_research(key, true)
 				_refresh_all()
 		)
 		research_list_box.add_child(btn)
@@ -178,7 +231,7 @@ func _setup_right_panel_buttons() -> void:
 	hover_info_panel.add_theme_stylebox_override("panel", UIIcons.make_button_style(Color(0.10, 0.13, 0.19), Color(0.32, 0.44, 0.62), 1))
 
 	var icon_keys: Array[String] = [
-		"blaster", "mortar", "damage", "range", "fire_rate", "sell", "manipulator",
+		"blaster", "mortar", "laser", "damage", "range", "fire_rate", "sell", "manipulator",
 		"rapid_cycling", "reinforced_shots", "extended_optics", "efficient_manipulator", "hive_breaker",
 	]
 	for k in icon_keys:
@@ -186,6 +239,7 @@ func _setup_right_panel_buttons() -> void:
 
 	_init_styled_button(build_blaster_button, _icons["blaster"], Color(0.28, 0.62, 0.95))
 	_init_styled_button(build_mortar_button, _icons["mortar"], Color(0.32, 0.78, 0.54))
+	_init_styled_button(build_laser_button, _icons["laser"], Color(0.85, 0.35, 0.82))
 	_init_styled_button(upg_dmg_button, _icons["damage"], Color(0.92, 0.48, 0.35))
 	_init_styled_button(upg_rng_button, _icons["range"], Color(0.35, 0.82, 0.95))
 	_init_styled_button(upg_spd_button, _icons["fire_rate"], Color(0.95, 0.82, 0.32))
@@ -196,7 +250,6 @@ func _setup_right_panel_buttons() -> void:
 		var btn: Button = _research_buttons[key]
 		_init_styled_button(btn, _icons[key], Color(0.42, 0.72, 0.92))
 
-	# Also style Bottom Bar buttons so every clickable button reads cleanly
 	UIIcons.apply_right_button_theme(rewind_button, Color(0.75, 0.58, 0.95))
 	UIIcons.apply_right_button_theme(pause_button, Color(0.42, 0.78, 0.98))
 	UIIcons.apply_right_button_theme(haste_button, Color(0.42, 0.92, 0.72))
@@ -288,19 +341,38 @@ func _refresh_all() -> void:
 	top_status_label.text = "Lives: %d / %d" % [m.lives, Balance.PLAYER_STARTING_LIVES]
 	enemy_base_bar.max_value = Balance.ENEMY_BASE_MAX_HP
 	enemy_base_bar.value = m.enemy_base_hp
-	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE)))
-	enemy_base_label.text = "Enemy Base: %d / %d HP  |  Shots to destroy: %d" % [m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP, shots_left]
-	wave_label.text = "Wave %d / 15" % m.wave_number
-	money_label.text = "Money: %d" % m.economy["money"]
-	research_label.text = "Research: %d" % m.economy["research"]
-	refineries_label.text = "Refineries: %d (+%d$/5s)" % [
-		m.economy["refineries_owned"],
-		m.economy["refineries_owned"] * Balance.REFINERY_INCOME_PER_TICK,
+
+	var shot_dmg: int = base_attack_ref.get_shot_damage() if base_attack_ref != null else Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE
+	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(shot_dmg)))
+	var charge_pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0)) if base_attack_ref != null else 0
+	enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d (Shots to destroy: %d)" % [
+		m.enemy_base_hp,
+		Balance.ENEMY_BASE_MAX_HP,
+		charge_pct,
+		Balance.BASE_ATTACK_COST,
+		shot_dmg,
+		shots_left,
+		shots_left,
 	]
+
+	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
+	wave_label.text = "Wave %d / %d (Lv %d)" % [m.wave_number, max_w, GameState.selected_mission_level]
+	money_label.text = "Money: $%d" % m.economy["money"]
+	research_label.text = "Meta-Research: %d R (%d/%d this mission)" % [
+		GameState.meta_research,
+		int(m.stats["research_earned"]),
+		Balance.MAX_RESEARCH_PER_MISSION,
+	]
+	refineries_label.text = "Refineries: %d (+$%.2f/s)" % [
+		m.economy["refineries_owned"],
+		float(m.economy["refineries_owned"]) * Balance.REFINERY_RATE_PER_SEC,
+	]
+
+	_refresh_speed_buttons()
 
 	var mins: int = int(GameState.mission_elapsed_seconds) / 60
 	var secs: int = int(GameState.mission_elapsed_seconds) % 60
-	clock_label.text = "Mission Time: %02d:%02d" % [mins, secs]
+	clock_label.text = "Time: %02d:%02d (%.0fx)" % [mins, secs, 0.0 if GameState.is_speed_paused else GameState.game_speed]
 
 	_refresh_preview_panel()
 	_refresh_selection_panel()
@@ -316,6 +388,15 @@ func _refresh_all() -> void:
 		_refresh_debug_overlay()
 
 
+func _refresh_speed_buttons() -> void:
+	var paused: bool = GameState.is_speed_paused
+	var spd: float = GameState.game_speed
+	speed_pause_button.modulate = Color(1.0, 0.65, 0.35) if paused else Color.WHITE
+	speed_1x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 1.0)) else Color.WHITE
+	speed_2x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 2.0)) else Color.WHITE
+	speed_3x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 3.0)) else Color.WHITE
+
+
 func _refresh_surge_bar() -> void:
 	var m := GameState.mission
 	var win: float = surge_ref.get_surge_window() if surge_ref != null else Balance.SURGE_BASE_WINDOW
@@ -324,7 +405,11 @@ func _refresh_surge_bar() -> void:
 
 	var paused: bool = surge_ref.is_surge_paused() if surge_ref != null else false
 	var pause_tag: String = " [PAUSED]" if paused else ""
-	surge_label.text = "SURGE - use a time power or all towers slow down: %.1f s%s" % [maxf(0.0, m.surge_timer_seconds), pause_tag]
+	surge_label.text = "SURGE DEADLINE: Start of Wave %d (%.0fs)%s - use any time power to reset (+5 waves)" % [
+		m.surge_deadline_wave,
+		maxf(0.0, m.surge_timer_seconds),
+		pause_tag,
+	]
 
 	if m.surge_count > 0:
 		var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
@@ -337,11 +422,11 @@ func _refresh_surge_bar() -> void:
 		surge_penalty_label.text = "0 surges"
 
 	var rem: float = m.surge_timer_seconds
-	if rem <= Balance.SURGE_WARNING_RED:
+	if rem <= Balance.SURGE_WARNING_RED or m.wave_number + 1 >= m.surge_deadline_wave:
 		var pulse: float = 0.6 + 0.4 * sin(_pulse_accum * 10.0)
 		surge_bar.modulate = Color(1.0, 0.25, 0.25, pulse)
 		surge_label.modulate = Color(1.0, 0.35, 0.35)
-	elif rem <= Balance.SURGE_WARNING_AMBER:
+	elif rem <= Balance.SURGE_WARNING_AMBER or m.wave_number + 2 >= m.surge_deadline_wave:
 		surge_bar.modulate = Color(1.0, 0.72, 0.22)
 		surge_label.modulate = Color(1.0, 0.8, 0.32)
 	else:
@@ -415,7 +500,7 @@ func _refresh_manipulator_panel() -> void:
 		manip_upgrade_button.text = "Manipulator (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
 		manip_upgrade_button.disabled = true
 		manip_upgrade_button.modulate = Color(0.85, 0.85, 0.88)
-		_set_button_description(manip_upgrade_button, "Upgrading Manipulator: all time powers are OFFLINE, Base is locked, and Surge is paused.")
+		_set_button_description(manip_upgrade_button, "Upgrading Manipulator: all time powers OFFLINE, Base locked, Surge paused.")
 		return
 
 	if m.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
@@ -433,20 +518,20 @@ func _refresh_manipulator_panel() -> void:
 	var btime: int = int(cfg["build_time"])
 	manip_status_label.text = "Manipulator Lv %d" % m.manipulator_level
 	manip_status_label.modulate = Color(0.85, 0.9, 1.0)
-	_set_button_description(manip_upgrade_button, "Lv%d (%d$, %ds): %s. Powers OFFLINE & Surge paused." % [
+	_set_button_description(manip_upgrade_button, "Lv%d ($%d, %ds): %s. Powers OFFLINE & Surge paused." % [
 		next_lvl,
 		cost,
 		btime,
 		cfg["benefit_text"],
 	])
 	if GameState.is_base_charging():
-		manip_upgrade_button.text = "Manipulator Lv%d (%d$) [BUSY]" % [next_lvl, cost]
+		manip_upgrade_button.text = "Manipulator Lv%d ($%d) [BUSY]" % [next_lvl, cost]
 		manip_upgrade_button.disabled = true
 		manip_upgrade_button.modulate = Color(0.78, 0.78, 0.82)
 		return
 
 	var can_buy: bool = time_powers_ref != null and time_powers_ref.can_upgrade_manipulator()
-	manip_upgrade_button.text = "Manipulator Lv%d (%d$)" % [next_lvl, cost]
+	manip_upgrade_button.text = "Manipulator Lv%d ($%d)" % [next_lvl, cost]
 	manip_upgrade_button.disabled = not can_buy
 	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.65, 0.65)
 
@@ -456,14 +541,21 @@ func _refresh_preview_panel() -> void:
 		return
 	var preview: Dictionary = wave_manager_ref.get_preview_data()
 	var wave_num: int = preview["wave_number"]
-	preview_title_label.text = "PRE-WAVE PREVIEW - Wave %d / 15" % wave_num
+	var max_w: int = wave_manager_ref.max_waves_limit
+	preview_title_label.text = "WAVE %d / %d (s$%d, b$%d, DPS req %d)" % [
+		wave_num,
+		max_w,
+		int(preview.get("s_dollars", 0)),
+		int(preview.get("b_dollars", 0)),
+		int(preview.get("dps_needed", 0)),
+	]
 
 	var counts: Dictionary = preview["counts"]
 	var unit_parts: PackedStringArray = []
-	if counts.has("runner"):
-		unit_parts.append("%d Runners (HP %d)" % [counts["runner"], GameState.get_enemy_wave_hp("runner", wave_num)])
-	if counts.has("brute"):
-		unit_parts.append("%d Brutes (HP %d)" % [counts["brute"], GameState.get_enemy_wave_hp("brute", wave_num)])
+	for utype in ["juggernaut", "blitzer", "brute", "rusher", "crawler"]:
+		if counts.has(utype):
+			var uname: String = Balance.ENEMIES[utype]["name"]
+			unit_parts.append("%d %s (HP %d)" % [counts[utype], uname, GameState.get_enemy_wave_hp(utype, wave_num)])
 	preview_body_label.text = "Incoming: " + ", ".join(unit_parts)
 
 	var muts: Array = preview["active_mutations"]
@@ -471,7 +563,7 @@ func _refresh_preview_panel() -> void:
 		preview_mutations_label.text = "Mutations: No mutations"
 		preview_mutations_label.modulate = Color(0.75, 0.85, 0.95)
 	else:
-		var lines: PackedStringArray = ["Active Mutations (for the rest of this mission):"]
+		var lines: PackedStringArray = ["Active Mutations (mission):"]
 		var has_new: bool = false
 		for item in muts:
 			var prefix: String = "[NEW] " if item["is_new"] else ""
@@ -512,16 +604,16 @@ func _refresh_selection_panel() -> void:
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
-		_set_button_description(sell_button, "Refund %d$ (50%% of %d$ spent) and free pad P%d." % [
+		_set_button_description(sell_button, "Refund $%d (50%% of $%d spent) and free pad P%d." % [
 			refund,
 			_selected_tower.total_spent,
 			_selected_tower.pad_index + 1,
 		])
 		if _sell_confirm_armed:
-			sell_button.text = "CONFIRM SELL (+%d$)" % refund
+			sell_button.text = "CONFIRM SELL (+$%d)" % refund
 			sell_button.modulate = Color(1.0, 0.55, 0.45)
 		else:
-			sell_button.text = "Sell Tower (+%d$)" % refund
+			sell_button.text = "Sell Tower (+$%d)" % refund
 			sell_button.modulate = Color.WHITE
 	elif _selected_pad_idx >= 0:
 		build_menu_box.visible = true
@@ -529,6 +621,7 @@ func _refresh_selection_panel() -> void:
 		build_pad_label.text = "BUILD ON PAD P%d" % (_selected_pad_idx + 1)
 		_style_build_button(build_blaster_button, "blaster", money, false)
 		_style_build_button(build_mortar_button, "mortar", money, false)
+		_style_build_button(build_laser_button, "laser", money, false)
 	else:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
@@ -539,26 +632,42 @@ func _refresh_selection_panel() -> void:
 			build_pad_label.text = "BUILD TOWERS"
 		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
 		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
+		_style_build_button(build_laser_button, "laser", money, pending == "laser")
 
 
 func _refresh_research_panel() -> void:
-	var res: int = GameState.mission.economy["research"]
+	var res: int = GameState.meta_research
+	meta_research_status_label.text = "Persistent Meta-Research: %d R | Selected Level: %d (%d shot%s to destroy Hive)" % [
+		res,
+		GameState.selected_mission_level,
+		GameState.selected_mission_level,
+		"s" if GameState.selected_mission_level > 1 else "",
+	]
+	level_1_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 1 else Color.WHITE
+	level_2_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 2 else Color.WHITE
+	level_3_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 3 else Color.WHITE
+
+	var can_spend_now: bool = not GameState.is_wave_active and (GameState.mission.wave_number == 1 or GameState.mission.is_over)
 	for key in RESEARCH_ORDER:
 		var btn: Button = _research_buttons[key]
 		var cfg: Dictionary = Balance.RESEARCH_NODES[key]
-		var cost: int = int(cfg["cost"])
-		var owned: bool = GameState.mission.owned_research.get(key, false)
-		_set_button_description(btn, "%d R (instant): %s." % [
-			cost,
-			cfg["description"],
-		])
-		if owned:
-			btn.text = "%s [OWNED]" % cfg["name"]
+		var rank: int = GameState.get_research_rank(key)
+		var max_rank: int = cfg["rank_costs"].size()
+		var cost: int = GameState.get_next_research_cost(key)
+		if rank >= max_rank or cost < 0:
+			_set_button_description(btn, "MAX Rank (%d/%d): %s." % [rank, max_rank, cfg["description"]])
+			btn.text = "%s [Rank %d/%d MAX]" % [cfg["name"], rank, max_rank]
 			btn.disabled = true
 			btn.modulate = Color(0.62, 0.95, 0.72)
 		else:
-			btn.text = "%s (%d R)" % [cfg["name"], cost]
-			var affordable: bool = res >= cost and not GameState.mission.is_over
+			_set_button_description(btn, "Rank %d->%d (%d R): %s. (Between levels only)" % [
+				rank,
+				rank + 1,
+				cost,
+				cfg["description"],
+			])
+			btn.text = "%s [Rank %d/%d] (%d R)" % [cfg["name"], rank, max_rank, cost]
+			var affordable: bool = res >= cost and can_spend_now
 			btn.disabled = not affordable
 			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.65, 0.65)
 
@@ -585,12 +694,12 @@ func _refresh_charge_button() -> void:
 	var cost: int = Balance.BASE_ATTACK_COST
 	var dur: int = int(round(base_attack_ref.get_charge_duration()))
 	if GameState.is_base_locked():
-		charge_button.text = "Hive Destroyer (%d$, %ds)\n[BASE LOCKED]" % [cost, dur]
+		charge_button.text = "Hive Destroyer ($%d, %ds)\n[BASE LOCKED]" % [cost, dur]
 		charge_button.disabled = true
 		charge_button.modulate = Color(0.7, 0.7, 0.7)
 		return
 	var affordable: bool = base_attack_ref.can_start_charge()
-	charge_button.text = "Hive Destroyer (%d$, %ds)\nDeals %d dmg (no Haste)" % [cost, dur, base_attack_ref.get_shot_damage()]
+	charge_button.text = "Hive Destroyer ($%d, %ds)\nDeals %d dmg (no Haste)" % [cost, dur, base_attack_ref.get_shot_damage()]
 	charge_button.disabled = not affordable
 	charge_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
@@ -613,12 +722,12 @@ func _refresh_refinery_button() -> void:
 		return
 	var cost: int = economy_ref.get_next_refinery_cost()
 	if GameState.is_base_locked():
-		refinery_button.text = "Refinery (%d$) [BASE LOCKED]" % cost
+		refinery_button.text = "Refinery ($%d) [BASE LOCKED]" % cost
 		refinery_button.disabled = true
 		refinery_button.modulate = Color(0.7, 0.7, 0.7)
 		return
 	var affordable: bool = GameState.mission.economy["money"] >= cost and not GameState.mission.is_over
-	refinery_button.text = "Build Refinery (%d$, 6s)" % cost
+	refinery_button.text = "Build Refinery ($%d, %.0fs)\n+$%.2f/sec" % [cost, Balance.REFINERY_BUILD_TIME, Balance.REFINERY_RATE_PER_SEC]
 	refinery_button.disabled = not affordable
 	refinery_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
@@ -628,14 +737,18 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	var cost: int = int(cfg["cost"])
 	var affordable: bool = money >= cost and not GameState.mission.is_over
 	var armed_prefix: String = "[CLICK PAD] " if is_armed else ""
-	btn.text = "%s%s (%d$)" % [armed_prefix, cfg["name"], cost]
+	btn.text = "%s%s ($%d)" % [armed_prefix, cfg["name"], cost]
 	btn.disabled = not affordable
 	if _armed_style_state.get(tower_type, false) != is_armed:
 		_armed_style_state[tower_type] = is_armed
-		var accent := Color(0.28, 0.62, 0.95) if tower_type == "blaster" else Color(0.32, 0.78, 0.54)
+		var accent := Color(0.28, 0.62, 0.95)
+		if tower_type == "mortar":
+			accent = Color(0.32, 0.78, 0.54)
+		elif tower_type == "laser":
+			accent = Color(0.85, 0.35, 0.82)
 		UIIcons.apply_right_button_theme(btn, accent, is_armed)
 
-	var desc: String = "%d$, %ds | %s (Dmg: %s, Spd: %s)" % [
+	var desc: String = "$%d, %ds | %s (Dmg: %s, Spd: %s)" % [
 		cost,
 		int(cfg["build_time"]),
 		cfg["damage_type_label"],
@@ -643,9 +756,11 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 		cfg["speed_rating"],
 	]
 	if tower_type == "mortar":
-		desc += " - splash, 60px min."
+		desc += " - AoE vs Standard."
+	elif tower_type == "laser":
+		desc += " - 150% vs Std, 10% vs Refl."
 	else:
-		desc += " - single target."
+		desc += " - 150% vs Arm, 120% vs Refl."
 	_set_button_description(btn, desc)
 
 	if is_armed:
@@ -668,9 +783,9 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 	var cost: int = Balance.TOWER_UPGRADE_COSTS[lvl]
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
-	btn.text = "%s %s (%d$)" % [title, pips, cost]
+	btn.text = "%s %s ($%d)" % [title, pips, cost]
 	btn.disabled = not can_buy
-	_set_button_description(btn, "Lvl %d/3 (%d$, %ds): %s. No fire while building." % [
+	_set_button_description(btn, "Lvl %d/3 ($%d, %ds): %s. No fire while building." % [
 		lvl + 1,
 		cost,
 		btime,
@@ -704,14 +819,15 @@ func _refresh_debug_overlay() -> void:
 	var m := GameState.mission
 	var active_count: int = map_ref.get_active_enemies().size() if map_ref != null else 0
 	var path_len: float = map_ref.get_path_length() if map_ref != null else 0.0
-	var eff_runner_speed: float = GameState.get_effective_enemy_speed("runner")
+	var eff_crawler_speed: float = GameState.get_effective_enemy_speed("crawler")
+	var wstats: Dictionary = WavesData.compute_wave_stats(m.wave_number, GameState.get_enemy_hp_multiplier())
 	var lines: PackedStringArray = [
 		"[DEBUG F1]",
-		"Clock: %.1f s | Path: %.0f px | Active aliens: %d" % [GameState.mission_elapsed_seconds, path_len, active_count],
-		"Wave: %d / 15 | Lives: %d | Enemy Base: %d HP" % [m.wave_number, m.lives, m.enemy_base_hp],
-		"Money: %d | Research: %d | Refineries: %d" % [m.economy["money"], m.economy["research"], m.economy["refineries_owned"]],
-		"Runner Speed: %.1f px/s (balance base: %.1f px/s)" % [eff_runner_speed, Balance.ENEMIES["runner"]["speed"]],
-		"Surge: %.1f s left (%d surges) | Manip Lv%d" % [m.surge_timer_seconds, m.surge_count, m.manipulator_level],
+		"Clock: %.1f s (%.0fx) | Path: %.0f px | Active aliens: %d" % [GameState.mission_elapsed_seconds, GameState.game_speed, path_len, active_count],
+		"Wave: %d (s$%d, b$%d, DPS req %d) | Lives: %d | Enemy Base: %d HP" % [m.wave_number, wstats["s_dollars"], wstats["b_dollars"], wstats["dps_needed"], m.lives, m.enemy_base_hp],
+		"Money: $%d | Meta-Research: %d R | Refineries: %d" % [m.economy["money"], GameState.meta_research, m.economy["refineries_owned"]],
+		"Crawler Speed: %.1f px/s (balance base: %.1f px/s)" % [eff_crawler_speed, Balance.ENEMIES["crawler"]["speed"]],
+		"Surge Deadline: Wave %d (%.0fs left, %d surges) | Manip Lv%d" % [m.surge_deadline_wave, m.surge_timer_seconds, m.surge_count, m.manipulator_level],
 		"Mutations: Armoured x%d | Thaw x%d | Swift x%d" % [
 			m.mutations["armoured_stacks"],
 			m.mutations["thaw_stacks"],
@@ -826,12 +942,12 @@ func _on_wave_state_changed(_new_state: int) -> void:
 func _populate_how_time_works() -> void:
 	how_time_works_label.text = "\n".join([
 		"HOW TIME WORKS:",
-		"1. REWIND: Replay the current wave to farm money & research. Cost: Armoured (+15% alien HP for the rest of this mission).",
-		"2. PAUSE: Freeze aliens while towers keep firing. Cost: Thaw-hardened (-10% frozen damage for the rest of this mission).",
+		"1. REWIND: Replay the current wave to farm b$ & R. Cost: Armoured (+15% alien HP for the rest of this mission).",
+		"2. PAUSE: Freeze aliens while towers keep firing. Cost: Thaw-hardened (+20% eff HP next wave, -10% frozen dmg).",
 		"3. HASTE: Build & upgrade towers/refineries 3x faster. Cost: Swift (+8% alien speed for the rest of this mission).",
-		"4. SURGE: Wait too long without using a power and all towers lose 5% attack speed for the rest of this mission.",
+		"4. SURGE: Miss the 5-wave deadline (Wave 6 start) and all towers lose 5% attack speed for the rest of this mission.",
 		"5. MANIPULATOR: Upgrading pauses Surge & locks powers/Base while building.",
-		"6. WIN: Charge the Hive Destroyer (Haste cannot speed it up) to destroy the Enemy Base.",
+		"6. WIN: Charge the Hive Destroyer ($450, 30s; Haste cannot speed it up) to destroy the Enemy Base.",
 	])
 
 
@@ -845,22 +961,22 @@ func _check_teaching_prompt() -> void:
 
 	if w == 1 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_1"
-		text = "TIP (1/6): Click a build pad beside the path to build a Blaster, then press Start Wave."
+		text = "TIP (1/6): Spend ~90% of your $200 (2 towers) on pads beside the path, then press Start Wave."
 	elif w == 2 and st == WaveManager.State.SPAWNING:
 		prompt_id = "wave_2"
-		text = "TIP (2/6): PAUSE freezes aliens only while towers keep firing - try it. (Cost: Thaw-hardened for the rest of this mission.)"
+		text = "TIP (2/6): PAUSE freezes aliens only while towers keep firing. (Cost: Thaw-hardened +20% HP on future waves.)"
 	elif w == 3 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_3"
-		text = "TIP (3/6): SURGE BAR - if it empties, all towers slow down permanently for this mission. Using any power refills it."
+		text = "TIP (3/6): SURGE DEADLINE is start of Wave 6. Use at least one time power every 5 waves or towers lose 5% speed."
 	elif w == 4 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_4"
-		text = "TIP (4/6): HASTE speeds up tower/refinery construction 3x. Great for Cluster Mortars vs bunched waves (Cost: Swift)."
+		text = "TIP (4/6): Match damage types: Laser (150% vs Standard), Piercing Blaster (150% vs Armored), Mortar (AoE)."
 	elif w == 5 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_5"
-		text = "TIP (5/6): REWIND replays a wave to farm Money & Research (Cost: Armoured). Spend Research on global upgrades; Refineries tick income."
+		text = "TIP (5/6): REWIND Wave 5 to farm b$250 twice before Wave 6 (Cost: Armoured +15% HP). Spend Research in Levels/Lab."
 	elif w == 6 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_6"
-		text = "TIP (6/6): You win by destroying their base. Charge the Hive Destroyer (150$, 30s) - Haste cannot speed it up."
+		text = "TIP (6/6): Win by destroying the Enemy Base (500 HP). Each Hive Destroyer shot costs $450 (30s charge, no Haste)."
 
 	if prompt_id != "" and not GameState.mission.shown_prompts.get(prompt_id, false):
 		GameState.mission.shown_prompts[prompt_id] = true
@@ -907,7 +1023,7 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 	if outcome == "won":
 		end_title_label.text = "VICTORY - ENEMY BASE DESTROYED"
 	elif outcome == "stalled":
-		end_title_label.text = "MISSION STALLED - WAVE 15 ENDED"
+		end_title_label.text = "MISSION STALLED - FINAL WAVE ENDED"
 	else:
 		end_title_label.text = "DEFEAT - BASE LOST"
 
@@ -915,7 +1031,7 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 	var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
 	end_stats_label.text = "\n".join([
 		reason,
-		"Mission Time: %.1f s | Wave: %d / 15 | Waves Cleared: %d" % [
+		"Mission Time: %.1f s | Wave: %d | Waves Cleared: %d" % [
 			GameState.mission_elapsed_seconds,
 			m.wave_number,
 			m.stats["waves_completed"],
@@ -931,9 +1047,10 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 			m.mutations["swift_stacks"],
 		],
 		"Surges Suffered: %d (Towers at %d%% speed)" % [m.surge_count, pct],
-		"Money Earned: %d | Research Earned: %d | Base Charges Fired: %d" % [
+		"Money Earned: $%d | Research Earned: %d R (Persistent Total: %d R) | Charges Fired: %d" % [
 			m.stats["money_earned"],
 			m.stats["research_earned"],
+			GameState.meta_research,
 			m.stats["charges_fired"],
 		],
 	])

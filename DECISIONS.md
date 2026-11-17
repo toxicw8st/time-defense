@@ -1,22 +1,27 @@
 # DECISIONS.md
 
-Log of unspecified design choices and creator overrides made during prototype implementation.
+Log of unspecified design choices, creator overrides, and algorithmic difficulty overhaul decisions.
 
-## Step 0 + Pre-Step 1 Creator Rulings
-- **Workspace folder name**: Kept existing repo directory `time-defense` (`project.godot` name `TimeDefense`), using `res://` relative paths everywhere.
-- **Renderer & viewport**: Switched `project.godot` to `GL Compatibility` and explicit `1280x720` (`canvas_items` / `expand`) per Implementation Guide p. 3.
-- **Balance data format**: Used `res://data/balance.gd` (`class_name Balance`) for typed constant access across all scripts.
-- **#1 Research stacking**: Multiplicative with tower upgrades and surge (`base * (1 + upgrade_bonus) * (1 + research_bonus) * surge_penalty`), matching Guide p. 6 formula and creator confirmation.
+## Notation Standard (Used Across Code, Comments & Docs)
+- `s$` = spawn cost (threat cost to spawn an enemy unit)
+- `b$` = bounty (player `$` earned for killing an enemy unit)
+- `$` = player money (starting `$200`, tower costs, refinery costs, base-attack cost)
+- `s$` and `b$` are strictly separate numbers for the same unit and are never equated.
+
+## Step 0 + Pre-Step 1 Creator Rulings (Locked)
+- **Workspace & Viewport**: `time-defense` (`GL Compatibility`, `1280x720`, `canvas_items` / `expand`).
+- **#1 Research stacking**: Multiplicative with tower upgrades and surge (`base * (1 + upgrade_bonus) * (1 + research_bonus) * surge_penalty`).
 - **#2 Base lock during Manipulator upgrade**: Manipulator upgrade and Hive Destroyer charging share the single Base slot — starting a Manipulator upgrade blocks new Hive Destroyer charges and new Refinery builds until finished; if a Hive Destroyer charge is active, starting a Manipulator upgrade is blocked until the charge finishes.
-- **#3 Rewind behavior (Creator Override of Guide pp. 5-6)**: Rewind affects only the enemy wave (clears active enemies/projectiles, restarts the current wave deterministically without re-paying the wave-clear bonus, and adds `+1 Armoured`). All player-side state — towers (including mid-wave builds/upgrades), refineries, constructions in progress, money, research, research tree, manipulator level, and player lives (lost lives remain lost) — stays as it currently is.
-- **#4 Brute HP scaling**: Brutes scale from their Wave 8 debut (`220 * 1.12^(wave - 8)`), reaching ~486 HP by Wave 15 instead of debuting at 486 HP.
-- **#5 Cooldowns, Surge timing & Wave 15 end**:
-  - Time power cooldowns raised to ~1.5 waves (`Pause 55 s`, `Haste 50 s`, `Rewind 65 s` post-replay; Rewind is also locked during an active replay so nested rewinds cannot happen).
-  - Surge window targets ~1.5 waves of pressure so ignoring time powers through Wave 2 triggers a Surge by the start of Wave 3 (verified during Step 5/balance pass).
-  - If Wave 15 clears with lives > 0 and enemy base HP > 0, end the run in a `"Stalled"` debrief screen per Guide p. 11.
-
-## Post-Playtest Bug Fixes & Creator Rules
-- **BUILD Phase Universal Pause**: Between waves (`BUILD` phase), ALL progression timers — Refineries, tower/refinery/manipulator construction timers, Hive Destroyer charge timer, time-ability cooldowns, Surge countdown, and Mission Clock — pause so players can think calmly without being able to wait between waves for infinite money, cooldowns, or risk-free charging.
+- **#3 Rewind behavior**: Rewind affects only the enemy wave (clears active enemies/projectiles, restarts the current wave deterministically, and adds `+1 Armoured`). All player-side state — towers (including mid-wave builds/upgrades), refineries, constructions in progress, `$`, persistent `meta_research`, manipulator level, and player lives (lost lives remain lost) — stays as it currently is.
+- **BUILD Phase Universal Pause**: Between waves (`BUILD` phase), all progression timers — Refineries, construction timers, Hive Destroyer charge timer, time-ability cooldowns, Surge countdown, and Mission Clock — pause.
 - **Hive Destroyer Charge Pauses Time Abilities & Surge**: While Hive Destroyer is charging, all 3 time abilities (`Rewind`, `Pause`, `Haste`) are locked (`PAUSED (HIVE)`), active Pause/Haste effects and power cooldowns pause, and the Surge countdown pauses.
-- **Always-Visible Build Menu & Dual Placement Flow**: Build menu stays visible when no tower is selected; players can either click a pad then click a tower, OR click a tower first (`pending_build_type`) and click any open pad.
-- **Surge Reset Confirmed**: Using any time ability resets the Surge countdown (`52.0 s` / `60.0 s` at Lv4).
+
+## Algorithmic Difficulty, Economy & Meta-Progression Overhaul
+1. **Added `Laser Spire` (`$100`, `Laser` damage) Alongside `Blaster Turret` (`$90`, `Piercing`) and `Cluster Mortar` (`$110`, `Normal`)**:
+   - **Why**: The prompt requires the 3×3 Damage Matrix (`Normal`, `Piercing`, `Laser` vs `Standard`, `Armored`, `Reflective`), and the original prototype only had 2 towers (`Blaster` and `Mortar`). Adding `Laser Spire` (`$100`, `6.2 dmg @ 2.5/s = 15.5 base DPS`, `150%` vs `Standard`, `85%` vs `Armored`, `10%` vs `Reflective`) gives the player all 3 damage types without adding any forbidden mechanics.
+2. **Physical Speed & Single-Lane Range Calibration (`BASE_UNIT_SPEED_PX = 12.0 px/s`, Tower Ranges `108–135 px`)**:
+   - **Why**: On the `1,891.1 px` S-path, `12.0 px/s` gives a `157.6 s` traversal time (`+ ~23 s` spawn stream = `~180 s` / `3 minutes` on Wave 1, growing `+10 s` per wave). Calibrating tower ranges to `108–135 px` ensures a tower placed at `y = 157` or `y = 322` covers a single lane (`~140 px` chord = `~11.7 s` crossing + `~25 s` stream = `~37.0 s` effective engagement window on Wave 1) rather than hitting two parallel lanes simultaneously. This makes the live 2D physics match `DPS needed = (mutated_hp * avg_speed) / (wave_length * 0.30 * difficulty_k)` directly so 2 starting towers hold Wave 1 (`ratio 1.02`) and fail before Wave 5.
+3. **5-Wave Surge Deadline (`SURGE_WAVE_SPAN = 5`)**:
+   - **Why**: With 3-minute waves, the Surge deadline is the beginning of Wave 6 if no time power is used during Waves 1–5, and resets to `+5` full waves (`current_wave + 6` start) whenever any time ability is used.
+4. **Rogue-Like Persistent Meta-Research & Between-Levels Lab**:
+   - **Why**: Removed `ResearchBox` from the in-game `RightPanel` shop completely and moved research spending to `BetweenLevelsOverlay` (`Levels / Lab`), with persistent `GameState.meta_research`, multi-rank costs `[100, 250, 600, 1400, 3200]`, a `60 R` per-mission cap (`< 100 R` Rank 1 cost), and `0.25x` diminishing returns on Rewind replays.
