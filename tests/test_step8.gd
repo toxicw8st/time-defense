@@ -9,7 +9,8 @@ extends Node
 ## (f) DPS needed per wave for Waves 1-10 matches prompt table [27, 37, 46, 60, 104, 138, 121, 137, 179, 544] within ~10%
 
 func _ready() -> void:
-	await _test_real_ui_clicks_and_hud_requirements()
+	var ui_ok: bool = await _test_real_ui_clicks_and_hud_requirements()
+	assert(ui_ok, "UI clicks and mobile ergonomics test must complete cleanly")
 	_test_f_dps_needed_and_algorithm_table()
 	_test_a_two_towers_fail_before_wave_5()
 	_test_b_fourth_refinery_impossible_before_wave_5()
@@ -44,7 +45,7 @@ func _send_left_click(map: GameMap, screen_pos: Vector2) -> void:
 	await get_tree().process_frame
 
 
-func _test_real_ui_clicks_and_hud_requirements() -> void:
+func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	GameState.reset_meta_progression()
 	GameState.prompts_muted = false
 	GameState.reset_mission()
@@ -81,6 +82,18 @@ func _test_real_ui_clicks_and_hud_requirements() -> void:
 	var base_hover_size: Vector2 = hud.hover_info_panel.size
 	assert(base_right_size == Vector2(340, 480), "RightPanel must stay fixed 340x480, got %s" % str(base_right_size))
 
+	# Verify mobile TopBar buttons exist, fit inside 1280px, and work without a keyboard (Esc/F1)
+	assert(hud.menu_button.visible and hud.debug_button.visible and hud.fullscreen_button.visible)
+	assert(hud.clock_label.get_global_rect().end.x <= 1280.0, "TopBar Row2 must fit cleanly inside 1280px")
+	hud.debug_button.pressed.emit()
+	assert(hud.debug_panel.visible, "Mobile Dbg button must toggle DebugPanel")
+	hud.debug_button.pressed.emit()
+	assert(not hud.debug_panel.visible)
+	hud.menu_button.pressed.emit()
+	assert(hud.pause_overlay.visible, "Mobile Menu button must open PauseOverlay")
+	hud.menu_button.pressed.emit()
+	assert(not hud.pause_overlay.visible)
+
 	var buttons_to_hover: Array[Button] = [
 		hud.build_blaster_button,
 		hud.build_mortar_button,
@@ -95,6 +108,23 @@ func _test_real_ui_clicks_and_hud_requirements() -> void:
 		assert(hud.hover_info_label.get_line_count() <= 2, "Description >2 lines: %s" % hud.hover_info_label.text)
 		b.mouse_exited.emit()
 		await get_tree().process_frame
+
+	# Verify mobile tap-to-inspect works even on disabled buttons (no hover required)
+	GameState.mission.economy["money"] = 100 # Less than Manipulator Lv2 ($150) so button is disabled
+	hud._refresh_all()
+	assert(hud.manip_upgrade_button.disabled)
+	var tap_ev := InputEventScreenTouch.new()
+	tap_ev.pressed = true
+	hud.manip_upgrade_button.gui_input.emit(tap_ev)
+	await get_tree().process_frame
+	assert(hud.hover_info_label.text.contains("Lv2"), "Tapping disabled button on touch must show its description: %s" % hud.hover_info_label.text)
+	GameState.mission.economy["money"] = Balance.STARTING_MONEY
+	hud._refresh_all()
+
+	# Verify touch-friendly 34px hit zone selects Pad P1 even when tapped +24px off-center!
+	await _send_left_click(map, Vector2(220.0 + 24.0, 96.0))
+	assert(map.selected_pad_index == 0, "Mobile 34px touch pad hitbox must select Pad P1 at +24px offset")
+	await _send_left_click(map, Vector2(100.0, 200.0))
 
 	# Click Pad P1 -> build Blaster ($90); click Laser ($100) -> click Pad P11 -> builds Laser ($190 total spent!)
 	var p1_screen := Vector2(220.0, 96.0)
@@ -132,6 +162,7 @@ func _test_real_ui_clicks_and_hud_requirements() -> void:
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
+	return true
 
 
 func _test_f_dps_needed_and_algorithm_table() -> void:

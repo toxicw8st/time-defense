@@ -42,6 +42,7 @@ const ENEMY_BASE_POS: Vector2 = Vector2(58, 75)
 const PLAYER_BASE_POS: Vector2 = Vector2(842, 405)
 const REFINERY_ANNEX_RECT: Rect2 = Rect2(16, 195, 134, 268)
 const PAD_SIZE: float = 36.0
+const PAD_TOUCH_RADIUS: float = 34.0 # Finger-friendly hit zone (68 px diameter; pads are >=105 px apart)
 
 @onready var map_click_area: Control = $MapClickArea
 @onready var enemy_path: Path2D = $EnemyPath
@@ -367,7 +368,14 @@ func _find_pad_at(local_pos: Vector2) -> int:
 		var rect := Rect2(p.x - half, p.y - half, PAD_SIZE, PAD_SIZE)
 		if rect.has_point(local_pos):
 			return i
-	return -1
+	var best_idx: int = -1
+	var best_dist_sq: float = PAD_TOUCH_RADIUS * PAD_TOUCH_RADIUS
+	for i in range(BUILD_PAD_POSITIONS.size()):
+		var d_sq: float = local_pos.distance_squared_to(BUILD_PAD_POSITIONS[i])
+		if d_sq <= best_dist_sq:
+			best_dist_sq = d_sq
+			best_idx = i
+	return best_idx
 
 
 func _draw() -> void:

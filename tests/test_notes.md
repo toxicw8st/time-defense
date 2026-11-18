@@ -18,3 +18,6 @@
 - [x] `tests/test_step6.tscn` -> `STEP6_TEST_PASS manip_lvl=2 arm=1 thaw=1 swift=1 hp_mult=1.38`
 - [x] `tests/test_step7.tscn` -> `STEP7_TEST_PASS charges_fired=3 1_over_N=ok restart_clean=true`
 - [x] `tests/test_step8.tscn` -> `ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok)`
+
+## Mobile + Desktop Verification
+- [x] `tests/test_step8.tscn` (headless & windowed OpenGL 3.3 Compatibility): verified TopBar `Menu`, `Dbg`, and `Full` buttons fit cleanly inside `1280 px`, toggle Pause/Debug overlays without a keyboard, disabled-button tap via `InputEventScreenTouch` displays info in `HoverInfoPanel` without mouse hover, and `34 px` pad touch hitbox selects Pad P1 at `+24 px` offset (`ALL_TESTS_ZERO_ERRORS`).

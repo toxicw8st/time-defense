@@ -1,0 +1,83 @@
+name: Deploy TimeDefense Web to GitHub Pages
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.7.2"
+      GODOT_STATUS: "stable"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Godot 4.7.2 Linux binary & export templates
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/godot_bin
+            ~/.local/share/godot/export_templates/4.7.2.stable
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}-linux-web-v1
+
+      - name: Install Godot 4.7.2 & export templates (if not cached)
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/godot_bin ~/.local/share/godot/export_templates/4.7.2.stable
+          curl -fL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64.zip" -o /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot_bin
+          chmod +x /tmp/godot_bin/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64
+
+          curl -fL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_export_templates.tpz" -o /tmp/templates.tpz
+          unzip -q /tmp/templates.tpz -d /tmp/templates_extract
+          mv /tmp/templates_extract/templates/* ~/.local/share/godot/export_templates/4.7.2.stable/
+          rm -rf /tmp/godot.zip /tmp/templates.tpz /tmp/templates_extract
+
+      - name: Import resources & run headless acceptance tests
+        run: |
+          GODOT="/tmp/godot_bin/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64"
+          "$GODOT" --headless --import
+          for i in $(seq 0 8); do
+            echo "=== Running test_step${i}.tscn ==="
+            "$GODOT" --headless "res://tests/test_step${i}.tscn" 2>&1 | tee /tmp/test_out.log
+            if grep -q "SCRIPT ERROR" /tmp/test_out.log; then
+              echo "Detected SCRIPT ERROR in test_step${i}.tscn!"
+              exit 1
+            fi
+          done
+
+      - name: Export Godot Web (HTML5) build
+        run: |
+          GODOT="/tmp/godot_bin/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64"
+          mkdir -p build/web
+          "$GODOT" --headless --export-release "Web" build/web/index.html
+          ls -lh build/web
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

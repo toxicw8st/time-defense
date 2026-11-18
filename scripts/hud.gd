@@ -15,6 +15,9 @@ signal start_wave_requested
 @onready var speed_2x_button: Button = $TopBar/VBox/Row2/SpeedBox/Speed2xButton
 @onready var speed_3x_button: Button = $TopBar/VBox/Row2/SpeedBox/Speed3xButton
 @onready var level_picker_button: Button = $TopBar/VBox/Row2/LevelPickerButton
+@onready var menu_button: Button = $TopBar/VBox/Row2/MenuButton
+@onready var debug_button: Button = $TopBar/VBox/Row2/DebugButton
+@onready var fullscreen_button: Button = $TopBar/VBox/Row2/FullscreenButton
 @onready var clock_label: Label = $TopBar/VBox/Row2/ClockLabel
 
 @onready var right_panel: PanelContainer = $RightPanel
@@ -104,6 +107,7 @@ var _pulse_accum: float = 0.0
 var _icons: Dictionary = {}
 var _hover_descriptions: Dictionary = {}
 var _hovered_button: Button = null
+var _tapped_info_button: Button = null
 var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false}
 
 const RESEARCH_ORDER: Array[String] = [
@@ -138,6 +142,9 @@ func _ready() -> void:
 	speed_2x_button.pressed.connect(func() -> void: GameState.set_game_speed(2.0))
 	speed_3x_button.pressed.connect(func() -> void: GameState.set_game_speed(3.0))
 	level_picker_button.pressed.connect(_toggle_between_levels_screen)
+	menu_button.pressed.connect(_toggle_pause_menu)
+	debug_button.pressed.connect(_toggle_debug_panel)
+	fullscreen_button.pressed.connect(_toggle_fullscreen)
 
 	level_1_button.pressed.connect(func() -> void: _select_level(1))
 	level_2_button.pressed.connect(func() -> void: _select_level(2))
@@ -257,6 +264,9 @@ func _setup_right_panel_buttons() -> void:
 	UIIcons.apply_right_button_theme(charge_button, Color(0.95, 0.62, 0.28))
 	UIIcons.apply_right_button_theme(start_wave_button, Color(0.38, 0.78, 1.0))
 
+	for top_btn in [speed_pause_button, speed_1x_button, speed_2x_button, speed_3x_button, level_picker_button, menu_button, debug_button, fullscreen_button]:
+		UIIcons.apply_right_button_theme(top_btn, Color(0.36, 0.56, 0.82))
+
 
 func _init_styled_button(btn: Button, icon_tex: Texture2D, accent: Color) -> void:
 	btn.icon = icon_tex
@@ -271,21 +281,32 @@ func _init_styled_button(btn: Button, icon_tex: Texture2D, accent: Color) -> voi
 			_hovered_button = null
 			_refresh_hover_info()
 	)
+	btn.pressed.connect(func() -> void:
+		_tapped_info_button = btn
+		_refresh_hover_info()
+	)
+	# Also respond to touch/click even when disabled so mobile users can tap any button to inspect it
+	btn.gui_input.connect(func(ev: InputEvent) -> void:
+		if (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT) or (ev is InputEventScreenTouch and ev.pressed):
+			_tapped_info_button = btn
+			_refresh_hover_info()
+	)
 
 
 func _set_button_description(btn: Button, desc: String) -> void:
 	_hover_descriptions[btn] = desc
 	btn.tooltip_text = desc
-	if _hovered_button == btn:
+	if _hovered_button == btn or _tapped_info_button == btn:
 		_refresh_hover_info()
 
 
 func _refresh_hover_info() -> void:
-	if _hovered_button != null and _hover_descriptions.has(_hovered_button):
-		hover_info_label.text = _hover_descriptions[_hovered_button]
+	var active_btn: Button = _hovered_button if _hovered_button != null else _tapped_info_button
+	if active_btn != null and is_instance_valid(active_btn) and _hover_descriptions.has(active_btn):
+		hover_info_label.text = _hover_descriptions[active_btn]
 		hover_info_label.modulate = Color(0.95, 0.98, 1.0)
 	else:
-		hover_info_label.text = "Hover any button below for details."
+		hover_info_label.text = "Hover or tap any button below for details."
 		hover_info_label.modulate = Color(0.68, 0.76, 0.88)
 
 
@@ -345,25 +366,24 @@ func _refresh_all() -> void:
 	var shot_dmg: int = base_attack_ref.get_shot_damage() if base_attack_ref != null else Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE
 	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(shot_dmg)))
 	var charge_pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0)) if base_attack_ref != null else 0
-	enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d (Shots to destroy: %d)" % [
+	enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d" % [
 		m.enemy_base_hp,
 		Balance.ENEMY_BASE_MAX_HP,
 		charge_pct,
 		Balance.BASE_ATTACK_COST,
 		shot_dmg,
 		shots_left,
-		shots_left,
 	]
 
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
 	wave_label.text = "Wave %d / %d (Lv %d)" % [m.wave_number, max_w, GameState.selected_mission_level]
 	money_label.text = "Money: $%d" % m.economy["money"]
-	research_label.text = "Meta-Research: %d R (%d/%d this mission)" % [
+	research_label.text = "Research: %d R (%d/%d)" % [
 		GameState.meta_research,
 		int(m.stats["research_earned"]),
 		Balance.MAX_RESEARCH_PER_MISSION,
 	]
-	refineries_label.text = "Refineries: %d (+$%.2f/s)" % [
+	refineries_label.text = "Ref: %d (+$%.2f/s)" % [
 		m.economy["refineries_owned"],
 		float(m.economy["refineries_owned"]) * Balance.REFINERY_RATE_PER_SEC,
 	]
@@ -923,11 +943,26 @@ func _on_tower_selected(tower: TowerUnit) -> void:
 	_refresh_selection_panel()
 
 
+func _toggle_debug_panel() -> void:
+	debug_panel.visible = not debug_panel.visible
+	_refresh_all()
+
+
+func _toggle_fullscreen() -> void:
+	var mode := DisplayServer.window_get_mode()
+	if mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 func _on_selection_cleared() -> void:
 	_selected_pad_idx = -1
 	_selected_tower = null
+	_tapped_info_button = null
 	_sell_confirm_armed = false
 	_refresh_selection_panel()
+	_refresh_hover_info()
 
 
 func _on_wave_summary_updated(summary_text: String) -> void:
@@ -1066,10 +1101,13 @@ func _on_mission_reset() -> void:
 	_last_summary_text = ""
 	_selected_pad_idx = -1
 	_selected_tower = null
+	_hovered_button = null
+	_tapped_info_button = null
 	_sell_confirm_armed = false
 	_event_feed.clear()
 	event_feed_label.text = "Events: (none yet)"
 	_check_teaching_prompt()
+	_refresh_hover_info()
 
 
 func _on_start_wave_pressed() -> void:
