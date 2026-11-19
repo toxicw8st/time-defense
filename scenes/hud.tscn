@@ -47,7 +47,7 @@ text = "Wave 1 / 45"
 
 [node name="Row2" type="HBoxContainer" parent="TopBar/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 6
 
 [node name="MoneyLabel" type="Label" parent="TopBar/VBox/Row2"]
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
@@ -69,55 +69,61 @@ text = "Ref: 0 (+$0.00/s)"
 
 [node name="SpeedBox" type="HBoxContainer" parent="TopBar/VBox/Row2"]
 layout_mode = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 3
 
 [node name="SpeedPauseButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(36, 26)
+custom_minimum_size = Vector2(32, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "||"
 
 [node name="Speed1xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(36, 26)
+custom_minimum_size = Vector2(32, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "1x"
 
 [node name="Speed2xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(36, 26)
+custom_minimum_size = Vector2(32, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "2x"
 
 [node name="Speed3xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(36, 26)
+custom_minimum_size = Vector2(32, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "3x"
 
 [node name="LevelPickerButton" type="Button" parent="TopBar/VBox/Row2"]
-custom_minimum_size = Vector2(92, 26)
+custom_minimum_size = Vector2(86, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "Levels / Lab"
 
 [node name="MenuButton" type="Button" parent="TopBar/VBox/Row2"]
-custom_minimum_size = Vector2(54, 26)
+custom_minimum_size = Vector2(50, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "Menu"
 
 [node name="DebugButton" type="Button" parent="TopBar/VBox/Row2"]
-custom_minimum_size = Vector2(44, 26)
+custom_minimum_size = Vector2(40, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "Dbg"
 
 [node name="FullscreenButton" type="Button" parent="TopBar/VBox/Row2"]
-custom_minimum_size = Vector2(44, 26)
+custom_minimum_size = Vector2(40, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "Full"
+
+[node name="DownloadButton" type="Button" parent="TopBar/VBox/Row2"]
+custom_minimum_size = Vector2(62, 26)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "DL / App"
 
 [node name="ClockLabel" type="Label" parent="TopBar/VBox/Row2"]
 layout_mode = 2
@@ -209,7 +215,7 @@ theme_override_constants/separation = 6
 
 [node name="BuildMenuBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 layout_mode = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 3
 
 [node name="BuildPadLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
 layout_mode = 2
@@ -218,30 +224,44 @@ text = "BUILD TOWERS"
 autowrap_mode = 3
 
 [node name="BuildBlasterButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
-custom_minimum_size = Vector2(0, 34)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 text = "Blaster Turret ($90)"
 alignment = 0
 
 [node name="BuildMortarButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
-custom_minimum_size = Vector2(0, 34)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 text = "Cluster Mortar ($110)"
 alignment = 0
 
 [node name="BuildLaserButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
-custom_minimum_size = Vector2(0, 34)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 text = "Laser Spire ($100)"
+alignment = 0
+
+[node name="BuildSlowButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Chrono Slow Tower ($100)"
+alignment = 0
+
+[node name="BuildRailgunButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Time Decay Rail Gun ($375)"
 alignment = 0
 
 [node name="TowerPanelBox" type="VBoxContainer" parent="RightPanel/Margin/VBox/Scroll/ContentVBox"]
 visible = false
 layout_mode = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 3
 
 [node name="TowerHeaderLabel" type="Label" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
 layout_mode = 2
@@ -259,29 +279,36 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Status: Active"
 
+[node name="TargetModeButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Target: First (tap to cycle)"
+alignment = 0
+
 [node name="UpgradeDmgButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Damage"
 alignment = 0
 
 [node name="UpgradeRngButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Range"
 alignment = 0
 
 [node name="UpgradeSpdButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Fire Rate"
 alignment = 0
 
 [node name="SellButton" type="Button" parent="RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Sell Tower"

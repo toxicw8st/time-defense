@@ -30,6 +30,11 @@ var last_tangent: Vector2 = Vector2.RIGHT
 var is_dead_or_leaked: bool = false
 var swift_stacks_at_spawn: int = 0
 var speed_multiplier_at_spawn: float = 1.0
+var slow_pct: float = 0.0
+var slow_remaining: float = 0.0
+var decay_base_pct: float = 0.0
+var decay_ticks_remaining: int = 0
+var decay_tick_timer: float = 0.0
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
@@ -55,16 +60,89 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 	hp = max_hp
 	distance_along_path = 0.0
 	is_dead_or_leaked = false
+	slow_pct = 0.0
+	slow_remaining = 0.0
+	decay_base_pct = 0.0
+	decay_ticks_remaining = 0
+	decay_tick_timer = 0.0
 	_sync_transform_to_path()
 	queue_redraw()
 
 
+func get_current_move_speed() -> float:
+	if GameState.is_enemies_frozen:
+		return 0.0
+	var slow_mult: float = (1.0 - slow_pct) if slow_remaining > 0.0 else 1.0
+	return base_speed * speed_multiplier_at_spawn * slow_mult
+
+
+func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_pct: float, ticks: int = 3) -> void:
+	if is_dead_or_leaked:
+		return
+	# Juggernaut resists slow by half
+	var eff_slow: float = raw_slow_pct * (0.5 if enemy_type == "juggernaut" else 1.0)
+	if slow_remaining <= 0.0 or eff_slow >= slow_pct:
+		slow_pct = eff_slow
+	slow_remaining = maxf(slow_remaining, slow_dur)
+
+	# Decay DoT refreshes 3s / 3-tick timer on re-hit; NEVER stacks
+	if raw_decay_pct > 0.0:
+		if decay_ticks_remaining > 0:
+			decay_base_pct = maxf(decay_base_pct, raw_decay_pct)
+		else:
+			decay_base_pct = raw_decay_pct
+		decay_ticks_remaining = ticks
+		decay_tick_timer = 1.0
+	queue_redraw()
+
+
+func step_status_effects(delta: float) -> void:
+	if is_dead_or_leaked or delta <= 0.0:
+		return
+	if not GameState.is_enemies_frozen and slow_remaining > 0.0:
+		slow_remaining = maxf(0.0, slow_remaining - delta)
+		if slow_remaining <= 0.0:
+			slow_pct = 0.0
+			queue_redraw()
+
+	if decay_ticks_remaining > 0 and decay_base_pct > 0.0:
+		decay_tick_timer -= delta
+		while decay_ticks_remaining > 0 and decay_tick_timer <= 0.0 and not is_dead_or_leaked:
+			decay_ticks_remaining -= 1
+			if decay_ticks_remaining > 0:
+				decay_tick_timer += 1.0
+			else:
+				decay_tick_timer = 0.0
+			apply_time_decay_tick(decay_base_pct)
+		if decay_ticks_remaining <= 0:
+			decay_base_pct = 0.0
+
+
+func apply_time_decay_tick(raw_tick_pct: float) -> float:
+	if is_dead_or_leaked or raw_tick_pct <= 0.0:
+		return 0.0
+	var matrix_mult: float = Balance.get_damage_multiplier("Time", armour_tags)
+	var eff_pct: float = minf(Balance.TIME_DECAY_MAX_TICK_PCT, raw_tick_pct * matrix_mult)
+	var dmg: float = hp * eff_pct
+	hp -= dmg
+	# Execute rule: if remaining HP < 1.0 after a tick, kill immediately!
+	if hp < 1.0:
+		hp = 0.0
+		is_dead_or_leaked = true
+		died.emit(self)
+		queue_free()
+	else:
+		queue_redraw()
+	return dmg
+
+
 func advance_along_path(delta: float) -> void:
-	if is_dead_or_leaked or path_curve == null or GameState.mission.is_over:
+	if is_dead_or_leaked or path_curve == null or GameState.mission.is_over or delta <= 0.0:
 		return
-	if GameState.is_enemies_frozen or delta <= 0.0:
+	step_status_effects(delta)
+	if is_dead_or_leaked or GameState.is_enemies_frozen:
 		return
-	var eff_speed: float = base_speed * speed_multiplier_at_spawn
+	var eff_speed: float = get_current_move_speed()
 	if eff_speed <= 0.0:
 		return
 	distance_along_path += eff_speed * delta
@@ -166,6 +244,9 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius - 2.0, 0.0, TAU, 20, Color(0.78, 0.82, 0.88, 0.85), 2.0)
 	if armour_tags.has("Reflective"):
 		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 20, Color(0.55, 0.98, 1.0, 0.85), 1.5)
+	if slow_remaining > 0.0 or decay_ticks_remaining > 0:
+		var time_col := Color(0.72, 0.42, 1.0, 0.85) if decay_ticks_remaining > 0 else Color(0.35, 0.85, 1.0, 0.85)
+		draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 20, time_col, 2.0)
 
 	# Mini HP bar
 	var bar_w: float = radius * 2.4

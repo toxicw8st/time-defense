@@ -26,10 +26,12 @@ class MissionState:
 	var enemy_base_hp: int = Balance.ENEMY_BASE_MAX_HP
 	var mutations: Dictionary = {
 		"armoured_stacks": 0,
+		"armoured_active_stacks": 0, # Stays unchanged during a Rewind replay; syncs for the next NEW wave
 		"thaw_stacks": 0,
-		"thaw_hp_stacks": 0, # Activates on subsequent waves after Pause (Wave 11+ after W10 Pause)
+		"thaw_hp_stacks": 0, # Activates on subsequent waves after Pause
 		"swift_stacks": 0,
 	}
+	var rewound_in_current_build_phase: bool = false
 	var surge_count: int = 0
 	var surge_deadline_wave: int = 1 + Balance.SURGE_WAVE_SPAN # Beginning of Wave 6 initially
 	var surge_timer_seconds: float = Balance.SURGE_BASE_WINDOW
@@ -240,10 +242,10 @@ func normalize_enemy_type(enemy_type: String) -> String:
 	return enemy_type
 
 
-## Stacked HP multiplier from Rewind (+15% per stack) and Pause (+20% per stack on subsequent waves).
-## With 1 Rewind + 1 Pause: 1.15 * 1.20 = 1.38x.
+## Stacked HP multiplier from Rewind (+5% per stack, applied after replay to next new wave)
+## and Pause (+5% per stack on subsequent waves). With 1 Rewind + 1 Pause: 1.05 * 1.05 = 1.1025 (~1.10x).
 func get_enemy_hp_multiplier() -> float:
-	var arm_stacks: int = mission.mutations.get("armoured_stacks", 0)
+	var arm_stacks: int = mission.mutations.get("armoured_active_stacks", 0)
 	var thaw_hp_stacks: int = mission.mutations.get("thaw_hp_stacks", 0)
 	var arm_mult: float = pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], arm_stacks)
 	var thaw_mult: float = pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_hp_stacks)
@@ -292,7 +294,8 @@ func get_tower_attack_speed_multiplier() -> float:
 		ranks = 1
 	var research_bonus: float = 1.0 + float(ranks) * float(Balance.RESEARCH_NODES["rapid_cycling"]["fire_rate_bonus"])
 	var surge_penalty: float = pow(Balance.SURGE_ATTACK_SPEED_FACTOR, mission.surge_count)
-	return research_bonus * surge_penalty
+	var haste_mult: float = (1.0 + float(Balance.TIME_POWERS["haste"]["tower_attack_speed_bonus"])) if is_haste_active else 1.0
+	return research_bonus * surge_penalty * haste_mult
 
 
 func get_construction_speed_multiplier() -> float:

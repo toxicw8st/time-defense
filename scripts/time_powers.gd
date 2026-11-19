@@ -63,6 +63,8 @@ func _on_wave_cleared(_wave_num: int) -> void:
 	if _waiting_rewind_cooldown_after_replay:
 		_waiting_rewind_cooldown_after_replay = false
 		cooldowns["rewind"] = get_effective_cooldown("rewind")
+	elif wave_manager_ref != null and not wave_manager_ref._is_replay_attempt:
+		cooldowns["rewind"] = 0.0 # Rewind resets for next build phase after clearing a new wave
 
 
 func _process(delta: float) -> void:
@@ -151,6 +153,15 @@ func get_haste_duration() -> float:
 func can_use_power(power_name: String) -> bool:
 	if GameState.mission.is_over or GameState.is_base_locked() or GameState.is_base_charging():
 		return false
+	if power_name == "rewind":
+		if _waiting_rewind_cooldown_after_replay:
+			return false
+		if wave_manager_ref == null:
+			return false
+		if wave_manager_ref.state == WaveManager.State.BUILD:
+			return wave_manager_ref.can_rewind_now()
+		return cooldowns.get("rewind", 0.0) <= 0.0 and wave_manager_ref.can_rewind_now()
+
 	if cooldowns.get(power_name, 0.0) > 0.0:
 		return false
 
@@ -159,10 +170,6 @@ func can_use_power(power_name: String) -> bool:
 			return GameState.is_wave_active and pause_remaining <= 0.0
 		"haste":
 			return GameState.is_wave_active and haste_remaining <= 0.0
-		"rewind":
-			if _waiting_rewind_cooldown_after_replay:
-				return false
-			return wave_manager_ref != null and wave_manager_ref.can_rewind_now()
 	return false
 
 
@@ -183,16 +190,16 @@ func activate_power(power_name: String) -> bool:
 		"haste":
 			haste_remaining = get_haste_duration()
 			GameState.is_haste_active = true
-			GameState.event_logged.emit("HASTE activated (%.0fs) - Construction 3x faster." % haste_remaining)
+			GameState.event_logged.emit("HASTE activated (%.0fs) - Towers +50%% attack speed & +50%% build speed." % haste_remaining)
 		"rewind":
 			if pause_remaining > 0.0:
 				pause_remaining = 0.0
 				GameState.is_enemies_frozen = false
 				cooldowns["pause"] = get_effective_cooldown("pause")
 			_waiting_rewind_cooldown_after_replay = true
-			GameState.event_logged.emit("REWIND activated - Replaying wave %d; builds & earnings kept." % GameState.mission.wave_number)
-			GameState.time_power_used.emit("rewind")
 			snapshot_helper.execute_rewind(map_ref, wave_manager_ref)
+			GameState.event_logged.emit("REWIND activated - Replaying wave %d (no new mutation); +5%% HP applies to next wave." % GameState.mission.wave_number)
+			GameState.time_power_used.emit("rewind")
 			power_activated.emit("rewind")
 			return true
 

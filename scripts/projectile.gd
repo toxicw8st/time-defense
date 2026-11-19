@@ -6,6 +6,7 @@ class_name ProjectileEffect
 
 var is_tracer: bool = false
 var tracer_color: Color = Color(0.45, 0.9, 1.0)
+var tracer_width: float = 2.5
 var damage_type: String = "Normal"
 var start_pos: Vector2 = Vector2.ZERO
 var target_pos: Vector2 = Vector2.ZERO
@@ -19,13 +20,14 @@ var _exploded: bool = false
 var _explosion_flash_timer: float = 0.0
 
 
-func setup_tracer(p_start: Vector2, p_end: Vector2, p_color: Color = Color(0.45, 0.9, 1.0)) -> void:
+func setup_tracer(p_start: Vector2, p_end: Vector2, p_color: Color = Color(0.45, 0.9, 1.0), p_width: float = 2.5, p_duration: float = 0.08) -> void:
 	is_tracer = true
 	tracer_color = p_color
+	tracer_width = p_width
 	start_pos = p_start
 	target_pos = p_end
 	elapsed = 0.0
-	flight_time = 0.08
+	flight_time = maxf(0.04, p_duration)
 	position = Vector2.ZERO
 	queue_redraw()
 
@@ -106,7 +108,7 @@ func _draw() -> void:
 		var alpha: float = clampf(1.0 - (elapsed / flight_time), 0.0, 1.0)
 		var col := tracer_color
 		col.a = alpha
-		draw_line(start_pos, target_pos, col, 2.5)
+		draw_line(start_pos, target_pos, col, tracer_width)
 		return
 
 	if _exploded:

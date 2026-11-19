@@ -18,6 +18,7 @@ signal start_wave_requested
 @onready var menu_button: Button = $TopBar/VBox/Row2/MenuButton
 @onready var debug_button: Button = $TopBar/VBox/Row2/DebugButton
 @onready var fullscreen_button: Button = $TopBar/VBox/Row2/FullscreenButton
+@onready var download_button: Button = $TopBar/VBox/Row2/DownloadButton
 @onready var clock_label: Label = $TopBar/VBox/Row2/ClockLabel
 
 @onready var right_panel: PanelContainer = $RightPanel
@@ -33,11 +34,14 @@ signal start_wave_requested
 @onready var build_blaster_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildBlasterButton
 @onready var build_mortar_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildMortarButton
 @onready var build_laser_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildLaserButton
+@onready var build_slow_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildSlowButton
+@onready var build_railgun_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildRailgunButton
 
 @onready var tower_panel_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox
 @onready var tower_header_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerHeaderLabel
 @onready var tower_ratings_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerRatingsLabel
 @onready var tower_status_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerStatusLabel
+@onready var target_mode_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TargetModeButton
 @onready var upg_dmg_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeDmgButton
 @onready var upg_rng_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeRngButton
 @onready var upg_spd_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/UpgradeSpdButton
@@ -108,7 +112,7 @@ var _icons: Dictionary = {}
 var _hover_descriptions: Dictionary = {}
 var _hovered_button: Button = null
 var _tapped_info_button: Button = null
-var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false}
+var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false, "slow": false, "railgun": false}
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -145,6 +149,7 @@ func _ready() -> void:
 	menu_button.pressed.connect(_toggle_pause_menu)
 	debug_button.pressed.connect(_toggle_debug_panel)
 	fullscreen_button.pressed.connect(_toggle_fullscreen)
+	download_button.pressed.connect(_on_download_button_pressed)
 
 	level_1_button.pressed.connect(func() -> void: _select_level(1))
 	level_2_button.pressed.connect(func() -> void: _select_level(2))
@@ -167,13 +172,20 @@ func _ready() -> void:
 	build_blaster_button.pressed.connect(func() -> void: _build_tower("blaster"))
 	build_mortar_button.pressed.connect(func() -> void: _build_tower("mortar"))
 	build_laser_button.pressed.connect(func() -> void: _build_tower("laser"))
+	build_slow_button.pressed.connect(func() -> void: _build_tower("slow"))
+	build_railgun_button.pressed.connect(func() -> void: _build_tower("railgun"))
 	build_blaster_button.mouse_entered.connect(func() -> void: _set_preview_type("blaster"))
 	build_mortar_button.mouse_entered.connect(func() -> void: _set_preview_type("mortar"))
 	build_laser_button.mouse_entered.connect(func() -> void: _set_preview_type("laser"))
+	build_slow_button.mouse_entered.connect(func() -> void: _set_preview_type("slow"))
+	build_railgun_button.mouse_entered.connect(func() -> void: _set_preview_type("railgun"))
 	build_blaster_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_mortar_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_laser_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
+	build_slow_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
+	build_railgun_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 
+	target_mode_button.pressed.connect(_on_cycle_target_mode_pressed)
 	upg_dmg_button.pressed.connect(func() -> void: _upgrade_selected("damage"))
 	upg_rng_button.pressed.connect(func() -> void: _upgrade_selected("range"))
 	upg_spd_button.pressed.connect(func() -> void: _upgrade_selected("fire_rate"))
@@ -238,7 +250,7 @@ func _setup_right_panel_buttons() -> void:
 	hover_info_panel.add_theme_stylebox_override("panel", UIIcons.make_button_style(Color(0.10, 0.13, 0.19), Color(0.32, 0.44, 0.62), 1))
 
 	var icon_keys: Array[String] = [
-		"blaster", "mortar", "laser", "damage", "range", "fire_rate", "sell", "manipulator",
+		"blaster", "mortar", "laser", "slow", "railgun", "target", "damage", "range", "fire_rate", "sell", "manipulator",
 		"rapid_cycling", "reinforced_shots", "extended_optics", "efficient_manipulator", "hive_breaker",
 	]
 	for k in icon_keys:
@@ -247,6 +259,9 @@ func _setup_right_panel_buttons() -> void:
 	_init_styled_button(build_blaster_button, _icons["blaster"], Color(0.28, 0.62, 0.95))
 	_init_styled_button(build_mortar_button, _icons["mortar"], Color(0.32, 0.78, 0.54))
 	_init_styled_button(build_laser_button, _icons["laser"], Color(0.85, 0.35, 0.82))
+	_init_styled_button(build_slow_button, _icons["slow"], Color(0.25, 0.82, 0.92))
+	_init_styled_button(build_railgun_button, _icons["railgun"], Color(0.68, 0.42, 0.95))
+	_init_styled_button(target_mode_button, _icons["target"], Color(0.95, 0.85, 0.40))
 	_init_styled_button(upg_dmg_button, _icons["damage"], Color(0.92, 0.48, 0.35))
 	_init_styled_button(upg_rng_button, _icons["range"], Color(0.35, 0.82, 0.95))
 	_init_styled_button(upg_spd_button, _icons["fire_rate"], Color(0.95, 0.82, 0.32))
@@ -264,7 +279,7 @@ func _setup_right_panel_buttons() -> void:
 	UIIcons.apply_right_button_theme(charge_button, Color(0.95, 0.62, 0.28))
 	UIIcons.apply_right_button_theme(start_wave_button, Color(0.38, 0.78, 1.0))
 
-	for top_btn in [speed_pause_button, speed_1x_button, speed_2x_button, speed_3x_button, level_picker_button, menu_button, debug_button, fullscreen_button]:
+	for top_btn in [speed_pause_button, speed_1x_button, speed_2x_button, speed_3x_button, level_picker_button, menu_button, debug_button, fullscreen_button, download_button]:
 		UIIcons.apply_right_button_theme(top_btn, Color(0.36, 0.56, 0.82))
 
 
@@ -482,6 +497,8 @@ func _style_power_button(btn: Button, power_name: String, offline: bool, offline
 		status_line = "ACTIVE %.1fs" % time_powers_ref.haste_remaining
 	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.is_replaying_wave():
 		status_line = "REPLAYING"
+	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.state == WaveManager.State.BUILD and GameState.mission.rewound_in_current_build_phase:
+		status_line = "USED THIS BUILD"
 	elif time_powers_ref.cooldowns.get(power_name, 0.0) > 0.0:
 		status_line = "CD %.0fs" % ceilf(time_powers_ref.cooldowns[power_name])
 	elif not time_powers_ref.can_use_power(power_name):
@@ -618,8 +635,16 @@ func _refresh_selection_panel() -> void:
 			tower_status_label.text = "Status: Active"
 			tower_status_label.modulate = Color(0.55, 0.95, 0.65)
 
-		_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+25% damage per level")
-		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+12% range per level")
+		var tlabel: String = str(Balance.TARGETING_LABELS.get(_selected_tower.target_mode, "First"))
+		target_mode_button.text = "Target: %s (tap to cycle)" % tlabel
+		target_mode_button.disabled = GameState.mission.is_over
+		_set_button_description(target_mode_button, "Targeting (%s): First/Last/Strongest/Weakest/Fastest/Slowest." % tlabel)
+
+		if _selected_tower.uses_decay_upgrades():
+			_style_upgrade_button(upg_dmg_button, "Decay DoT", "damage", _selected_tower, money, "5%/10%/20% current HP/s (3 ticks Time DoT, execute <1 HP)")
+		else:
+			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+25% damage per level")
+		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+25% / +60% / +100% (2x) total range")
 		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+15% fire speed per level")
 
 		var refund: int = _selected_tower.get_sell_refund()
@@ -642,6 +667,8 @@ func _refresh_selection_panel() -> void:
 		_style_build_button(build_blaster_button, "blaster", money, false)
 		_style_build_button(build_mortar_button, "mortar", money, false)
 		_style_build_button(build_laser_button, "laser", money, false)
+		_style_build_button(build_slow_button, "slow", money, false)
+		_style_build_button(build_railgun_button, "railgun", money, false)
 	else:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
@@ -653,6 +680,8 @@ func _refresh_selection_panel() -> void:
 		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
 		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
 		_style_build_button(build_laser_button, "laser", money, pending == "laser")
+		_style_build_button(build_slow_button, "slow", money, pending == "slow")
+		_style_build_button(build_railgun_button, "railgun", money, pending == "railgun")
 
 
 func _refresh_research_panel() -> void:
@@ -766,21 +795,27 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 			accent = Color(0.32, 0.78, 0.54)
 		elif tower_type == "laser":
 			accent = Color(0.85, 0.35, 0.82)
+		elif tower_type == "slow":
+			accent = Color(0.25, 0.82, 0.92)
+		elif tower_type == "railgun":
+			accent = Color(0.68, 0.42, 0.95)
 		UIIcons.apply_right_button_theme(btn, accent, is_armed)
 
-	var desc: String = "$%d, %ds | %s (Dmg: %s, Spd: %s)" % [
+	var desc: String = "$%d, %ds | %s" % [
 		cost,
 		int(cfg["build_time"]),
 		cfg["damage_type_label"],
-		cfg["damage_rating"],
-		cfg["speed_rating"],
 	]
 	if tower_type == "mortar":
 		desc += " - AoE vs Standard."
 	elif tower_type == "laser":
-		desc += " - 150% vs Std, 10% vs Refl."
+		desc += " - 150% Std, 10% Refl."
+	elif tower_type == "slow":
+		desc += " - 1/s, 30% slow 2s, Decay DoT."
+	elif tower_type == "railgun":
+		desc += " - 1/5s long rail, 50% slow 4s, Decay."
 	else:
-		desc += " - 150% vs Arm, 120% vs Refl."
+		desc += " - JUGGERNAUT COUNTER (180%)."
 	_set_button_description(btn, desc)
 
 	if is_armed:
@@ -800,7 +835,7 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 		btn.modulate = Color(0.75, 0.92, 0.78)
 		_set_button_description(btn, "%s MAX (3/3): %s." % [title, desc_detail])
 		return
-	var cost: int = Balance.TOWER_UPGRADE_COSTS[lvl]
+	var cost: int = Balance.get_tower_upgrade_cost(key, lvl)
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
 	btn.text = "%s %s ($%d)" % [title, pips, cost]
@@ -948,6 +983,25 @@ func _toggle_debug_panel() -> void:
 	_refresh_all()
 
 
+func _on_cycle_target_mode_pressed() -> void:
+	if _selected_tower != null and is_instance_valid(_selected_tower):
+		var new_mode: String = _selected_tower.cycle_target_mode()
+		var tlabel: String = str(Balance.TARGETING_LABELS.get(new_mode, "First"))
+		GameState.event_logged.emit("%s (P%d) target -> %s" % [
+			Balance.TOWERS[_selected_tower.tower_type]["name"],
+			_selected_tower.pad_index + 1,
+			tlabel,
+		])
+		_refresh_selection_panel()
+
+
+func _on_download_button_pressed() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("if (window.ttdOpenDownloads) window.ttdOpenDownloads();")
+	else:
+		GameState.event_logged.emit("Downloads & PWA Install: https://toxicw8st.github.io/time-defense/")
+
+
 func _toggle_fullscreen() -> void:
 	var mode := DisplayServer.window_get_mode()
 	if mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
@@ -977,9 +1031,9 @@ func _on_wave_state_changed(_new_state: int) -> void:
 func _populate_how_time_works() -> void:
 	how_time_works_label.text = "\n".join([
 		"HOW TIME WORKS:",
-		"1. REWIND: Replay the current wave to farm b$ & R. Cost: Armoured (+15% alien HP for the rest of this mission).",
-		"2. PAUSE: Freeze aliens while towers keep firing. Cost: Thaw-hardened (+20% eff HP next wave, -10% frozen dmg).",
-		"3. HASTE: Build & upgrade towers/refineries 3x faster. Cost: Swift (+8% alien speed for the rest of this mission).",
+		"1. REWIND (BUILD phase): Replay previous wave once (no new mut); next NEW wave gets Armoured (+5% alien HP).",
+		"2. PAUSE: Freeze aliens 8s while towers keep firing. Cost: Thaw-hardened (+5% HP next wave, -10% frozen dmg).",
+		"3. HASTE: Towers +50% attack speed & +50% build speed for 30s. Cost: Swift (+5% alien speed).",
 		"4. SURGE: Miss the 5-wave deadline (Wave 6 start) and all towers lose 5% attack speed for the rest of this mission.",
 		"5. MANIPULATOR: Upgrading pauses Surge & locks powers/Base while building.",
 		"6. WIN: Charge the Hive Destroyer ($450, 30s; Haste cannot speed it up) to destroy the Enemy Base.",
@@ -999,16 +1053,16 @@ func _check_teaching_prompt() -> void:
 		text = "TIP (1/6): Spend ~90% of your $200 (2 towers) on pads beside the path, then press Start Wave."
 	elif w == 2 and st == WaveManager.State.SPAWNING:
 		prompt_id = "wave_2"
-		text = "TIP (2/6): PAUSE freezes aliens only while towers keep firing. (Cost: Thaw-hardened +20% HP on future waves.)"
+		text = "TIP (2/6): PAUSE freezes aliens 8s while towers keep firing. (Cost: Thaw-hardened +5% HP on future waves.)"
 	elif w == 3 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_3"
 		text = "TIP (3/6): SURGE DEADLINE is start of Wave 6. Use at least one time power every 5 waves or towers lose 5% speed."
 	elif w == 4 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_4"
-		text = "TIP (4/6): Match damage types: Laser (150% vs Standard), Piercing Blaster (150% vs Armored), Mortar (AoE)."
+		text = "TIP (4/6): Match damage types: Laser (150% vs Standard), Piercing Blaster (180% vs Juggernaut), Chrono Slow + Decay."
 	elif w == 5 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_5"
-		text = "TIP (5/6): REWIND Wave 5 to farm b$250 twice before Wave 6 (Cost: Armoured +15% HP). Spend Research in Levels/Lab."
+		text = "TIP (5/6): REWIND in BUILD phase replays previous wave (no new mut; +5% HP next wave). Spend Research in Levels/Lab."
 	elif w == 6 and st == WaveManager.State.BUILD:
 		prompt_id = "wave_6"
 		text = "TIP (6/6): Win by destroying the Enemy Base (500 HP). Each Hive Destroyer shot costs $450 (30s charge, no Haste)."

@@ -99,8 +99,9 @@ func start_wave(is_replay: bool = false) -> bool:
 func restart_wave_for_rewind() -> void:
 	if map_ref != null:
 		map_ref.clear_all_enemies()
+	GameState.mission.rewound_in_current_build_phase = true
 	var target_wave: int = GameState.mission.wave_number
-	if state == State.BUILD and _last_cleared_wave > 0 and _post_wave_rewind_timer > 0.0:
+	if state == State.BUILD and _last_cleared_wave > 0:
 		target_wave = _last_cleared_wave
 		GameState.mission.wave_number = target_wave
 	_begin_wave_internal(target_wave, true)
@@ -110,9 +111,11 @@ func _begin_wave_internal(wave_num: int, is_replay: bool) -> void:
 	_is_replay_attempt = is_replay
 	if is_replay:
 		GameState.mission.replay_count_this_wave += 1
+		# Replayed wave is EXACTLY as it was: do NOT apply newly added mutations during the replay
 	else:
 		GameState.mission.replay_count_this_wave = 0
-		# Apply any Pause (Thaw-hardened +20% effective HP) stacks accumulated on previous waves
+		GameState.mission.rewound_in_current_build_phase = false
+		GameState.mission.mutations["armoured_active_stacks"] = GameState.mission.mutations.get("armoured_stacks", 0)
 		GameState.mission.mutations["thaw_hp_stacks"] = GameState.mission.mutations.get("thaw_stacks", 0)
 
 	_post_wave_rewind_timer = 0.0
@@ -131,8 +134,11 @@ func _begin_wave_internal(wave_num: int, is_replay: bool) -> void:
 func _complete_current_wave() -> void:
 	state = State.CLEARED
 	GameState.is_wave_active = false
-	# Activate any Pause HP stacks for the next wave immediately upon wave clear
+	# Activate accumulated mutations AFTER wave clears so next NEW wave gets them
+	GameState.mission.mutations["armoured_active_stacks"] = GameState.mission.mutations.get("armoured_stacks", 0)
 	GameState.mission.mutations["thaw_hp_stacks"] = GameState.mission.mutations.get("thaw_stacks", 0)
+	if not _is_replay_attempt:
+		GameState.mission.rewound_in_current_build_phase = false
 	state_changed.emit(state)
 
 	var wave_num: int = GameState.mission.wave_number
@@ -179,9 +185,11 @@ func is_replaying_wave() -> bool:
 func can_rewind_now() -> bool:
 	if GameState.mission.is_over or is_replaying_wave():
 		return false
-	if is_wave_active():
-		return true
-	return state == State.BUILD and _last_cleared_wave > 0 and _post_wave_rewind_timer > 0.0
+	if GameState.mission.rewound_in_current_build_phase:
+		return false
+	if state == State.BUILD:
+		return _last_cleared_wave > 0
+	return is_wave_active()
 
 
 func get_preview_data() -> Dictionary:
@@ -190,16 +198,18 @@ func get_preview_data() -> Dictionary:
 	var m := GameState.mission.mutations
 	var active_mutations: Array[Dictionary] = []
 
-	var arm_pct: int = int(round((pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], m.get("armoured_stacks", 0)) - 1.0) * 100.0))
+	var arm_stacks: int = int(m.get("armoured_stacks", 0))
+	var arm_pct: int = int(round((pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], arm_stacks) - 1.0) * 100.0))
 	var thaw_stacks: int = int(m.get("thaw_stacks", 0))
 	var thaw_hp_pct: int = int(round((pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_stacks) - 1.0) * 100.0))
-	var total_hp_pct: int = int(round((GameState.get_enemy_hp_multiplier() - 1.0) * 100.0))
+	var preview_hp_mult: float = pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], arm_stacks) * pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_stacks)
+	var total_hp_pct: int = int(round((preview_hp_mult - 1.0) * 100.0))
 
 	var defs := [
 		{
 			"key": "armoured_stacks",
 			"label": "Armoured",
-			"effect": "+%d%% alien HP (total x%.2f)" % [arm_pct, GameState.get_enemy_hp_multiplier()],
+			"effect": "+%d%% alien HP (total x%.2f)" % [arm_pct, preview_hp_mult],
 		},
 		{
 			"key": "thaw_stacks",

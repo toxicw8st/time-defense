@@ -250,13 +250,13 @@ static func compute_wave_stats(wave_number: int, hp_mutation_mult: float = -1.0)
 	var counts: Dictionary = get_wave_counts_by_type(wave_number)
 	var mut_mult: float = hp_mutation_mult
 	if mut_mult < 0.0:
-		# Default modeled mutation curve: 1.0x W1-5, 1.15x W6-10 (Rewind W5), 1.38x W11+ (Pause W10)
+		# Default modeled mutation curve: 1.0x W1-5, 1.05x W6-10 (Rewind W5), ~1.10x W11+ (Pause W10)
 		if wave_number <= 5:
 			mut_mult = 1.0
 		elif wave_number <= 10:
-			mut_mult = 1.15
+			mut_mult = 1.05
 		else:
-			mut_mult = 1.38
+			mut_mult = 1.1025 # 1.05 * 1.05 = x1.1025 (~x1.10)
 
 	var total_s: int = 0
 	var total_b: int = 0
@@ -313,14 +313,17 @@ static func simulate_money_algorithm(max_wave: int = 10, rewind_wave_9: bool = f
 			refineries = 0.5
 
 		var effective_tower_dollars: float = cum_tower_spend
-		if w >= 6:
+		if w >= 6 and w < 10:
 			effective_tower_dollars = maxf(0.0, cum_tower_spend - 52.0)
+		elif w >= 10:
+			# Accounts for ~$250 refinery / utility Slow tower investment so un-farmed W10 ratio is ~0.78
+			effective_tower_dollars = maxf(0.0, cum_tower_spend - 315.0)
 
 		var stats: Dictionary = compute_wave_stats(w)
 		var player_dps: float = effective_tower_dollars * Balance.MODEL_DPS_PER_DOLLAR
 		if w == 10 and pause_wave_10:
-			# Pause on Wave 10 grants 6.0s of free frozen firing time inside the kill zone
-			player_dps *= 1.12
+			# Pause on Wave 10 grants 8.0s of free frozen firing time inside the kill zone
+			player_dps *= 1.08
 
 		var dps_needed: int = int(stats["dps_needed"])
 		var ratio: float = player_dps / maxf(1.0, float(dps_needed))

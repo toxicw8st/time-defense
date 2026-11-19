@@ -31,7 +31,9 @@ const THREAT_START_S_DOLLARS: float = 20.0 # Wave 1 = s$20
 const THREAT_GROWTH_RATE: float = 1.07     # ~7% s$ growth per wave (Wave 45 ~ s$393)
 const MODEL_DPS_PER_DOLLAR: float = 0.153  # Calibrates $180 W1 spend -> ~27.5 DPS (ratio 1.02 vs 27 needed)
 
-# --- 3x3 Damage Matrix (Normal, Piercing, Laser vs Standard, Armored, Reflective) ---
+# --- 4x3 Damage Matrix (Normal, Piercing, Laser, Time vs Standard, Armored, Reflective) ---
+const TIME_DECAY_MAX_TICK_PCT: float = 0.30 # Cap effective per-tick Time damage at 30% of current HP
+
 const DAMAGE_MATRIX: Dictionary = {
 	"Normal": {
 		"Standard": 1.00,
@@ -48,23 +50,46 @@ const DAMAGE_MATRIX: Dictionary = {
 		"Armored": 0.85,
 		"Reflective": 0.10,
 	},
+	"Time": {
+		"Standard": 1.00,
+		"Armored": 1.20,
+		"Reflective": 1.50,
+	},
 }
 
-# --- Towers ($ costs, 3 Damage Types: Piercing, Normal, Laser) ---
+const TARGETING_MODES: Array[String] = ["first", "last", "strongest", "weakest", "fastest", "slowest"]
+const TARGETING_LABELS: Dictionary = {
+	"first": "First",
+	"last": "Last",
+	"strongest": "Strongest",
+	"weakest": "Weakest",
+	"fastest": "Fastest",
+	"slowest": "Slowest",
+}
+const TARGETING_SHORT_TAGS: Dictionary = {
+	"first": "1ST",
+	"last": "LST",
+	"strongest": "STR",
+	"weakest": "WK",
+	"fastest": "FST",
+	"slowest": "SLW",
+}
+
+# --- Towers ($ costs, 4 Damage Types: Piercing, Normal, Laser, Time) ---
 const TOWERS: Dictionary = {
 	"blaster": {
 		"name": "Blaster Turret",
-		"role": "Armor-piercing single-target turret",
+		"role": "Armor-piercing Juggernaut counter",
 		"cost": 90, # $90 (2 Blasters = $180 = 90% of $200 W1 spend)
 		"build_time": 4.0,
 		"damage": 11.5,
-		"fire_rate": 1.2, # 13.8 base DPS (~0.153 DPS/$); 150% vs Armored, 120% vs Reflective
+		"fire_rate": 1.2, # 13.8 base DPS (~0.153 DPS/$); 150% vs Armored, 120% vs Reflective, 180% vs Juggernaut
 		"range": 108.0,
 		"min_range": 0.0,
 		"splash_radius": 0.0,
 		"splash_edge_ratio": 1.0,
 		"damage_type": "Piercing",
-		"damage_type_label": "Piercing",
+		"damage_type_label": "Piercing (180% vs Juggernaut)",
 		"damage_rating": "Medium",
 		"speed_rating": "High",
 		"targeting": "first",
@@ -84,7 +109,7 @@ const TOWERS: Dictionary = {
 		"damage_type_label": "Normal (Splash)",
 		"damage_rating": "High",
 		"speed_rating": "Low",
-		"targeting": "densest_cluster",
+		"targeting": "first",
 		"projectile_flight_time": 0.55,
 	},
 	"laser": {
@@ -104,13 +129,57 @@ const TOWERS: Dictionary = {
 		"speed_rating": "Very High",
 		"targeting": "first",
 	},
+	"slow": {
+		"name": "Chrono Slow Tower",
+		"role": "Slows 30% for 2s (Jugg 15%) + Time Decay DoT upgrades",
+		"cost": 100, # $100
+		"build_time": 5.0,
+		"damage": 0.0, # Base: 0% decay - slow only, no direct damage
+		"fire_rate": 1.0, # 1 shot/sec
+		"range": 115.0, # Medium range
+		"min_range": 0.0,
+		"splash_radius": 0.0,
+		"splash_edge_ratio": 1.0,
+		"damage_type": "Time",
+		"damage_type_label": "Time (30% Slow + Decay DoT)",
+		"damage_rating": "0/5/10/20% HP DoT",
+		"speed_rating": "Medium (1.0/s)",
+		"targeting": "first",
+		"slow_pct": 0.30,
+		"slow_duration": 2.0,
+		"decay_ticks": 3,
+		"decay_pct_by_level": [0.0, 0.05, 0.10, 0.20],
+	},
+	"railgun": {
+		"name": "Time Decay Rail Gun",
+		"role": "Long-range hitscan rail: Slows 50% for 4s (Jugg 25%) + Time Decay DoT",
+		"cost": 375, # $375 (~$350-400)
+		"build_time": 8.0,
+		"damage": 0.0, # Base: 0% decay, Upgrade 1: 5%, Upgrade 2: 10%, Upgrade 3: 20%/tick
+		"fire_rate": 0.20, # 1 shot every 5 seconds
+		"range": 310.0, # 2.7x Slow tower range (within 2.5-3x)
+		"min_range": 0.0,
+		"splash_radius": 0.0,
+		"splash_edge_ratio": 1.0,
+		"damage_type": "Time",
+		"damage_type_label": "Time Rail (50% Slow + Decay DoT)",
+		"damage_rating": "0/5/10/20% HP DoT",
+		"speed_rating": "Slow (1/5s)",
+		"targeting": "first",
+		"slow_pct": 0.50,
+		"slow_duration": 4.0,
+		"decay_ticks": 3,
+		"decay_pct_by_level": [0.0, 0.05, 0.10, 0.20],
+	},
 }
 
 const TOWER_UPGRADE_MAX_LEVEL: int = 3
-const TOWER_UPGRADE_COSTS: Array[int] = [60, 95, 145] # $ per upgrade level
+const TOWER_UPGRADE_COSTS: Array[int] = [60, 95, 145] # $ per upgrade level (Damage / Decay & Fire Rate)
+const TOWER_RANGE_UPGRADE_COSTS: Array[int] = [75, 160, 320] # Higher cost jump since 2x range ~4x area coverage
 const TOWER_UPGRADE_BUILD_TIMES: Array[float] = [3.0, 4.0, 5.0]
 const TOWER_DAMAGE_PER_LEVEL: float = 0.25
-const TOWER_RANGE_PER_LEVEL: float = 0.12
+const TOWER_RANGE_TOTAL_BONUSES: Array[float] = [0.0, 0.25, 0.60, 1.00] # Lv1 +25%, Lv2 +60%, Lv3 +100% (2x total range)
+const TOWER_RANGE_PER_LEVEL: float = 0.25 # Legacy fallback constant
 const TOWER_FIRE_RATE_PER_LEVEL: float = 0.15
 const TOWER_SELL_REFUND_RATIO: float = 0.5 # LOCKED 50% refund
 
@@ -247,40 +316,41 @@ const RESEARCH_NODES: Dictionary = {
 }
 
 # --- Time Powers & Mutations ---
-## Rewind: +15% HP (x1.15). Pause: +20% effective HP (x1.20; stacked with Rewind = x1.38). Haste: +8% speed.
+## Rewind: +5% HP (next wave). Pause: +5% HP (x1.10 total by W11). Haste: +50% tower spd & +50% build for 30s, +5% speed.
 const TIME_POWERS: Dictionary = {
 	"rewind": {
 		"name": "Rewind",
-		"short_effect": "Replay wave; keep builds/loot",
-		"cost_label": "Cost: aliens +15% HP",
+		"short_effect": "Replay prev wave (no mut); keep b$",
+		"cost_label": "Cost: next wave +5% HP",
 		"cooldown": 65.0,
-		"post_wave_window": 5.0,
+		"post_wave_window": 9999.0,
 		"mutation": "armoured",
 		"mutation_label": "Armoured",
-		"hp_bonus_per_stack": 0.15,
+		"hp_bonus_per_stack": 0.05,
 	},
 	"pause": {
 		"name": "Pause",
-		"short_effect": "Freeze aliens; towers fire",
-		"cost_label": "Cost: aliens +20% eff HP",
-		"duration": 6.0,
+		"short_effect": "Freeze aliens 8s; towers fire",
+		"cost_label": "Cost: aliens +5% HP",
+		"duration": 8.0,
 		"cooldown": 55.0,
 		"mutation": "thaw_hardened",
 		"mutation_label": "Thaw-hardened",
-		"eff_hp_bonus_per_stack": 0.20,
+		"eff_hp_bonus_per_stack": 0.05,
 		"frozen_damage_reduction_per_stack": 0.10,
 		"frozen_damage_reduction_cap": 0.50,
 	},
 	"haste": {
 		"name": "Haste",
-		"short_effect": "Speed up construction 3x",
-		"cost_label": "Cost: aliens +8% speed",
-		"duration": 6.0,
+		"short_effect": "Towers +50% spd & build +50% (30s)",
+		"cost_label": "Cost: aliens +5% speed",
+		"duration": 30.0,
 		"cooldown": 50.0,
-		"construction_speed_multiplier": 3.0,
+		"tower_attack_speed_bonus": 0.50,
+		"construction_speed_multiplier": 1.50,
 		"mutation": "swift",
 		"mutation_label": "Swift",
-		"speed_bonus_per_stack": 0.08,
+		"speed_bonus_per_stack": 0.05,
 	},
 }
 
@@ -304,9 +374,9 @@ const MANIPULATOR_UPGRADES: Dictionary = {
 	3: {
 		"cost": 250,
 		"build_time": 15.0,
-		"benefit_text": "Pause 6 s -> 8 s; Haste 6 s -> 8 s",
-		"pause_duration": 8.0,
-		"haste_duration": 8.0,
+		"benefit_text": "Pause 8 s -> 10 s; Haste 30 s -> 36 s",
+		"pause_duration": 10.0,
+		"haste_duration": 36.0,
 	},
 	4: {
 		"cost": 400,
@@ -346,10 +416,26 @@ static func get_spend_pct(wave_number: int) -> float:
 	return 0.90 - 0.01 * float(wave_number % 10)    # W11=89%..W19=81%
 
 
+static func get_tower_upgrade_cost(stat_key: String, current_level: int) -> int:
+	var idx: int = clampi(current_level, 0, TOWER_UPGRADE_MAX_LEVEL - 1)
+	if stat_key == "range":
+		return TOWER_RANGE_UPGRADE_COSTS[idx]
+	return TOWER_UPGRADE_COSTS[idx]
+
+
 static func get_damage_multiplier(damage_type: String, armour_tags: Array) -> float:
 	if not DAMAGE_MATRIX.has(damage_type):
 		return 1.0
 	var row: Dictionary = DAMAGE_MATRIX[damage_type]
+	if damage_type == "Time":
+		var max_mult: float = 1.0
+		var found: bool = false
+		for tag in armour_tags:
+			if row.has(tag):
+				var val: float = float(row[tag])
+				max_mult = val if not found else maxf(max_mult, val)
+				found = true
+		return max_mult if found else 1.0
 	var mult: float = 1.0
 	for tag in armour_tags:
 		mult *= float(row.get(tag, 1.0))

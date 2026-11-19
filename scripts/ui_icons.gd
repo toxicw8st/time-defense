@@ -57,6 +57,22 @@ static func create_icon(kind: String) -> ImageTexture:
 			_stroke_rect(img, 4, 8, 16, 20, Color(1.0, 0.75, 0.96))
 			_fill_triangle_up(img, 10, 2, 6, Color(0.95, 0.45, 0.90))
 			_fill_rect(img, 13, 5, 22, 8, Color(0.45, 0.96, 1.0))
+		"slow":
+			_fill_circle(img, 12, 12, 9, Color(0.16, 0.62, 0.76))
+			_draw_ring(img, 12, 12, 9, Color(0.55, 0.96, 1.0))
+			_fill_rect(img, 11, 6, 13, 13, Color(0.95, 0.98, 1.0))
+			_fill_rect(img, 12, 11, 17, 13, Color(0.95, 0.98, 1.0))
+		"railgun":
+			_fill_rect(img, 2, 7, 12, 17, Color(0.48, 0.25, 0.82))
+			_stroke_rect(img, 2, 7, 12, 17, Color(0.88, 0.72, 1.0))
+			_fill_rect(img, 10, 10, 23, 14, Color(0.92, 0.55, 1.0))
+			_fill_rect(img, 12, 11, 23, 13, Color(1.0, 0.92, 0.55))
+		"target":
+			_draw_ring(img, 12, 12, 8, Color(0.95, 0.85, 0.40))
+			_fill_rect(img, 11, 2, 13, 8, Color(0.95, 0.85, 0.40))
+			_fill_rect(img, 11, 16, 13, 22, Color(0.95, 0.85, 0.40))
+			_fill_rect(img, 2, 11, 8, 13, Color(0.95, 0.85, 0.40))
+			_fill_rect(img, 16, 11, 22, 13, Color(0.95, 0.85, 0.40))
 		"damage", "reinforced_shots":
 			_fill_rect(img, 10, 6, 14, 20, Color(0.96, 0.42, 0.32))
 			_fill_triangle_up(img, 12, 3, 8, Color(1.0, 0.68, 0.35))
