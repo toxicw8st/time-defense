@@ -174,6 +174,36 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	wm.restart_wave_for_rewind()
 	assert(not hud.prompt_banner.visible)
 
+	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait (1280x2844)
+	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
+	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
+	assert(hud.right_panel.position == Vector2(1260.0, 64.0) and hud.right_panel.size == Vector2(340.0, 480.0))
+	assert(is_equal_approx(map.extra_left_margin, 160.0) and is_equal_approx(map.extra_right_margin, 160.0))
+	assert(map.position == Vector2(160.0, 64.0) and map.scale == Vector2.ONE)
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "PromptBanner"]:
+		var ctrl: Control = hud.get_node(ctrl_name)
+		var r := Rect2(ctrl.position, ctrl.size)
+		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
+			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] * map.scale + map.position
+			assert(not r.has_point(pad_screen), "20:9 Landscape %s overlaps Pad P%d!" % [ctrl_name, i + 1])
+
+	hud.apply_responsive_layout(Vector2(1280.0, 2844.0))
+	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.position.y, 36.0))
+	assert(map.scale.x > 1.35 and is_equal_approx(map.position.y, 108.0))
+	assert(hud.right_panel.position.x == 0.0 and is_equal_approx(hud.right_panel.size.x, 1280.0))
+	assert(hud.right_panel.position.y >= map.position.y + GameMap.MAP_HEIGHT * map.scale.y - 1.0)
+	assert(hud.bottom_bar.position.x == 0.0 and is_equal_approx(hud.bottom_bar.size.x, 1280.0))
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "PromptBanner"]:
+		var ctrl: Control = hud.get_node(ctrl_name)
+		var r := Rect2(ctrl.position, ctrl.size)
+		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
+			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] * map.scale + map.position
+			assert(not r.has_point(pad_screen), "9:20 Portrait %s overlaps Pad P%d!" % [ctrl_name, i + 1])
+
+	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+	assert(hud.right_panel.size == Vector2(340.0, 480.0) and is_equal_approx(map.extra_left_margin, 0.0))
+	assert(map.position == Vector2(0.0, 64.0) and map.scale == Vector2.ONE)
+
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()

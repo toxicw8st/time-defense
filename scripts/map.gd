@@ -66,6 +66,19 @@ var pending_build_type: String = ""
 var pad_occupancy: Array[TowerUnit] = []
 var floating_texts: Array[Dictionary] = []
 var economy_ref: Node = null
+var extra_left_margin: float = 0.0
+var extra_right_margin: float = 0.0
+
+
+func set_viewport_margins(left_m: float, right_m: float) -> void:
+	extra_left_margin = maxf(0.0, left_m)
+	extra_right_margin = maxf(0.0, right_m)
+	if map_click_area != null:
+		map_click_area.offset_left = -extra_left_margin
+		map_click_area.offset_top = 0.0
+		map_click_area.offset_right = MAP_WIDTH + extra_right_margin
+		map_click_area.offset_bottom = MAP_HEIGHT
+	queue_redraw()
 
 
 func set_economy_ref(p_econ: Node) -> void:
@@ -138,8 +151,10 @@ func _on_map_gui_input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventMouse):
 		return
-	var local_pos: Vector2 = event.position
-	var in_map: bool = Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)).has_point(local_pos)
+	var click_offset: Vector2 = map_click_area.position if map_click_area != null else Vector2.ZERO
+	var local_pos: Vector2 = event.position + click_offset
+	var map_bounds := Rect2(Vector2(-extra_left_margin, 0.0), Vector2(MAP_WIDTH + extra_left_margin + extra_right_margin, MAP_HEIGHT))
+	var in_map: bool = map_bounds.has_point(local_pos)
 
 	if event is InputEventMouseMotion:
 		var new_hover: int = _find_pad_at(local_pos) if in_map else -1
@@ -379,9 +394,19 @@ func _find_pad_at(local_pos: Vector2) -> int:
 
 
 func _draw() -> void:
-	# Map background
-	draw_rect(Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)), Color(0.09, 0.11, 0.16))
-	draw_rect(Rect2(Vector2.ZERO, Vector2(MAP_WIDTH, MAP_HEIGHT)), Color(0.22, 0.27, 0.36), false, 2.0)
+	# Map background (extends seamlessly across 20:9 widescreen arena margins)
+	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
+	var arena_rect := Rect2(Vector2(-extra_left_margin, 0.0), Vector2(full_w, MAP_HEIGHT))
+	draw_rect(arena_rect, Color(0.09, 0.11, 0.16))
+	var gx: float = -floorf(extra_left_margin / 80.0) * 80.0
+	while gx <= MAP_WIDTH + extra_right_margin:
+		draw_line(Vector2(gx, 0.0), Vector2(gx, MAP_HEIGHT), Color(0.13, 0.16, 0.23, 0.55), 1.0)
+		gx += 80.0
+	var gy: float = 80.0
+	while gy < MAP_HEIGHT:
+		draw_line(Vector2(-extra_left_margin, gy), Vector2(MAP_WIDTH + extra_right_margin, gy), Color(0.13, 0.16, 0.23, 0.55), 1.0)
+		gy += 80.0
+	draw_rect(arena_rect, Color(0.22, 0.27, 0.36), false, 2.0)
 
 	# Refinery Annex area (bottom-left, distinct from tower pads)
 	draw_rect(REFINERY_ANNEX_RECT, Color(0.12, 0.15, 0.19))
@@ -414,9 +439,18 @@ func _draw() -> void:
 			draw_arc(center, 14.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 24, Color(0.45, 0.95, 0.65), 2.5)
 			draw_string(font, Vector2(rx + 6, ry + 21), "%.1fs" % economy_ref.refinery_job.remaining_time, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 
-	# Draw S-path
+	# Draw S-path (plus widescreen entry/exit corridors when expanded)
 	if enemy_path != null and enemy_path.curve != null:
 		var pts: PackedVector2Array = enemy_path.curve.get_baked_points()
+		if extra_left_margin > 0.0:
+			var lead_pts := PackedVector2Array([Vector2(-extra_left_margin, PATH_WAYPOINTS[0].y), PATH_WAYPOINTS[0]])
+			draw_polyline(lead_pts, Color(0.16, 0.20, 0.27), 24.0)
+			draw_polyline(lead_pts, Color(0.24, 0.29, 0.38), 16.0)
+		if extra_right_margin > 0.0:
+			var end_pt: Vector2 = PATH_WAYPOINTS[PATH_WAYPOINTS.size() - 1]
+			var tail_pts := PackedVector2Array([end_pt, Vector2(MAP_WIDTH + extra_right_margin, end_pt.y)])
+			draw_polyline(tail_pts, Color(0.16, 0.20, 0.27), 24.0)
+			draw_polyline(tail_pts, Color(0.24, 0.29, 0.38), 16.0)
 		if pts.size() >= 2:
 			draw_polyline(pts, Color(0.18, 0.22, 0.30), 32.0)
 			draw_polyline(pts, Color(0.28, 0.33, 0.42), 24.0)

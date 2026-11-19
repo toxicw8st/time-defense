@@ -8,6 +8,7 @@ extends Node2D
 @onready var time_powers_manager: TimePowersManager = $TimePowersManager
 @onready var base_attack_manager: BaseAttackManager = $BaseAttackManager
 @onready var hud: CanvasLayer = $HUD
+@onready var background: ColorRect = $Background
 
 
 func _ready() -> void:
@@ -21,6 +22,16 @@ func _ready() -> void:
 	hud.set_references(map, wave_manager, economy_manager, surge_manager, time_powers_manager, base_attack_manager)
 	hud.start_wave_requested.connect(_on_start_wave_requested)
 	hud.restart_requested.connect(_on_restart_requested)
+	if get_viewport() != null:
+		get_viewport().size_changed.connect(_on_viewport_resized)
+		_on_viewport_resized()
+
+
+func _on_viewport_resized() -> void:
+	if background != null and get_viewport() != null:
+		var vp_size: Vector2 = get_viewport().get_visible_rect().size
+		background.position = Vector2.ZERO
+		background.size = vp_size
 
 
 func _on_start_wave_requested() -> void:

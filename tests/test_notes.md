@@ -21,4 +21,4 @@
 - [x] `tests/test_step8.tscn` -> `ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok)`
 
 ## Mobile + Desktop Verification
-- [x] `tests/test_step8.tscn` (headless & windowed OpenGL 3.3 Compatibility): verified TopBar `Menu`, `Dbg`, `Full`, and `DL / App` buttons fit inside `1280 px`, `Target:` mode cycling button works in-game, disabled-button tap via `InputEventScreenTouch` displays info in `HoverInfoPanel` without mouse hover, and `34 px` pad touch hitbox selects Pad P1 at `+24 px` offset with zero errors.
+- [x] `tests/test_step8.tscn` (headless & windowed OpenGL 3.3 Compatibility): verified TopBar `Menu`, `Dbg`, `Full`, and `DL / App` buttons fit inside `1280 px`, `Target:` mode cycling button works in-game, disabled-button tap via `InputEventScreenTouch` displays info in `HoverInfoPanel` without mouse hover, `34 px` pad touch hitbox selects Pad P1 at `+24 px` offset, and `HUD.apply_responsive_layout()` passes Pixel 11 Pro `20:9` Landscape (`1600×720`) and `9:20` Portrait (`1280×2844`) zero-overlap checks before cleanly restoring Desktop `1280×720` with zero errors.

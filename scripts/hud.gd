@@ -3,6 +3,8 @@ extends CanvasLayer
 signal restart_requested
 signal start_wave_requested
 
+@onready var top_bar: PanelContainer = $TopBar
+@onready var bottom_bar: PanelContainer = $BottomBar
 @onready var top_status_label: Label = $TopBar/VBox/Row1/TopStatusLabel
 @onready var enemy_base_bar: ProgressBar = $TopBar/VBox/Row1/EnemyBaseBox/EnemyBaseBar
 @onready var enemy_base_label: Label = $TopBar/VBox/Row1/EnemyBaseBox/EnemyBaseLabel
@@ -197,6 +199,9 @@ func _ready() -> void:
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.event_logged.connect(_on_event_logged)
+	if get_viewport() != null:
+		get_viewport().size_changed.connect(_on_viewport_size_changed)
+		apply_responsive_layout(_get_effective_viewport_size())
 	_refresh_all()
 
 
@@ -348,6 +353,8 @@ func set_references(
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
 	if surge_ref != null:
 		surge_ref.surge_banner_triggered.connect(_on_surge_banner_triggered)
+	if get_viewport() != null:
+		apply_responsive_layout(_get_effective_viewport_size())
 	_check_teaching_prompt()
 	_refresh_all()
 
@@ -1003,11 +1010,185 @@ func _on_download_button_pressed() -> void:
 
 
 func _toggle_fullscreen() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("if (window.ttdToggleLandscapeFullscreen) window.ttdToggleLandscapeFullscreen();")
+		return
 	var mode := DisplayServer.window_get_mode()
 	if mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
+func _get_effective_viewport_size() -> Vector2:
+	if get_viewport() == null:
+		return Vector2(Balance.VIEWPORT_WIDTH, Balance.VIEWPORT_HEIGHT)
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	# Headless DisplayServer uses a square 1280x1280 dummy framebuffer under stretch/aspect="expand"
+	if DisplayServer.get_name() == "headless" and is_equal_approx(vp_size.x, 1280.0) and is_equal_approx(vp_size.y, 1280.0):
+		return Vector2(1280.0, 720.0)
+	return vp_size
+
+
+func _on_viewport_size_changed() -> void:
+	apply_responsive_layout(_get_effective_viewport_size())
+
+
+func _apply_bar_safe_margins(bar: PanelContainer, pad_x: float) -> void:
+	if bar == null:
+		return
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.11, 0.14, 0.20, 0.96)
+	sb.border_color = Color(0.26, 0.34, 0.48)
+	sb.set_border_width_all(1)
+	sb.content_margin_left = 6.0 + pad_x
+	sb.content_margin_right = 6.0 + pad_x
+	sb.content_margin_top = 4.0
+	sb.content_margin_bottom = 4.0
+	bar.add_theme_stylebox_override("panel", sb)
+
+
+func _set_bottom_button_widths(scale_mult: float) -> void:
+	var base_widths := {
+		rewind_button: 185.0,
+		pause_button: 185.0,
+		haste_button: 185.0,
+		refinery_button: 170.0,
+		charge_button: 195.0,
+		start_wave_button: 145.0,
+	}
+	for btn in base_widths.keys():
+		if btn != null:
+			btn.custom_minimum_size.x = roundf(float(base_widths[btn]) * scale_mult)
+
+
+func _center_overlay(ctrl: Control, vp_size: Vector2, default_size: Vector2) -> void:
+	if ctrl == null:
+		return
+	var w: float = minf(default_size.x, vp_size.x - 24.0)
+	var h: float = minf(default_size.y, vp_size.y - 24.0)
+	ctrl.size = Vector2(w, h)
+	ctrl.position = Vector2(floorf((vp_size.x - w) * 0.5), floorf((vp_size.y - h) * 0.5))
+
+
+func apply_responsive_layout(vp_size: Vector2) -> void:
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		return
+	var bg := get_parent().get_node_or_null("Background") as ColorRect
+	if bg != null:
+		bg.position = Vector2.ZERO
+		bg.size = vp_size
+
+	# 1) Desktop / Standard 16:9 (1280x720) — preserve exact desktop coordinates & RightPanel (340x480)
+	if vp_size.x <= 1285.0 and vp_size.y <= 725.0:
+		top_bar.remove_theme_stylebox_override("panel")
+		bottom_bar.remove_theme_stylebox_override("panel")
+		_set_bottom_button_widths(1.0)
+		top_bar.position = Vector2.ZERO
+		top_bar.size = Vector2(1280.0, 64.0)
+		bottom_bar.position = Vector2(0.0, 544.0)
+		bottom_bar.size = Vector2(1280.0, 176.0)
+		right_panel.custom_minimum_size = Vector2(340.0, 480.0)
+		right_panel.position = Vector2(940.0, 64.0)
+		right_panel.size = Vector2(340.0, 480.0)
+		right_panel.set_deferred("size", Vector2(340.0, 480.0))
+		if map_ref != null:
+			map_ref.position = Vector2(0.0, 64.0)
+			map_ref.scale = Vector2.ONE
+			map_ref.set_viewport_margins(0.0, 0.0)
+		surge_banner.position = Vector2(150.0, 68.0)
+		surge_banner.size = Vector2(410.0, 42.0)
+		prompt_banner.position = Vector2(572.0, 68.0)
+		prompt_banner.size = Vector2(362.0, 54.0)
+		pause_overlay.position = Vector2(240.0, 120.0)
+		pause_overlay.size = Vector2(800.0, 400.0)
+		between_levels_overlay.position = Vector2(220.0, 86.0)
+		between_levels_overlay.size = Vector2(840.0, 444.0)
+		end_overlay.position = Vector2(340.0, 150.0)
+		end_overlay.size = Vector2(600.0, 360.0)
+		debug_panel.position = Vector2(16.0, 74.0)
+		return
+
+	# 2) Pixel 11 Pro 20:9 Widescreen Landscape (e.g. 1600x720 / 1603x720)
+	if vp_size.x >= vp_size.y:
+		var top_h: float = 64.0
+		var bot_h: float = 176.0
+		var rp_w: float = 340.0
+		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.08, 0.0, 28.0)
+		_apply_bar_safe_margins(top_bar, safe_x)
+		_apply_bar_safe_margins(bottom_bar, safe_x)
+
+		top_bar.position = Vector2.ZERO
+		top_bar.size = Vector2(vp_size.x, top_h)
+
+		bottom_bar.position = Vector2(0.0, vp_size.y - bot_h)
+		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.22))
+		bottom_bar.size = Vector2(vp_size.x, bot_h)
+
+		var middle_h: float = maxf(480.0, vp_size.y - top_h - bot_h)
+		right_panel.custom_minimum_size = Vector2(rp_w, 480.0)
+		right_panel.position = Vector2(vp_size.x - rp_w, top_h)
+		right_panel.size = Vector2(rp_w, middle_h)
+
+		var avail_w: float = maxf(GameMap.MAP_WIDTH, vp_size.x - rp_w)
+		var avail_h: float = middle_h
+		var map_scale: float = minf(avail_w / GameMap.MAP_WIDTH, avail_h / GameMap.MAP_HEIGHT)
+		var extra_w: float = maxf(0.0, (avail_w / map_scale) - GameMap.MAP_WIDTH)
+		var extra_left: float = floorf(extra_w * 0.5)
+		var extra_right: float = extra_w - extra_left
+		var map_y: float = top_h + floorf((avail_h - GameMap.MAP_HEIGHT * map_scale) * 0.5)
+		if map_ref != null:
+			map_ref.position = Vector2(extra_left * map_scale, map_y)
+			map_ref.scale = Vector2(map_scale, map_scale)
+			map_ref.set_viewport_margins(extra_left, extra_right)
+
+		surge_banner.position = Vector2(safe_x + 12.0, top_h + 6.0)
+		surge_banner.size = Vector2(410.0, 42.0)
+		prompt_banner.position = Vector2(maxf(safe_x + 12.0, right_panel.position.x - 368.0), top_h + 6.0)
+		prompt_banner.size = Vector2(362.0, 54.0)
+		_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
+		_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
+		_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
+		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
+		return
+
+	# 3) Pixel 11 Pro 9:20 Tall Portrait Fallback (e.g. 1280x2844 when Auto-Rotate is OFF)
+	var safe_top: float = 36.0
+	var safe_bot: float = 20.0
+	var p_top_h: float = 72.0
+	var p_bot_h: float = 184.0
+	_apply_bar_safe_margins(top_bar, 6.0)
+	_apply_bar_safe_margins(bottom_bar, 6.0)
+
+	top_bar.position = Vector2(0.0, safe_top)
+	top_bar.size = Vector2(vp_size.x, p_top_h)
+
+	var p_scale: float = vp_size.x / GameMap.MAP_WIDTH
+	var map_h: float = GameMap.MAP_HEIGHT * p_scale
+	if map_ref != null:
+		map_ref.position = Vector2(0.0, safe_top + p_top_h)
+		map_ref.scale = Vector2(p_scale, p_scale)
+		map_ref.set_viewport_margins(0.0, 0.0)
+
+	var bot_y: float = vp_size.y - safe_bot - p_bot_h
+	bottom_bar.position = Vector2(0.0, bot_y)
+	_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 0.85, 1.0))
+	bottom_bar.size = Vector2(vp_size.x, p_bot_h)
+
+	var rp_top: float = safe_top + p_top_h + map_h
+	var rp_h: float = maxf(320.0, bot_y - rp_top)
+	right_panel.custom_minimum_size = Vector2(0.0, 320.0)
+	right_panel.position = Vector2(0.0, rp_top)
+	right_panel.size = Vector2(vp_size.x, rp_h)
+
+	surge_banner.position = Vector2(16.0, safe_top + p_top_h + 6.0)
+	surge_banner.size = Vector2(minf(260.0, vp_size.x * 0.22), 42.0)
+	prompt_banner.position = Vector2(maxf(16.0, vp_size.x - 378.0), safe_top + p_top_h + 6.0)
+	prompt_banner.size = Vector2(362.0, 54.0)
+	_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
+	_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
+	_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
+	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 
 
 func _on_selection_cleared() -> void:
