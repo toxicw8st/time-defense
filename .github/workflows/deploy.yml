@@ -72,6 +72,7 @@ jobs:
           touch build/web/.nojekyll
           "$GODOT" --headless --export-release "Web" build/web/index.html
           test -f build/web/index.manifest.json
+          python3 -c 'import json; p="build/web/index.manifest.json"; m=json.loads(open(p,"rb").read().decode("utf-8",errors="replace")); m.update({"display":"standalone","orientation":"landscape","short_name":"TimeDefense"}); open(p,"w",encoding="utf-8").write(json.dumps(m,ensure_ascii=True,separators=(",",":"))); print("NORMALIZED_MANIFEST:", open(p,"r",encoding="utf-8").read())'
           test -f build/web/index.service.worker.js
           test -f build/web/index.icon.png
           (cd build/web && zip -q -r downloads/TimeDefense-Web.zip index.html index.js index.wasm index.pck index.manifest.json index.service.worker.js index.icon.png index.apple-touch-icon.png index.audio.worklet.js index.audio.position.worklet.js 2>/dev/null || zip -q downloads/TimeDefense-Web.zip index.*)
