@@ -96,11 +96,11 @@ const TOWERS: Dictionary = {
 	},
 	"mortar": {
 		"name": "Cluster Mortar",
-		"role": "Lobbed splash shells vs bunched ground units",
+		"role": "Heavy 5s-reload splash shells vs bunched ground units",
 		"cost": 110, # $110
 		"build_time": 7.0,
 		"damage": 22.0,
-		"fire_rate": 0.5, # 11.0 single DPS, high AoE DPS; Normal damage (100% Std, 50% Arm, 110% Refl)
+		"fire_rate": 0.20, # Slowed 60% (from 0.50 -> 0.20/s, 1 shell per 5.0s) so 1 Mortar cannot solo Waves 1-3
 		"range": 135.0,
 		"min_range": 60.0,
 		"splash_radius": 70.0,
@@ -108,7 +108,7 @@ const TOWERS: Dictionary = {
 		"damage_type": "Normal",
 		"damage_type_label": "Normal (Splash)",
 		"damage_rating": "High",
-		"speed_rating": "Low",
+		"speed_rating": "Very Low (1/5s)",
 		"targeting": "first",
 		"projectile_flight_time": 0.55,
 	},

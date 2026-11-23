@@ -87,6 +87,10 @@ var hive_beam_timer: float = 0.0
 var surge_explosion_timer: float = 0.0
 var surge_explosion_max_timer: float = 1.65
 var surge_explosion_sparks: Array[Dictionary] = []
+var ability_fx_type: String = ""
+var ability_fx_timer: float = 0.0
+var ability_fx_max_timer: float = 1.65
+var ability_fx_particles: Array[Dictionary] = []
 var hovered_pad_index: int = -1
 var selected_pad_index: int = -1
 var selected_zone_index: int = -1
@@ -518,6 +522,59 @@ func _on_surge_triggered(surge_count: int) -> void:
 	trigger_surge_explosion(surge_count)
 
 
+func trigger_ability_animation(power_name: String) -> void:
+	if not (power_name in ["pause", "haste", "rewind"]):
+		return
+	ability_fx_type = power_name
+	ability_fx_max_timer = 1.80 if power_name == "rewind" else 1.65
+	ability_fx_timer = ability_fx_max_timer
+	ability_fx_particles.clear()
+
+	for i in range(28):
+		var ang: float = float(i) * TAU / 28.0 + sin(float(i) * 1.9) * 0.14
+		var spd: float = 115.0 + float((i * 41) % 135)
+		var col := Color(0.45, 0.96, 1.0)
+		var start_pos := active_player_base_pos
+		if power_name == "pause":
+			col = Color(0.55, 0.98, 1.0) if i % 2 == 0 else Color(0.92, 0.98, 1.0)
+			spd = 95.0 + float((i * 33) % 110)
+		elif power_name == "haste":
+			col = Color(0.32, 1.0, 0.72) if i % 2 == 0 else Color(1.0, 0.88, 0.30)
+			spd = 140.0 + float((i * 43) % 145)
+		else: # "rewind" — starts wide and spirals/pulls + bursts across the base
+			col = Color(0.84, 0.45, 1.0) if i % 2 == 0 else Color(1.0, 0.80, 0.32)
+			start_pos = active_player_base_pos + Vector2(cos(ang), sin(ang)) * 14.0
+			spd = 120.0 + float((i * 37) % 120)
+		ability_fx_particles.append({
+			"pos": start_pos,
+			"vel": Vector2(cos(ang), sin(ang)) * spd,
+			"color": col,
+			"angle": ang,
+		})
+
+	if power_name == "pause":
+		spawn_floater(active_player_base_pos + Vector2(-58, -62), "TEMPORAL PAUSE! (FROZEN)", Color(0.45, 0.96, 1.0))
+	elif power_name == "haste":
+		spawn_floater(active_player_base_pos + Vector2(-56, -62), "CHRONO HASTE! (+50% SPD)", Color(0.38, 1.0, 0.78))
+	else:
+		spawn_floater(active_player_base_pos + Vector2(-56, -62), "TIME REWIND! (RESET)", Color(0.86, 0.52, 1.0))
+	queue_redraw()
+
+
+func _on_time_power_used(power_name: String) -> void:
+	trigger_ability_animation(power_name)
+
+
+func get_ability_fx_state() -> Dictionary:
+	return {
+		"active": ability_fx_timer > 0.0,
+		"type": ability_fx_type,
+		"timer": ability_fx_timer,
+		"max_timer": ability_fx_max_timer,
+		"particle_count": ability_fx_particles.size(),
+	}
+
+
 func _ready() -> void:
 	load_level(GameState.selected_map_level)
 	if map_click_area != null:
@@ -526,6 +583,7 @@ func _ready() -> void:
 	GameState.enemy_leaked.connect(_on_enemy_leaked)
 	GameState.enemy_killed.connect(_on_enemy_killed)
 	GameState.surge_triggered.connect(_on_surge_triggered)
+	GameState.time_power_used.connect(_on_time_power_used)
 
 
 func _exit_tree() -> void:
@@ -537,6 +595,8 @@ func _exit_tree() -> void:
 		GameState.enemy_killed.disconnect(_on_enemy_killed)
 	if GameState.surge_triggered.is_connected(_on_surge_triggered):
 		GameState.surge_triggered.disconnect(_on_surge_triggered)
+	if GameState.time_power_used.is_connected(_on_time_power_used):
+		GameState.time_power_used.disconnect(_on_time_power_used)
 
 
 func _process(delta: float) -> void:
@@ -552,6 +612,17 @@ func _process(delta: float) -> void:
 			sp["vel"] *= pow(0.18, delta)
 		if surge_explosion_timer <= 0.0:
 			surge_explosion_sparks.clear()
+	if ability_fx_timer > 0.0:
+		ability_fx_timer = maxf(0.0, ability_fx_timer - delta)
+		for p in ability_fx_particles:
+			p["pos"] += p["vel"] * delta
+			if ability_fx_type == "rewind":
+				var tangent := Vector2(-p["vel"].y, p["vel"].x) * 0.45
+				p["pos"] += tangent * delta
+			p["vel"] *= pow(0.22, delta)
+		if ability_fx_timer <= 0.0:
+			ability_fx_type = ""
+			ability_fx_particles.clear()
 
 	if not floating_texts.is_empty():
 		for i in range(floating_texts.size() - 1, -1, -1):
@@ -814,6 +885,9 @@ func _on_mission_reset() -> void:
 	hive_beam_timer = 0.0
 	surge_explosion_timer = 0.0
 	surge_explosion_sparks.clear()
+	ability_fx_type = ""
+	ability_fx_timer = 0.0
+	ability_fx_particles.clear()
 	selected_pad_index = -1
 	selected_zone_index = -1
 	selected_drop_pos = Vector2(-1.0, -1.0)
@@ -1261,6 +1335,10 @@ func _draw() -> void:
 	# 8) Player Base Citadel with Distinct Animations for "Almost Dead" (Critical Hull) and "About to Have a Surge" (Temporal Overload)
 	_draw_player_base(font)
 
+	# 8b) Time Ability Explosion / Detonation Animations (Pause Stasis Blast, Haste Overdrive Surge, Rewind Vortex)
+	if ability_fx_timer > 0.0:
+		_draw_ability_fx()
+
 	# 9) Global Time Power Battlefield Border FX (Pause Stasis Frost / Haste Overclock)
 	if GameState.is_enemies_frozen:
 		draw_rect(arena_rect.grow(-2.0), Color(0.42, 0.88, 1.0, 0.45), false, 3.5)
@@ -1608,3 +1686,137 @@ func _draw_player_base(font: Font) -> void:
 		draw_rect(b_box, Color(0.10, 0.06, 0.20, 0.90))
 		draw_rect(b_box, Color(0.68, 0.42, 0.98, 0.82), false, 1.0)
 		draw_string(font, b_box.position + Vector2(5.0, 11.0), "SURGE CHARGE %d%%" % chg_pct, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.75, 1.0))
+
+
+func _draw_ability_fx() -> void:
+	var pb_pos: Vector2 = active_player_base_pos
+	var prog: float = clampf(1.0 - (ability_fx_timer / maxf(0.01, ability_fx_max_timer)), 0.0, 1.0)
+	var alpha: float = clampf(1.0 - prog, 0.0, 1.0)
+
+	if ability_fx_type == "pause":
+		# 1) Cryo-Temporal Stasis Core Flash
+		if prog < 0.42:
+			var fa: float = clampf(1.0 - (prog / 0.42), 0.0, 1.0)
+			draw_circle(pb_pos, 26.0 + prog * 88.0, Color(0.32, 0.88, 1.0, fa * 0.48))
+			draw_circle(pb_pos, 16.0 + prog * 36.0, Color(0.92, 0.99, 1.0, fa * 0.88))
+
+		# 2) 2 Sweeping Frost Shockwave Rings + Expanding Hexagonal Stasis Crystal Polygon
+		for w_i in range(2):
+			var delay: float = float(w_i) * 0.16
+			var wp: float = clampf((prog - delay) / (1.0 - delay), 0.0, 1.0)
+			if wp > 0.0 and wp < 1.0:
+				var rad: float = 24.0 + wp * 880.0
+				var wa: float = (1.0 - wp) * 0.90
+				draw_arc(pb_pos, rad, 0.0, TAU, 72, Color(0.45, 0.95, 1.0, wa) if w_i == 0 else Color(0.88, 0.98, 1.0, wa), 4.0 * (1.0 - wp * 0.5))
+		var hex_r: float = 30.0 + prog * 480.0
+		var hex_poly := _make_regular_poly(pb_pos, hex_r, 6, visual_time * 0.35)
+		for hi in range(6):
+			draw_line(hex_poly[hi], hex_poly[(hi + 1) % 6], Color(0.55, 0.96, 1.0, alpha * 0.72), 2.5)
+
+		# 3) Radial Time-Crystal Fracture Rays from Player Base
+		for ray_i in range(12):
+			var r_ang: float = float(ray_i) * TAU / 12.0
+			var r_len: float = (55.0 + float((ray_i * 23) % 70)) * sin(minf(1.0, prog * 1.9) * PI * 0.5)
+			var r_end: Vector2 = pb_pos + Vector2(cos(r_ang), sin(r_ang)) * r_len
+			draw_line(pb_pos, r_end, Color(0.65, 0.98, 1.0, alpha * 0.85), 2.2)
+			draw_circle(r_end, 3.2 * alpha, Color.WHITE)
+
+		# 4) Stasis Diamond Lock Rings on every frozen Enemy on the map
+		for e_unit in get_active_enemies():
+			var e_pos: Vector2 = e_unit.position
+			var e_r: float = 14.0 + 18.0 * (1.0 - alpha)
+			draw_arc(e_pos, e_r, 0.0, TAU, 16, Color(0.45, 0.96, 1.0, alpha * 0.88), 2.0)
+			draw_line(e_pos + Vector2(-8, 0), e_pos + Vector2(8, 0), Color(0.90, 0.98, 1.0, alpha * 0.75), 1.5)
+			draw_line(e_pos + Vector2(0, -8), e_pos + Vector2(0, 8), Color(0.90, 0.98, 1.0, alpha * 0.75), 1.5)
+
+		# 5) 28 Flying Ice-Diamond Shards
+		for p in ability_fx_particles:
+			var p_pos: Vector2 = p["pos"]
+			var p_col: Color = p["color"]
+			p_col.a = alpha
+			var dir: Vector2 = Vector2(cos(float(p["angle"])), sin(float(p["angle"])))
+			draw_line(p_pos - dir * 5.0, p_pos + dir * 5.0, p_col, 2.4)
+			draw_circle(p_pos, 2.2, Color(1.0, 1.0, 1.0, alpha))
+
+	elif ability_fx_type == "haste":
+		# 1) Chrono Overdrive Core Flash
+		if prog < 0.40:
+			var fa: float = clampf(1.0 - (prog / 0.40), 0.0, 1.0)
+			draw_circle(pb_pos, 28.0 + prog * 90.0, Color(0.30, 1.0, 0.72, fa * 0.48))
+			draw_circle(pb_pos, 16.0 + prog * 40.0, Color(1.0, 0.92, 0.42, fa * 0.85))
+
+		# 2) 3 Hyper-Velocity Concentric Acceleration Rings
+		for w_i in range(3):
+			var delay: float = float(w_i) * 0.12
+			var wp: float = clampf((prog - delay) / (1.0 - delay), 0.0, 1.0)
+			if wp > 0.0 and wp < 1.0:
+				var rad: float = 22.0 + wp * 780.0
+				var wa: float = (1.0 - wp) * 0.90
+				var w_col := Color(0.32, 1.0, 0.74, wa) if w_i % 2 == 0 else Color(1.0, 0.86, 0.28, wa)
+				draw_arc(pb_pos, rad, 0.0, TAU, 64, w_col, 3.8 * (1.0 - wp * 0.45))
+
+		# 3) Radial Kinetic Overdrive Bolts & Speed Streaks
+		for b_i in range(12):
+			var ang: float = float(b_i) * TAU / 12.0 + prog * 1.4
+			var blen: float = 65.0 + float((b_i * 31) % 80) * sin(minf(1.0, prog * 2.0) * PI * 0.5)
+			var bend: Vector2 = pb_pos + Vector2(cos(ang), sin(ang)) * blen
+			var b_col := Color(0.35, 1.0, 0.78, alpha) if b_i % 2 == 0 else Color(1.0, 0.88, 0.34, alpha)
+			_draw_lightning_bolt(pb_pos, bend, b_col, 2.5 * alpha + 0.8, float(b_i) * 2.3, true)
+
+		# 4) Golden-Emerald Overclock Conduits linking Player Base directly to every Tower!
+		for t_unit in get_all_towers():
+			var t_pos: Vector2 = t_unit.position
+			_draw_lightning_bolt(pb_pos, t_pos, Color(0.35, 1.0, 0.76, alpha * 0.85), 2.2 * alpha, float(t_unit.tower_id) * 1.9, false)
+			draw_arc(t_pos, 22.0 + 5.0 * sin(visual_time * 24.0), 0.0, TAU, 24, Color(1.0, 0.88, 0.35, alpha * 0.92), 2.4)
+
+		# 5) 28 Flying Emerald/Gold Velocity Sparks
+		for p in ability_fx_particles:
+			var p_pos: Vector2 = p["pos"]
+			var p_vel: Vector2 = p["vel"]
+			var p_col: Color = p["color"]
+			p_col.a = alpha
+			var tail: Vector2 = p_pos - p_vel.normalized() * 11.0
+			draw_line(tail, p_pos, p_col, 2.4)
+			draw_circle(p_pos, 2.2, Color(1.0, 1.0, 0.85, alpha))
+
+	else: # "rewind"
+		# 1) Reverse-Temporal Core Vortex Flash
+		if prog < 0.48:
+			var fa: float = clampf(1.0 - (prog / 0.48), 0.0, 1.0)
+			draw_circle(pb_pos, 28.0 + prog * 96.0, Color(0.72, 0.35, 1.0, fa * 0.50))
+			draw_circle(pb_pos, 16.0 + prog * 45.0, Color(1.0, 0.78, 0.35, fa * 0.82))
+
+		# 2) Giant Counter-Clockwise Spinning Temporal Clock Dial around Player Base
+		var dial_r: float = 44.0 + sin(minf(1.0, prog * 1.6) * PI) * 28.0
+		draw_arc(pb_pos, dial_r, 0.0, TAU, 36, Color(0.86, 0.48, 1.0, alpha * 0.92), 2.6)
+		var ccw_fast := Vector2.RIGHT.rotated(-prog * TAU * 3.5) * (dial_r * 0.86)
+		var ccw_slow := Vector2.RIGHT.rotated(-prog * TAU * 1.25 - 1.1) * (dial_r * 0.60)
+		draw_line(pb_pos, pb_pos + ccw_fast, Color(1.0, 0.90, 0.42, alpha), 2.8)
+		draw_line(pb_pos, pb_pos + ccw_slow, Color(0.95, 0.85, 1.0, alpha), 2.2)
+
+		# 3) 3 Reverse-Time Ripple Waves sweeping all the way across the Arena toward the Hive
+		for w_i in range(3):
+			var delay: float = float(w_i) * 0.14
+			var wp: float = clampf((prog - delay) / (1.0 - delay), 0.0, 1.0)
+			if wp > 0.0 and wp < 1.0:
+				var rad: float = lerpf(920.0, 20.0, wp) if w_i == 2 else (24.0 + wp * 900.0)
+				var wa: float = (1.0 - wp) * 0.85
+				var w_col := Color(0.84, 0.44, 1.0, wa) if w_i % 2 == 0 else Color(1.0, 0.78, 0.32, wa)
+				draw_arc(pb_pos, rad, 0.0, TAU, 72, w_col, 3.6 * (1.0 - wp * 0.4))
+
+		# 4) Backward Temporal Echo Pulses racing along Enemy Path back to the Alien Base!
+		if enemy_path != null and enemy_path.curve != null:
+			var plen: float = enemy_path.curve.get_baked_length()
+			if plen > 10.0:
+				for e_i in range(6):
+					var path_frac: float = clampf(1.0 - fmod(prog * 1.3 + float(e_i) * 0.16, 1.0), 0.0, 1.0)
+					var p_pt: Vector2 = enemy_path.curve.sample_baked(plen * path_frac, false)
+					draw_arc(p_pt, 12.0 + 10.0 * sin(prog * PI), 0.0, TAU, 18, Color(0.88, 0.50, 1.0, alpha * 0.82), 2.2)
+
+		# 5) 28 Swirling Violet/Gold Chronon Particles
+		for p in ability_fx_particles:
+			var p_pos: Vector2 = p["pos"]
+			var p_col: Color = p["color"]
+			p_col.a = alpha
+			draw_circle(p_pos, 3.2 * alpha + 1.0, p_col)
+			draw_circle(p_pos, 1.4, Color(1.0, 0.96, 0.82, alpha))

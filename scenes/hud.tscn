@@ -476,6 +476,7 @@ text = "Mute Tips"
 
 [node name="PauseOverlay" type="PanelContainer" parent="."]
 visible = false
+clip_contents = true
 offset_left = 240.0
 offset_top = 120.0
 offset_right = 1040.0
@@ -497,8 +498,14 @@ layout_mode = 2
 horizontal_alignment = 1
 text = "PAUSED"
 
-[node name="HowTimeWorksLabel" type="Label" parent="PauseOverlay/Margin/VBox"]
+[node name="HowScroll" type="ScrollContainer" parent="PauseOverlay/Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="HowTimeWorksLabel" type="Label" parent="PauseOverlay/Margin/VBox/HowScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 12
 text = "How time works"
 autowrap_mode = 3
@@ -523,6 +530,7 @@ text = "Restart Mission"
 
 [node name="BetweenLevelsOverlay" type="PanelContainer" parent="."]
 visible = false
+clip_contents = true
 offset_left = 220.0
 offset_top = 86.0
 offset_right = 1060.0
@@ -591,9 +599,14 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 10
 text = "Lv5: Gauntlet (5 Shots)"
 
-[node name="ResearchButtons" type="VBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
+[node name="ResearchScroll" type="ScrollContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
 layout_mode = 2
- size_flags_vertical = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="ResearchButtons" type="VBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox/ResearchScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
 [node name="BottomButtons" type="HBoxContainer" parent="BetweenLevelsOverlay/Margin/VBox"]
@@ -630,6 +643,7 @@ text = "Debug"
 
 [node name="EndOverlay" type="PanelContainer" parent="."]
 visible = false
+clip_contents = true
 offset_left = 340.0
 offset_top = 150.0
 offset_right = 940.0
@@ -651,8 +665,14 @@ layout_mode = 2
 horizontal_alignment = 1
 text = "DEFEAT - BASE LOST"
 
-[node name="EndStatsLabel" type="Label" parent="EndOverlay/Margin/VBox"]
+[node name="StatsScroll" type="ScrollContainer" parent="EndOverlay/Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="EndStatsLabel" type="Label" parent="EndOverlay/Margin/VBox/StatsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Stats"
 autowrap_mode = 3
 

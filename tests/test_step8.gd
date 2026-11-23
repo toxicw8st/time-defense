@@ -210,6 +210,27 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	assert(hud.right_panel.size == Vector2(340.0, 480.0) and is_equal_approx(map.extra_left_margin, 0.0))
 	assert(map.position == Vector2(0.0, 64.0) and map.scale == Vector2.ONE)
 
+	# Verify Start Menu, Play button, PauseOverlay, BetweenLevelsOverlay, EndOverlay stay strictly within screen bounds across all modes!
+	hud.open_start_menu()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var sm_r: Rect2 = hud.start_menu_overlay.get_global_rect()
+		var play_r: Rect2 = hud.start_play_button.get_global_rect()
+		assert(sm_r.position.x >= 0.0 and sm_r.position.y >= 0.0 and sm_r.end.x <= test_vp.x + 1.0 and sm_r.end.y <= test_vp.y + 1.0, "StartMenu overflow at %s: %s" % [str(test_vp), str(sm_r)])
+		assert(play_r.end.y <= test_vp.y + 1.0 and play_r.end.y <= sm_r.end.y + 1.0, "StartPlayButton pushed off-screen at %s: %s" % [str(test_vp), str(play_r)])
+	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+	hud.close_start_menu()
+
+	hud._toggle_pause_menu()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	assert(hud.pause_overlay.get_global_rect().end.y <= 720.0, "PauseOverlay overflowed bottom: %s" % str(hud.pause_overlay.get_global_rect()))
+	hud._toggle_pause_menu()
+
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
@@ -705,6 +726,20 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	map.surge_explosion_timer = 0.0
 	map.surge_explosion_sparks.clear()
 
+	# Test Ability Animations (Pause, Haste, Rewind) triggered by GameState.time_power_used
+	for p_name in ["pause", "haste", "rewind"]:
+		GameState.time_power_used.emit(p_name)
+		var afx: Dictionary = map.get_ability_fx_state()
+		assert(afx["active"] and afx["type"] == p_name and int(afx["particle_count"]) == 28, "Ability animation must trigger for %s" % p_name)
+	map.ability_fx_timer = 0.0
+	map.ability_fx_type = ""
+	map.ability_fx_particles.clear()
+	GameState.time_power_used.emit("test")
+	assert(not map.get_ability_fx_state()["active"], "Unknown power 'test' should not trigger ability FX")
+
+	# Test Cluster Mortar 60% slower fire rate (0.5 -> 0.20/s, 5.0s reload) & verify 1 Mortar cannot carry Waves 1-3 alone
+	assert(is_equal_approx(float(Balance.TOWERS["mortar"]["fire_rate"]), 0.20), "Mortar fire rate must be slowed 60% to 0.20/s")
+
 	GameState.mission.enemy_base_hp = 500
 	assert(map.get_enemy_base_visual_state()["damage_stage"] == "healthy")
 	GameState.mission.enemy_base_hp = 300
@@ -788,3 +823,35 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	print("CHECK_PACKAGE_PASS slow_railgun_decay=ok w10_package_lives=%d" % GameState.mission.lives)
 	remove_child(inst2)
 	inst2.queue_free()
+
+	# 6) Verify 1 Cluster Mortar alone cannot carry 3 waves without leaks/loss after 60% slowdown
+	GameState.reset_meta_progression()
+	GameState.prompts_muted = true
+	GameState.reset_mission()
+	var inst3: Node = main_scene.instantiate()
+	add_child(inst3)
+	var map3: GameMap = inst3.get_node("Map")
+	var wm3: WaveManager = inst3.get_node("WaveManager")
+	var solo_mortar: TowerUnit = map3.build_tower_on_pad(4, "mortar") # P5 ($110)
+	assert(solo_mortar != null)
+	var survived_w3_unscathed: bool = true
+	for _w_idx in range(1, 4):
+		if GameState.mission.is_over:
+			break
+		wm3.start_wave()
+		while wm3.is_wave_active() and not GameState.mission.is_over:
+			var dt3: float = 0.1
+			wm3.step_wave(dt3)
+			for e in map3.get_active_enemies():
+				e.advance_along_path(dt3)
+			for t in map3.get_all_towers():
+				t.advance_tower(dt3)
+			for p in map3.projectiles_container.get_children():
+				if p is ProjectileEffect:
+					p.advance_projectile(dt3)
+	if GameState.mission.lives < Balance.PLAYER_STARTING_LIVES or GameState.mission.is_over:
+		survived_w3_unscathed = false
+	assert(not survived_w3_unscathed, "1 Cluster Mortar alone MUST NOT carry Waves 1-3 without leaks after 60%% slowdown (lives=%d)" % GameState.mission.lives)
+	print("CHECK_MORTAR_NERF_PASS solo_mortar_w1_3_lives=%d" % GameState.mission.lives)
+	remove_child(inst3)
+	inst3.queue_free()

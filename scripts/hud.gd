@@ -60,7 +60,7 @@ signal start_wave_requested
 @onready var level_3_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level3Button
 @onready var level_4_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level4Button
 @onready var level_5_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level5Button
-@onready var research_list_box: VBoxContainer = $BetweenLevelsOverlay/Margin/VBox/ResearchButtons
+@onready var research_list_box: VBoxContainer = $BetweenLevelsOverlay/Margin/VBox/ResearchScroll/ResearchButtons
 @onready var launch_level_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/LaunchLevelButton
 @onready var close_lab_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/CloseLabButton
 
@@ -87,14 +87,14 @@ signal start_wave_requested
 @onready var pause_resume_button: Button = $PauseOverlay/Margin/VBox/PauseButtons/PauseResumeButton
 @onready var pause_restart_button: Button = $PauseOverlay/Margin/VBox/PauseButtons/PauseRestartButton
 @onready var pause_mute_check: CheckBox = $PauseOverlay/Margin/VBox/PauseMuteCheck
-@onready var how_time_works_label: Label = $PauseOverlay/Margin/VBox/HowTimeWorksLabel
+@onready var how_time_works_label: Label = $PauseOverlay/Margin/VBox/HowScroll/HowTimeWorksLabel
 
 @onready var debug_panel: PanelContainer = $DebugPanel
 @onready var debug_label: Label = $DebugPanel/MarginContainer/DebugLabel
 
 @onready var end_overlay: PanelContainer = $EndOverlay
 @onready var end_title_label: Label = $EndOverlay/Margin/VBox/EndTitleLabel
-@onready var end_stats_label: Label = $EndOverlay/Margin/VBox/EndStatsLabel
+@onready var end_stats_label: Label = $EndOverlay/Margin/VBox/StatsScroll/EndStatsLabel
 @onready var end_lab_button: Button = $EndOverlay/Margin/VBox/EndLabButton
 @onready var restart_button: Button = $EndOverlay/Margin/VBox/RestartButton
 
@@ -244,6 +244,11 @@ func _exit_tree() -> void:
 		GameState.event_logged.disconnect(_on_event_logged)
 
 
+func _reapply_overlay_bounds() -> void:
+	if get_viewport() != null:
+		apply_responsive_layout(_get_effective_viewport_size())
+
+
 func open_start_menu() -> void:
 	pause_overlay.visible = false
 	end_overlay.visible = false
@@ -252,6 +257,8 @@ func open_start_menu() -> void:
 	if start_menu_overlay != null:
 		start_menu_overlay.visible = true
 	_refresh_all()
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
 
 
 func close_start_menu() -> void:
@@ -266,11 +273,16 @@ func open_between_levels_screen() -> void:
 		start_menu_overlay.visible = false
 	between_levels_overlay.visible = true
 	_refresh_all()
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
 
 
 func _toggle_between_levels_screen() -> void:
 	between_levels_overlay.visible = not between_levels_overlay.visible
 	_refresh_all()
+	if between_levels_overlay.visible:
+		_reapply_overlay_bounds()
+		call_deferred("_reapply_overlay_bounds")
 
 
 func _select_level(level_n: int) -> void:
@@ -294,31 +306,32 @@ func _build_start_menu() -> void:
 	start_menu_overlay = PanelContainer.new()
 	start_menu_overlay.name = "StartMenuOverlay"
 	start_menu_overlay.visible = false
+	start_menu_overlay.clip_contents = true
 	start_menu_overlay.position = Vector2(180.0, 68.0)
 	start_menu_overlay.size = Vector2(920.0, 560.0)
 	start_menu_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.98), Color(0.38, 0.78, 1.0), 10, 6.0, 6.0))
 	add_child(start_menu_overlay)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_bottom", 14)
 	start_menu_overlay.add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 8)
 	margin.add_child(vbox)
 
 	var title := Label.new()
 	title.text = "TIME DEFENSE: CHRONO COMMAND"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 21)
 	title.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
 	vbox.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "TACTICAL TOWER DEFENSE & TEMPORAL WARFARE — SELECT MISSION SECTOR (LEVELS 1-5)"
+	subtitle.text = "SELECT MISSION SECTOR (LEVELS 1-5)"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 11)
 	subtitle.add_theme_color_override("font_color", Color(0.75, 0.86, 0.98))
@@ -331,50 +344,69 @@ func _build_start_menu() -> void:
 	lvl_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(lvl_row)
 
+	var short_zone_tags: Dictionary = {
+		1: "4 Rows | 3 Blasts",
+		2: "3 Columns | 3 Blasts",
+		3: "4 Islands | 4 Blasts",
+		4: "4 Bastions | 4 Blasts",
+		5: "5 Pillboxes | 5 Blasts",
+	}
 	start_level_buttons.clear()
 	for lvl_id in range(1, 6):
 		var lcfg: Dictionary = Balance.LEVELS[lvl_id]
 		var lbtn := Button.new()
 		lbtn.name = "StartLevel%dButton" % lvl_id
 		lbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lbtn.custom_minimum_size = Vector2(0, 56)
-		lbtn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbtn.custom_minimum_size = Vector2(0, 48)
 		lbtn.add_theme_font_size_override("font_size", 11)
-		lbtn.text = "%s\n(%s)" % [lcfg["short_name"], lcfg["zone_type"]]
+		lbtn.text = "%s\n(%s)" % [lcfg["short_name"], str(short_zone_tags.get(lvl_id, lcfg["zone_type"]))]
 		var captured_id: int = lvl_id
 		lbtn.pressed.connect(func() -> void: _select_level(captured_id))
 		UIIcons.apply_right_button_theme(lbtn, Color(0.32, 0.68, 0.96))
 		lvl_row.add_child(lbtn)
 		start_level_buttons.append(lbtn)
 
+	# Wrap briefing/description in a ScrollContainer so autowrap Labels can NEVER push the Play button below the screen!
+	var body_scroll := ScrollContainer.new()
+	body_scroll.name = "StartBodyScroll"
+	body_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(body_scroll)
+
 	var info_panel := PanelContainer.new()
+	info_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	info_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.12, 0.20, 0.95), Color(0.28, 0.52, 0.78), 6, 12.0, 10.0))
-	vbox.add_child(info_panel)
+	body_scroll.add_child(info_panel)
 
 	var info_vbox := VBoxContainer.new()
-	info_vbox.add_theme_constant_override("separation", 8)
+	info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_vbox.add_theme_constant_override("separation", 6)
 	info_panel.add_child(info_vbox)
 
 	start_level_title_label = Label.new()
-	start_level_title_label.add_theme_font_size_override("font_size", 15)
+	start_level_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_level_title_label.add_theme_font_size_override("font_size", 14)
 	start_level_title_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.38))
 	info_vbox.add_child(start_level_title_label)
 
 	start_level_desc_label = Label.new()
+	start_level_desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_level_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_level_desc_label.add_theme_font_size_override("font_size", 12)
 	start_level_desc_label.add_theme_color_override("font_color", Color(0.90, 0.95, 1.0))
 	info_vbox.add_child(start_level_desc_label)
 
 	var rules_lbl := Label.new()
+	rules_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rules_lbl.add_theme_font_size_override("font_size", 11)
 	rules_lbl.add_theme_color_override("font_color", Color(0.68, 0.84, 0.96))
 	rules_lbl.text = "\n".join([
 		"• DRAG & DROP PLACEMENT: Drag any tower from the right shop directly into the highlighted placement zones on the map.",
-		"• BASE VISUAL ALERTS: Watch your Citadel for hull-fire/smoke (Almost Dead) vs violet lightning ripples (Imminent Time Surge).",
-		"• TIME POWERS & WIN CONDITION: Use Rewind, Pause, or Haste every 5 waves to prevent Surge. Charge Hive Destroyer ($450) to destroy the Alien Hive.",
+		"• BASE VISUAL ALERTS: Watch your Citadel for hull-fire/smoke (Almost Dead) vs growing electrical lightning buildup (Surge).",
+		"• TIME POWERS & WIN CONDITION: Use Rewind, Pause, or Haste every 5 waves to discharge Surge. Charge Hive Destroyer ($450) to destroy the Alien Hive.",
 	])
 	info_vbox.add_child(rules_lbl)
 
@@ -385,13 +417,13 @@ func _build_start_menu() -> void:
 	vbox.add_child(start_meta_label)
 
 	var action_row := HBoxContainer.new()
-	action_row.add_theme_constant_override("separation", 14)
+	action_row.add_theme_constant_override("separation", 12)
 	vbox.add_child(action_row)
 
 	start_play_button = Button.new()
 	start_play_button.name = "StartPlayButton"
 	start_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_play_button.custom_minimum_size = Vector2(0, 46)
+	start_play_button.custom_minimum_size = Vector2(0, 48)
 	start_play_button.add_theme_font_size_override("font_size", 14)
 	start_play_button.text = "LAUNCH LEVEL 1"
 	start_play_button.pressed.connect(func() -> void:
@@ -404,8 +436,8 @@ func _build_start_menu() -> void:
 	start_lab_button = Button.new()
 	start_lab_button.name = "StartLabButton"
 	start_lab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_lab_button.custom_minimum_size = Vector2(0, 46)
-	start_lab_button.add_theme_font_size_override("font_size", 13)
+	start_lab_button.custom_minimum_size = Vector2(0, 48)
+	start_lab_button.add_theme_font_size_override("font_size", 12)
 	start_lab_button.text = "RESEARCH LAB (META-UPGRADES)"
 	start_lab_button.pressed.connect(open_between_levels_screen)
 	UIIcons.apply_right_button_theme(start_lab_button, Color(0.42, 0.72, 0.96))
@@ -413,7 +445,7 @@ func _build_start_menu() -> void:
 
 	start_download_button = Button.new()
 	start_download_button.name = "StartDownloadButton"
-	start_download_button.custom_minimum_size = Vector2(170, 46)
+	start_download_button.custom_minimum_size = Vector2(165, 48)
 	start_download_button.add_theme_font_size_override("font_size", 12)
 	start_download_button.text = "INSTALL / APP"
 	start_download_button.pressed.connect(_on_download_button_pressed)
@@ -1116,7 +1148,7 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 		cfg["damage_type_label"],
 	]
 	if tower_type == "mortar":
-		desc += " - AoE vs Standard."
+		desc += " - Heavy 5s-reload AoE vs crowds."
 	elif tower_type == "laser":
 		desc += " - 150% Std, 10% Refl."
 	elif tower_type == "slow":
@@ -1374,10 +1406,23 @@ func _set_bottom_button_widths(scale_mult: float) -> void:
 func _center_overlay(ctrl: Control, vp_size: Vector2, default_size: Vector2) -> void:
 	if ctrl == null:
 		return
-	var w: float = minf(default_size.x, vp_size.x - 24.0)
-	var h: float = minf(default_size.y, vp_size.y - 24.0)
-	ctrl.size = Vector2(w, h)
-	ctrl.position = Vector2(floorf((vp_size.x - w) * 0.5), floorf((vp_size.y - h) * 0.5))
+	var w: float = minf(default_size.x, maxf(300.0, vp_size.x - 24.0))
+	var h: float = minf(default_size.y, maxf(260.0, vp_size.y - 24.0))
+	var target_size := Vector2(w, h)
+	var target_pos := Vector2(floorf((vp_size.x - w) * 0.5), floorf((vp_size.y - h) * 0.5))
+	ctrl.position = target_pos
+	ctrl.size = target_size
+	ctrl.set_deferred("position", target_pos)
+	ctrl.set_deferred("size", target_size)
+
+
+func _place_overlay_exact(ctrl: Control, pos: Vector2, sz: Vector2) -> void:
+	if ctrl == null:
+		return
+	ctrl.position = pos
+	ctrl.size = sz
+	ctrl.set_deferred("position", pos)
+	ctrl.set_deferred("size", sz)
 
 
 func apply_responsive_layout(vp_size: Vector2) -> void:
@@ -1409,15 +1454,10 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(572.0, 68.0)
 		prompt_banner.size = Vector2(362.0, 54.0)
-		pause_overlay.position = Vector2(240.0, 120.0)
-		pause_overlay.size = Vector2(800.0, 400.0)
-		between_levels_overlay.position = Vector2(220.0, 86.0)
-		between_levels_overlay.size = Vector2(840.0, 444.0)
-		end_overlay.position = Vector2(340.0, 150.0)
-		end_overlay.size = Vector2(600.0, 360.0)
-		if start_menu_overlay != null:
-			start_menu_overlay.position = Vector2(180.0, 68.0)
-			start_menu_overlay.size = Vector2(920.0, 560.0)
+		_place_overlay_exact(pause_overlay, Vector2(240.0, 120.0), Vector2(800.0, 400.0))
+		_place_overlay_exact(between_levels_overlay, Vector2(220.0, 86.0), Vector2(840.0, 444.0))
+		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
+		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 68.0), Vector2(920.0, 560.0))
 		debug_panel.position = Vector2(16.0, 74.0)
 		return
 
@@ -1459,9 +1499,9 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		prompt_banner.position = Vector2(maxf(safe_x + 12.0, right_panel.position.x - 368.0), top_h + 6.0)
 		prompt_banner.size = Vector2(362.0, 54.0)
 		_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
-		_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
-		_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
-		_center_overlay(start_menu_overlay, vp_size, Vector2(920.0, 560.0))
+		_center_overlay(between_levels_overlay, vp_size, Vector2(900.0, 480.0))
+		_center_overlay(end_overlay, vp_size, Vector2(640.0, 400.0))
+		_center_overlay(start_menu_overlay, vp_size, Vector2(1060.0, 560.0))
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		return
 
@@ -1476,21 +1516,23 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	top_bar.position = Vector2(0.0, safe_top)
 	top_bar.size = Vector2(vp_size.x, p_top_h)
 
-	var p_scale: float = vp_size.x / GameMap.MAP_WIDTH
+	var bot_y: float = vp_size.y - safe_bot - p_bot_h
+	var max_map_h: float = maxf(240.0, bot_y - (safe_top + p_top_h) - 240.0)
+	var p_scale: float = minf(vp_size.x / GameMap.MAP_WIDTH, max_map_h / GameMap.MAP_HEIGHT)
 	var map_h: float = GameMap.MAP_HEIGHT * p_scale
 	if map_ref != null:
-		map_ref.position = Vector2(0.0, safe_top + p_top_h)
+		var map_x: float = floorf(maxf(0.0, (vp_size.x - GameMap.MAP_WIDTH * p_scale) * 0.5))
+		map_ref.position = Vector2(map_x, safe_top + p_top_h)
 		map_ref.scale = Vector2(p_scale, p_scale)
 		map_ref.set_viewport_margins(0.0, 0.0)
 
-	var bot_y: float = vp_size.y - safe_bot - p_bot_h
 	bottom_bar.position = Vector2(0.0, bot_y)
 	_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 0.85, 1.0))
 	bottom_bar.size = Vector2(vp_size.x, p_bot_h)
 
 	var rp_top: float = safe_top + p_top_h + map_h
-	var rp_h: float = maxf(320.0, bot_y - rp_top)
-	right_panel.custom_minimum_size = Vector2(0.0, 320.0)
+	var rp_h: float = maxf(220.0, bot_y - rp_top)
+	right_panel.custom_minimum_size = Vector2(0.0, 220.0)
 	right_panel.position = Vector2(0.0, rp_top)
 	right_panel.size = Vector2(vp_size.x, rp_h)
 
@@ -1498,10 +1540,10 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	surge_banner.size = Vector2(minf(260.0, vp_size.x * 0.22), 42.0)
 	prompt_banner.position = Vector2(maxf(16.0, vp_size.x - 378.0), safe_top + p_top_h + 6.0)
 	prompt_banner.size = Vector2(362.0, 54.0)
-	_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
-	_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
-	_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
-	_center_overlay(start_menu_overlay, vp_size, Vector2(920.0, 560.0))
+	_center_overlay(pause_overlay, vp_size, Vector2(960.0, 520.0))
+	_center_overlay(between_levels_overlay, vp_size, Vector2(1080.0, 620.0))
+	_center_overlay(end_overlay, vp_size, Vector2(820.0, 480.0))
+	_center_overlay(start_menu_overlay, vp_size, Vector2(1160.0, 780.0))
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 
 
@@ -1594,6 +1636,9 @@ func _toggle_pause_menu() -> void:
 	var next_paused: bool = not pause_overlay.visible
 	pause_overlay.visible = next_paused
 	get_tree().paused = next_paused
+	if next_paused:
+		_reapply_overlay_bounds()
+		call_deferred("_reapply_overlay_bounds")
 
 
 func _on_pause_restart_pressed() -> void:
@@ -1604,6 +1649,8 @@ func _on_pause_restart_pressed() -> void:
 
 func _on_mission_ended(outcome: String, reason: String) -> void:
 	end_overlay.visible = true
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
 	if outcome == "won":
 		end_title_label.text = "VICTORY - ENEMY BASE DESTROYED"
 	elif outcome == "stalled":
