@@ -395,8 +395,7 @@ func _build_start_menu() -> void:
 	start_play_button.add_theme_font_size_override("font_size", 14)
 	start_play_button.text = "LAUNCH LEVEL 1"
 	start_play_button.pressed.connect(func() -> void:
-		if GameState.selected_mission_level != GameState.selected_map_level:
-			GameState.select_level(GameState.selected_map_level)
+		GameState.select_level(GameState.selected_map_level)
 		_on_launch_level_pressed()
 	)
 	UIIcons.apply_right_button_theme(start_play_button, Color(0.28, 0.88, 0.62))

@@ -120,7 +120,7 @@ func toggle_speed_pause() -> void:
 func select_level(level_n: int) -> void:
 	var clamped: int = clampi(level_n, 1, Balance.MAX_MISSION_LEVELS)
 	selected_map_level = clamped
-	selected_mission_level = clamped
+	selected_mission_level = int(Balance.LEVELS[clamped]["shots_required"])
 	economy_changed.emit()
 
 

@@ -637,16 +637,17 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	var bad_tower: TowerUnit = hud_ref.drag_and_drop_tower("blaster", Vector2(350.0, 75.0) + map.position)
 	assert(bad_tower == null and GameState.mission.economy["money"] == money_before_bad_drop, "Dropping outside placement zones must fail and cost $0")
 
-	# 4d) Verify Start Menu, all 5 Levels (Levels 1..5), their placement zones, and 1/N Hive shots
+	# 4d) Verify Start Menu, all 5 Levels (Levels 1..5), their placement zones, and Hive Destroyer blasts (Level 1 = 3 blasts = 167 dmg)
 	var ba_ref: BaseAttackManager = inst.get_node("BaseAttackManager")
 	hud_ref.open_start_menu()
 	assert(hud_ref.start_menu_overlay != null and hud_ref.start_menu_overlay.visible, "Start Menu must open")
 	assert(hud_ref.start_level_buttons.size() == 5, "Start Menu must have 5 level buttons")
-	var expected_shots_dmg: Array[int] = [500, 250, 167, 125, 100]
+	var expected_shots_dmg: Array[int] = [167, 167, 125, 125, 100]
+	var expected_shots_count: Array[int] = [3, 3, 4, 4, 5]
 	for lvl_id in range(1, 6):
 		hud_ref._select_level(lvl_id)
 		map.load_level(lvl_id)
-		assert(GameState.selected_map_level == lvl_id and GameState.selected_mission_level == lvl_id)
+		assert(GameState.selected_map_level == lvl_id and GameState.selected_mission_level == expected_shots_count[lvl_id - 1])
 		assert(ba_ref.get_shot_damage() == expected_shots_dmg[lvl_id - 1], "Level %d shot dmg expected %d, got %d" % [lvl_id, expected_shots_dmg[lvl_id - 1], ba_ref.get_shot_damage()])
 		var plen_lvl: float = map.get_path_length()
 		assert(plen_lvl >= 1800.0 and plen_lvl <= 2000.0, "Level %d path length must be ~1900px, got %.1f" % [lvl_id, plen_lvl])
@@ -667,22 +668,42 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	hud_ref.close_start_menu()
 	assert(not hud_ref.start_menu_overlay.visible)
 
-	# 4e) Verify Base Visual States: Player Base Almost Dead vs About to Surge, plus Alien Base stages
+	# 4e) Verify Base Visual States: Player Base Almost Dead vs Growing Surge Buildup (Stage 0->4) -> Electrical Surge Explosion, plus Alien Base stages
 	GameState.mission.lives = 20
 	GameState.mission.surge_timer_seconds = 950.0
 	GameState.mission.wave_number = 1
 	GameState.mission.surge_deadline_wave = 6
 	var pb_nom: Dictionary = map.get_player_base_visual_state()
-	assert(not pb_nom["almost_dead"] and not pb_nom["surge_imminent"] and pb_nom["visual_style"] == "nominal_citadel")
+	assert(not pb_nom["almost_dead"] and not pb_nom["surge_imminent"] and pb_nom["surge_stage"] == 0 and pb_nom["visual_style"] == "nominal_citadel")
 
+	# Verify Surge buildup grows continuously across Waves 1 -> 2 -> 3 -> 4 -> 5
+	var prev_buildup: float = float(pb_nom["surge_buildup"])
+	for w_step in [2, 3, 4, 5]:
+		GameState.mission.wave_number = w_step
+		var st_w: Dictionary = map.get_player_base_visual_state()
+		var cur_buildup: float = float(st_w["surge_buildup"])
+		assert(cur_buildup > prev_buildup, "Surge buildup must grow from wave to wave (w=%d: %.2f <= %.2f)" % [w_step, cur_buildup, prev_buildup])
+		prev_buildup = cur_buildup
+	assert(map.get_player_base_visual_state()["surge_stage"] == 4 and map.get_player_base_visual_state()["surge_imminent"])
+
+	# Reset wave to 1 and test Almost Dead state
+	GameState.mission.wave_number = 1
 	GameState.mission.lives = 5
 	var pb_crit: Dictionary = map.get_player_base_visual_state()
 	assert(pb_crit["almost_dead"] and not pb_crit["surge_imminent"] and pb_crit["visual_style"] == "critical_hull_fire_smoke")
 
+	# Test Timer-based Imminent Surge state
 	GameState.mission.lives = 20
 	GameState.mission.surge_timer_seconds = 10.0
 	var pb_surge: Dictionary = map.get_player_base_visual_state()
 	assert(not pb_surge["almost_dead"] and pb_surge["surge_imminent"] and pb_surge["visual_style"] == "temporal_overload_lightning")
+
+	# Test Electrical Surge Explosion detonation when Surge fires!
+	GameState.surge_triggered.emit(1)
+	var pb_exp: Dictionary = map.get_player_base_visual_state()
+	assert(pb_exp["surge_exploding"] and pb_exp["visual_style"] == "electrical_surge_explosion" and map.surge_explosion_sparks.size() == 28, "Surge detonation must trigger electrical explosion on Player Base!")
+	map.surge_explosion_timer = 0.0
+	map.surge_explosion_sparks.clear()
 
 	GameState.mission.enemy_base_hp = 500
 	assert(map.get_enemy_base_visual_state()["damage_stage"] == "healthy")

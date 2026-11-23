@@ -84,6 +84,9 @@ var next_enemy_id: int = 1
 var next_tower_id: int = 1
 var leak_flash_timer: float = 0.0
 var hive_beam_timer: float = 0.0
+var surge_explosion_timer: float = 0.0
+var surge_explosion_max_timer: float = 1.65
+var surge_explosion_sparks: Array[Dictionary] = []
 var hovered_pad_index: int = -1
 var selected_pad_index: int = -1
 var selected_zone_index: int = -1
@@ -495,6 +498,26 @@ func trigger_hive_beam_effect(dmg: int = Balance.BASE_ATTACK_TEST_DAMAGE_OVERRID
 	queue_redraw()
 
 
+func trigger_surge_explosion(_surge_count: int = 1) -> void:
+	surge_explosion_max_timer = 1.65
+	surge_explosion_timer = surge_explosion_max_timer
+	surge_explosion_sparks.clear()
+	for i in range(28):
+		var ang: float = float(i) * TAU / 28.0 + sin(float(i) * 2.3) * 0.12
+		var spd: float = 95.0 + float((i * 37) % 115)
+		surge_explosion_sparks.append({
+			"pos": active_player_base_pos,
+			"vel": Vector2(cos(ang), sin(ang)) * spd,
+			"color": Color(0.45, 0.96, 1.0) if i % 3 == 0 else (Color(0.88, 0.42, 1.0) if i % 3 == 1 else Color(1.0, 0.88, 0.35)),
+		})
+	spawn_floater(active_player_base_pos + Vector2(-62, -62), "ELECTRICAL SURGE! (-5% SPD)", Color(0.88, 0.45, 1.0))
+	queue_redraw()
+
+
+func _on_surge_triggered(surge_count: int) -> void:
+	trigger_surge_explosion(surge_count)
+
+
 func _ready() -> void:
 	load_level(GameState.selected_map_level)
 	if map_click_area != null:
@@ -502,6 +525,7 @@ func _ready() -> void:
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.enemy_leaked.connect(_on_enemy_leaked)
 	GameState.enemy_killed.connect(_on_enemy_killed)
+	GameState.surge_triggered.connect(_on_surge_triggered)
 
 
 func _exit_tree() -> void:
@@ -511,6 +535,8 @@ func _exit_tree() -> void:
 		GameState.enemy_leaked.disconnect(_on_enemy_leaked)
 	if GameState.enemy_killed.is_connected(_on_enemy_killed):
 		GameState.enemy_killed.disconnect(_on_enemy_killed)
+	if GameState.surge_triggered.is_connected(_on_surge_triggered):
+		GameState.surge_triggered.disconnect(_on_surge_triggered)
 
 
 func _process(delta: float) -> void:
@@ -519,6 +545,13 @@ func _process(delta: float) -> void:
 		leak_flash_timer = maxf(0.0, leak_flash_timer - delta)
 	if hive_beam_timer > 0.0:
 		hive_beam_timer = maxf(0.0, hive_beam_timer - delta)
+	if surge_explosion_timer > 0.0:
+		surge_explosion_timer = maxf(0.0, surge_explosion_timer - delta)
+		for sp in surge_explosion_sparks:
+			sp["pos"] += sp["vel"] * delta
+			sp["vel"] *= pow(0.18, delta)
+		if surge_explosion_timer <= 0.0:
+			surge_explosion_sparks.clear()
 
 	if not floating_texts.is_empty():
 		for i in range(floating_texts.size() - 1, -1, -1):
@@ -779,6 +812,8 @@ func _on_mission_reset() -> void:
 	floating_texts.clear()
 	leak_flash_timer = 0.0
 	hive_beam_timer = 0.0
+	surge_explosion_timer = 0.0
+	surge_explosion_sparks.clear()
 	selected_pad_index = -1
 	selected_zone_index = -1
 	selected_drop_pos = Vector2(-1.0, -1.0)
@@ -903,30 +938,74 @@ func _make_regular_poly(center: Vector2, r: float, sides: int, angle_offset: flo
 	return pts
 
 
-## Visual state query for Player Base: distinctly separates "almost_dead" (low lives) from "surge_imminent" (about to surge).
+## Continuous 0.0 -> 1.0 growing electrical buildup on the Player Base as the Surge deadline approaches.
+func get_player_base_surge_buildup() -> float:
+	var m := GameState.mission
+	var span: float = float(Balance.MANIPULATOR_UPGRADES[4]["surge_wave_span"]) if m.manipulator_level >= 4 else float(Balance.SURGE_WAVE_SPAN)
+	var waves_left: float = clampf(float(m.surge_deadline_wave - m.wave_number), 0.0, span)
+	var wave_prog: float = clampf((span - waves_left) / maxf(1.0, span - 1.0), 0.0, 1.0)
+
+	var win: float = float(Balance.MANIPULATOR_UPGRADES[4]["surge_window"]) if m.manipulator_level >= 4 else Balance.SURGE_BASE_WINDOW
+	var rem_surge: float = m.surge_timer_seconds
+	var timer_used: float = clampf(1.0 - (rem_surge / maxf(1.0, win)), 0.0, 1.0)
+	var timer_prog: float = timer_used
+	if rem_surge <= Balance.SURGE_WARNING_RED:
+		timer_prog = 1.0
+	elif rem_surge <= Balance.SURGE_WARNING_AMBER:
+		timer_prog = maxf(timer_used, lerpf(0.82, 0.98, 1.0 - (rem_surge - Balance.SURGE_WARNING_RED) / maxf(0.1, Balance.SURGE_WARNING_AMBER - Balance.SURGE_WARNING_RED)))
+	elif rem_surge <= 45.0:
+		timer_prog = maxf(timer_used, lerpf(0.45, 0.82, 1.0 - (rem_surge - Balance.SURGE_WARNING_AMBER) / 30.0))
+
+	return clampf(maxf(wave_prog, timer_prog), 0.0, 1.0)
+
+
+## Visual state query for Player Base: distinctly separates "almost_dead" (low lives) from growing "surge_buildup" (0.0 -> 1.0) and "surge_exploding".
 func get_player_base_visual_state() -> Dictionary:
 	var m := GameState.mission
 	var lives_ratio: float = clampf(float(m.lives) / float(Balance.PLAYER_STARTING_LIVES), 0.0, 1.0)
 	var almost_dead: bool = m.lives <= 7
 	var damaged: bool = m.lives <= 13
 
+	var buildup: float = get_player_base_surge_buildup()
+	var surge_stage: int = 0
+	if buildup >= 0.80:
+		surge_stage = 4
+	elif buildup >= 0.60:
+		surge_stage = 3
+	elif buildup >= 0.38:
+		surge_stage = 2
+	elif buildup >= 0.15:
+		surge_stage = 1
+
 	var rem_surge: float = m.surge_timer_seconds
 	var wave_near_deadline: bool = (m.wave_number + 1 >= m.surge_deadline_wave)
-	var surge_imminent: bool = (rem_surge <= Balance.SURGE_WARNING_AMBER) or wave_near_deadline
-	var surge_urgency: float = 0.0
-	if rem_surge <= Balance.SURGE_WARNING_RED or wave_near_deadline:
-		surge_urgency = 1.0
-	elif rem_surge <= Balance.SURGE_WARNING_AMBER or (m.wave_number + 2 >= m.surge_deadline_wave):
-		surge_urgency = 0.55
+	var surge_imminent: bool = (rem_surge <= Balance.SURGE_WARNING_AMBER) or wave_near_deadline or (surge_stage >= 4)
+	var surge_urgency: float = buildup
+	var is_exploding: bool = (surge_explosion_timer > 0.0)
+
+	var v_style: String = "nominal_citadel"
+	if is_exploding:
+		v_style = "electrical_surge_explosion"
+	elif almost_dead and surge_imminent:
+		v_style = "critical_hull_and_surge"
+	elif almost_dead:
+		v_style = "critical_hull_fire_smoke"
+	elif surge_imminent:
+		v_style = "temporal_overload_lightning"
+	elif surge_stage >= 1:
+		v_style = "surge_buildup_stage_%d" % surge_stage
 
 	return {
 		"lives": m.lives,
 		"lives_ratio": lives_ratio,
 		"damaged": damaged,
 		"almost_dead": almost_dead,
+		"surge_buildup": buildup,
+		"surge_stage": surge_stage,
 		"surge_imminent": surge_imminent,
 		"surge_urgency": surge_urgency,
-		"visual_style": "critical_hull_and_surge" if (almost_dead and surge_imminent) else ("critical_hull_fire_smoke" if almost_dead else ("temporal_overload_lightning" if surge_imminent else "nominal_citadel")),
+		"surge_exploding": is_exploding,
+		"visual_style": v_style,
 	}
 
 
@@ -1205,14 +1284,27 @@ func _draw() -> void:
 			draw_string(font, pos + Vector2(28, 0), ft["research_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.48, 0.92, 1.0, alpha))
 
 
-func _draw_lightning_bolt(p_start: Vector2, p_end: Vector2, col: Color, width: float, seed_offset: float) -> void:
+func _draw_lightning_bolt(p_start: Vector2, p_end: Vector2, col: Color, width: float, seed_offset: float, branched: bool = false) -> void:
 	var dir: Vector2 = p_end - p_start
+	var len: float = dir.length()
+	if len < 2.0:
+		return
+	var jitter: float = clampf(len * 0.16, 3.0, 14.0)
 	var perp := Vector2(-dir.y, dir.x).normalized()
-	var p1: Vector2 = p_start + dir * 0.33 + perp * (sin(visual_time * 24.0 + seed_offset) * 6.5)
-	var p2: Vector2 = p_start + dir * 0.67 - perp * (cos(visual_time * 29.0 + seed_offset * 1.7) * 6.5)
+	var p1: Vector2 = p_start + dir * 0.28 + perp * (sin(visual_time * 26.0 + seed_offset) * jitter)
+	var p2: Vector2 = p_start + dir * 0.56 - perp * (cos(visual_time * 31.0 + seed_offset * 1.7) * jitter)
+	var p3: Vector2 = p_start + dir * 0.82 + perp * (sin(visual_time * 35.0 + seed_offset * 2.3) * jitter * 0.75)
 	draw_line(p_start, p1, col, width)
 	draw_line(p1, p2, col, width)
-	draw_line(p2, p_end, col, width)
+	draw_line(p2, p3, col, width * 0.9)
+	draw_line(p3, p_end, col, width * 0.8)
+	if branched:
+		var fork_dir: Vector2 = (dir.normalized() + perp * (0.55 if int(seed_offset * 10.0) % 2 == 0 else -0.55)).normalized()
+		var fork_end: Vector2 = p2 + fork_dir * (len * 0.36)
+		var fork_mid: Vector2 = p2 + fork_dir * (len * 0.18) + perp * (cos(visual_time * 28.0 + seed_offset) * jitter * 0.45)
+		var f_col := Color(col.r, col.g, col.b, col.a * 0.78)
+		draw_line(p2, fork_mid, f_col, width * 0.7)
+		draw_line(fork_mid, fork_end, f_col, width * 0.55)
 
 
 func _draw_enemy_base(font: Font) -> void:
@@ -1318,18 +1410,30 @@ func _draw_player_base(font: Font) -> void:
 	var lives_ratio: float = float(pb_state["lives_ratio"])
 	var is_damaged: bool = bool(pb_state["damaged"])
 	var is_almost_dead: bool = bool(pb_state["almost_dead"])
+	var buildup: float = float(pb_state["surge_buildup"])
+	var surge_stage: int = int(pb_state["surge_stage"])
 	var is_surge_imminent: bool = bool(pb_state["surge_imminent"])
-	var surge_urgency: float = float(pb_state["surge_urgency"])
+	var is_exploding: bool = bool(pb_state["surge_exploding"])
 
-	# --- A) "ABOUT TO HAVE A SURGE" (Temporal Overload Animation: Expanding Violet/Gold Distortion Ripples) ---
-	if is_surge_imminent:
-		var ripple_spd: float = 28.0 if surge_urgency >= 0.9 else 18.0
-		for r_i in range(3):
-			var r_phase: float = fmod(visual_time * ripple_spd + float(r_i) * 14.0, 42.0)
-			var r_rad: float = 22.0 + r_phase
-			var r_alpha: float = clampf(1.0 - (r_phase / 42.0), 0.0, 1.0) * (0.75 if surge_urgency >= 0.9 else 0.52)
-			var r_col := Color(0.78, 0.35, 1.0, r_alpha) if r_i % 2 == 0 else Color(1.0, 0.76, 0.25, r_alpha)
-			draw_arc(pb_pos, r_rad, 0.0, TAU, 36, r_col, 2.4)
+	# --- A) GROWING SURGE BUILDUP (Stages 1..4: progressively growing electrical field, ripples & orbiting nodes) ---
+	if buildup >= 0.15:
+		# Growing electrical corona aura around the base (radius grows from 20px at 15% up to 48px at 100%)
+		var aura_r: float = lerpf(20.0, 48.0, buildup) + 2.5 * sin(visual_time * lerpf(3.0, 12.0, buildup))
+		var aura_alpha: float = lerpf(0.08, 0.30, buildup)
+		draw_circle(pb_pos, aura_r, Color(0.68, 0.32, 1.0, aura_alpha))
+
+		# Concentric expanding electrical ripples: 1 ripple at Stage 2, 2 ripples at Stage 3, 3 fast ripples at Stage 4
+		var ripple_count: int = 3 if surge_stage >= 4 else (2 if surge_stage == 3 else (1 if surge_stage == 2 else 0))
+		var ripple_span: float = lerpf(24.0, 48.0, buildup)
+		var ripple_spd: float = lerpf(12.0, 34.0, buildup)
+		for r_i in range(ripple_count):
+			var r_phase: float = fmod(visual_time * ripple_spd + float(r_i) * (ripple_span / float(maxi(1, ripple_count))), ripple_span)
+			var r_rad: float = 20.0 + r_phase
+			var r_alpha: float = clampf(1.0 - (r_phase / ripple_span), 0.0, 1.0) * lerpf(0.35, 0.85, buildup)
+			var r_col := Color(0.78, 0.38, 1.0, r_alpha) if r_i % 2 == 0 else Color(0.45, 0.94, 1.0, r_alpha)
+			if surge_stage >= 4 and r_i == 1:
+				r_col = Color(1.0, 0.82, 0.28, r_alpha)
+			draw_arc(pb_pos, r_rad, 0.0, TAU, 36, r_col, lerpf(1.5, 2.8, buildup))
 
 	# --- B) "ALMOST DEAD" (Rotating Emergency Red Siren Cones behind the Citadel) ---
 	if is_almost_dead:
@@ -1366,7 +1470,7 @@ func _draw_player_base(font: Font) -> void:
 	# Outer shield walls: intact when healthy, flickering broken segments when Almost Dead!
 	for s_i in range(8):
 		if is_almost_dead and int(floor(visual_time * 10.0) + s_i) % 3 == 0:
-			continue # Flickering broken shield segment!
+			continue
 		draw_line(pb_outer[s_i], pb_outer[(s_i + 1) % 8], pb_border, 2.8)
 
 	# --- C) Structural Hull Cracks, Smoke Plumes & Flying Sparks when Damaged / Almost Dead ---
@@ -1381,7 +1485,6 @@ func _draw_player_base(font: Font) -> void:
 			draw_line(c_mid, c_tip, crack_col, 1.8)
 
 	if is_almost_dead:
-		# Rising dark smoke plumes & bright electrical spark bursts
 		for sm_i in range(6):
 			var phase: float = fmod(visual_time * 0.95 + float(sm_i) * 0.17, 1.0)
 			var smoke_x: float = pb_pos.x + cos(float(sm_i) * 1.1) * 15.0 + sin(visual_time * 3.0 + float(sm_i)) * 5.0
@@ -1394,22 +1497,85 @@ func _draw_player_base(font: Font) -> void:
 			var sp_p2: Vector2 = sp_p1 + Vector2(cos(sp_ang), sin(sp_ang)) * 5.5
 			draw_line(sp_p1, sp_p2, Color(1.0, 0.85, 0.28, 1.0 - sp_phase), 2.0)
 
-	# --- D) Time Manipulator Chronosphere Dome & Temporal Surge Lightning Arcs ---
-	var spin_mult: float = 3.6 if is_surge_imminent else 1.0
-	var manip_col := Color(1.0, 0.75, 0.28) if GameState.is_base_locked() else (Color(0.88, 0.42, 1.0) if is_surge_imminent else Color(0.45, 0.94, 1.0))
-	draw_arc(pb_pos, 16.5, visual_time * 1.8 * spin_mult, visual_time * 1.8 * spin_mult + PI * 1.35, 24, manip_col, 2.4)
-	draw_arc(pb_pos, 11.5, -visual_time * 2.5 * spin_mult, -visual_time * 2.5 * spin_mult + PI * 1.35, 20, Color(1.0, 0.78, 0.28, 0.95) if is_surge_imminent else Color(0.75, 0.55, 1.0, 0.9), 2.0)
+	# --- D) Time Manipulator Chronosphere Dome & Progressively Growing Lightning Arcs ---
+	var spin_mult: float = lerpf(1.0, 4.4, buildup)
+	var manip_col := Color(0.45, 0.94, 1.0).lerp(Color(0.88, 0.42, 1.0), buildup)
+	if GameState.is_base_locked():
+		manip_col = Color(1.0, 0.75, 0.28)
+	draw_arc(pb_pos, 16.5 + buildup * 2.5, visual_time * 1.8 * spin_mult, visual_time * 1.8 * spin_mult + PI * 1.35, 24, manip_col, 2.2 + buildup * 0.8)
+	draw_arc(pb_pos, 11.5 + buildup * 1.5, -visual_time * 2.5 * spin_mult, -visual_time * 2.5 * spin_mult + PI * 1.35, 20, Color(0.75, 0.55, 1.0, 0.9).lerp(Color(1.0, 0.82, 0.28, 0.98), buildup), 2.0)
 
-	if is_surge_imminent:
-		# Jagged Tesla Temporal Lightning bolts snapping from Chronosphere to the 8 outer citadel pylons!
-		var bolt_count: int = 6 if surge_urgency >= 0.9 else 4
+	if surge_stage >= 1:
+		# Lightning bolts grow in count (2 -> 4 -> 6 -> 8), reach (14px -> 24px -> 34px -> 45px), thickness, and branching!
+		var bolt_count: int = 2 + surge_stage * 2
+		var bolt_reach: float = lerpf(14.0, 44.0, buildup)
+		var bolt_width: float = lerpf(1.3, 2.5, buildup)
 		for b_i in range(bolt_count):
-			var pylon_idx: int = (b_i * 2 + int(floor(visual_time * 12.0))) % 8
-			var b_col := Color(0.85, 0.45, 1.0, 0.95) if b_i % 2 == 0 else Color(1.0, 0.85, 0.32, 0.95)
-			_draw_lightning_bolt(pb_pos, pb_outer[pylon_idx], b_col, 2.0, float(b_i) * 1.9)
+			var b_ang: float = float(b_i) * TAU / float(bolt_count) + visual_time * (1.2 + buildup * 2.5) + sin(visual_time * 8.0 + float(b_i)) * 0.25
+			var b_end: Vector2 = pb_pos + Vector2(cos(b_ang), sin(b_ang)) * bolt_reach
+			var b_col := Color(0.45, 0.96, 1.0, 0.88) if b_i % 3 == 0 else (Color(0.88, 0.45, 1.0, 0.95) if b_i % 3 == 1 else Color(1.0, 0.86, 0.32, 0.95))
+			_draw_lightning_bolt(pb_pos, b_end, b_col, bolt_width, float(b_i) * 1.9, surge_stage >= 3)
 
-	draw_circle(pb_pos, 6.2 + (1.8 * sin(visual_time * 14.0) if is_surge_imminent else 0.0), manip_col)
-	draw_circle(pb_pos, 2.8, Color.WHITE)
+		# Orbiting electrical plasma nodes appear at Stage 2+ and multiply as charge builds
+		if surge_stage >= 2:
+			var node_count: int = surge_stage + 1
+			var orbit_r: float = lerpf(22.0, 32.0, buildup)
+			for n_i in range(node_count):
+				var na: float = float(n_i) * TAU / float(node_count) + visual_time * (2.5 + buildup * 3.0)
+				var np: Vector2 = pb_pos + Vector2(cos(na), sin(na)) * orbit_r
+				draw_circle(np, 2.2 + buildup * 1.8, Color(0.85, 0.48, 1.0, 0.9))
+				draw_circle(np, 1.2 + buildup * 0.8, Color(1.0, 0.95, 0.75))
+
+	# Swelling Chronosphere Core (grows from 6.2px up to 11.2px as electrical charge builds up)
+	var core_rad: float = lerpf(6.2, 10.6, buildup) + (2.0 * sin(visual_time * 16.0) if buildup >= 0.5 else 0.0)
+	draw_circle(pb_pos, core_rad, manip_col)
+	draw_circle(pb_pos, core_rad * 0.48, Color.WHITE)
+
+	# --- E) ELECTRICAL SURGE EXPLOSION DETONATION (When Surge Triggers!) ---
+	if is_exploding:
+		var exp_prog: float = clampf(1.0 - (surge_explosion_timer / maxf(0.01, surge_explosion_max_timer)), 0.0, 1.0)
+		var exp_alpha: float = clampf(1.0 - exp_prog, 0.0, 1.0)
+
+		# 1) Blinding high-voltage core detonation flash dome
+		if exp_prog < 0.45:
+			var flash_a: float = clampf(1.0 - (exp_prog / 0.45), 0.0, 1.0)
+			draw_circle(pb_pos, 28.0 + exp_prog * 95.0, Color(0.75, 0.42, 1.0, flash_a * 0.52))
+			draw_circle(pb_pos, 18.0 + exp_prog * 55.0, Color(0.55, 0.98, 1.0, flash_a * 0.78))
+			draw_circle(pb_pos, 14.0 + exp_prog * 25.0, Color(1.0, 1.0, 1.0, flash_a * 0.95))
+
+		# 2) 3 Concentric High-Voltage Expanding EMP Blast Shockwaves across the battlefield
+		for w_i in range(3):
+			var w_delay: float = float(w_i) * 0.14
+			var w_p: float = clampf((exp_prog - w_delay) / (1.0 - w_delay), 0.0, 1.0)
+			if w_p > 0.0 and w_p < 1.0:
+				var w_rad: float = 24.0 + w_p * 340.0
+				var w_a: float = (1.0 - w_p) * 0.92
+				var w_col := Color(0.45, 0.96, 1.0, w_a) if w_i == 0 else (Color(0.88, 0.42, 1.0, w_a) if w_i == 1 else Color(1.0, 0.86, 0.32, w_a))
+				draw_arc(pb_pos, w_rad, 0.0, TAU, 64, w_col, 4.2 * (1.0 - w_p * 0.5))
+
+		# 3) 12 Giant Radial Branched Lightning Bolts erupting outward from the Player Base
+		for eb_i in range(12):
+			var eb_ang: float = float(eb_i) * TAU / 12.0 + sin(visual_time * 19.0 + float(eb_i)) * 0.18
+			var eb_len: float = (70.0 + float((eb_i * 29) % 85)) * (0.35 + 0.65 * sin(minf(1.0, exp_prog * 2.2) * PI * 0.5))
+			var eb_end: Vector2 = pb_pos + Vector2(cos(eb_ang), sin(eb_ang)) * eb_len
+			var eb_col := Color(0.52, 0.98, 1.0, exp_alpha) if eb_i % 3 == 0 else (Color(0.92, 0.45, 1.0, exp_alpha) if eb_i % 3 == 1 else Color(1.0, 0.92, 0.45, exp_alpha))
+			_draw_lightning_bolt(pb_pos, eb_end, eb_col, 3.0 * exp_alpha + 1.0, float(eb_i) * 3.1, true)
+
+		# 4) Chain-Lightning Surge Arcs striking every built Player Tower on the map (-5% speed shock visual!)
+		for t_unit in get_all_towers():
+			var t_pos: Vector2 = t_unit.position
+			_draw_lightning_bolt(pb_pos, t_pos, Color(0.78, 0.45, 1.0, exp_alpha * 0.85), 2.2 * exp_alpha, float(t_unit.tower_id) * 2.7, true)
+			draw_arc(t_pos, 20.0 + 4.0 * sin(visual_time * 25.0), 0.0, TAU, 24, Color(0.48, 0.96, 1.0, exp_alpha * 0.9), 2.2)
+
+		# 5) 28 Flying High-Voltage Electric Spark Particles
+		for sp in surge_explosion_sparks:
+			var sp_pos: Vector2 = sp["pos"]
+			var sp_vel: Vector2 = sp["vel"]
+			var sp_col: Color = sp["color"]
+			sp_col.a = exp_alpha
+			var tail: Vector2 = sp_pos - sp_vel.normalized() * 8.0
+			draw_line(tail, sp_pos, sp_col, 2.2)
+			draw_circle(sp_pos, 2.4, Color(1.0, 1.0, 1.0, exp_alpha))
 
 	# Circular Lives Integrity Arc around the Player Base
 	var life_arc_col := Color(0.35, 0.95, 0.75) if not is_damaged else (Color(1.0, 0.25, 0.25) if is_almost_dead else Color(1.0, 0.78, 0.28))
@@ -1425,9 +1591,20 @@ func _draw_player_base(font: Font) -> void:
 		draw_rect(Rect2(pb_pos + Vector2(-22, -50), Vector2(44, 14)), Color(0.05, 0.09, 0.16, 0.88))
 		draw_string(font, pb_pos + Vector2(-16, -39), "BASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.78, 0.94, 1.0))
 
-	if is_surge_imminent:
+	if is_exploding:
+		var e_box := Rect2(pb_pos + Vector2(-52.0, 40.0), Vector2(104.0, 15.0))
+		draw_rect(e_box, Color(0.24, 0.06, 0.34, 0.96))
+		draw_rect(e_box, Color(0.55, 0.98, 1.0), false, 1.5)
+		draw_string(font, e_box.position + Vector2(5.0, 11.0), "ELECTRICAL SURGE!", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.92, 0.45))
+	elif is_surge_imminent:
 		var s_pulse: float = 0.65 + 0.35 * sin(visual_time * 12.0)
 		var s_box := Rect2(pb_pos + Vector2(-46.0, 40.0), Vector2(92.0, 14.0))
 		draw_rect(s_box, Color(0.16, 0.06, 0.26, 0.94))
 		draw_rect(s_box, Color(0.88, 0.45, 1.0, s_pulse), false, 1.2)
 		draw_string(font, s_box.position + Vector2(5.0, 11.0), "SURGE IMMINENT!", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.86, 0.42))
+	elif surge_stage >= 2:
+		var chg_pct: int = int(round(buildup * 100.0))
+		var b_box := Rect2(pb_pos + Vector2(-46.0, 40.0), Vector2(92.0, 14.0))
+		draw_rect(b_box, Color(0.10, 0.06, 0.20, 0.90))
+		draw_rect(b_box, Color(0.68, 0.42, 0.98, 0.82), false, 1.0)
+		draw_string(font, b_box.position + Vector2(5.0, 11.0), "SURGE CHARGE %d%%" % chg_pct, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.75, 1.0))

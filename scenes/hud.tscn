@@ -565,19 +565,19 @@ text = "Select Level (1/N Base Shots):"
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 10
-text = "Lv1: Rows (1 Shot)"
+text = "Lv1: Rows (3 Shots)"
 
 [node name="Level2Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 10
-text = "Lv2: Columns (2 Shots)"
+text = "Lv2: Columns (3 Shots)"
 
 [node name="Level3Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 10
-text = "Lv3: Islands (3 Shots)"
+text = "Lv3: Islands (4 Shots)"
 
 [node name="Level4Button" type="Button" parent="BetweenLevelsOverlay/Margin/VBox/LevelRow"]
 layout_mode = 2
