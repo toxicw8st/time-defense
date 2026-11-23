@@ -110,6 +110,13 @@ static func create_icon(kind: String) -> ImageTexture:
 			_fill_rect(img, 10, 9, 22, 11, Color(0.88, 0.52, 1.0))
 			_fill_rect(img, 10, 13, 22, 15, Color(0.88, 0.52, 1.0))
 			_fill_rect(img, 11, 11, 23, 13, Color(1.0, 0.92, 0.55))
+		"annihilator":
+			_fill_rect(img, 3, 6, 13, 18, Color(0.78, 0.32, 0.16))
+			_stroke_rect(img, 3, 6, 13, 18, Color(1.0, 0.82, 0.35))
+			_fill_rect(img, 11, 8, 22, 16, Color(0.32, 0.24, 0.18))
+			_fill_rect(img, 11, 8, 23, 10, Color(1.0, 0.84, 0.28))
+			_fill_rect(img, 11, 14, 23, 16, Color(1.0, 0.84, 0.28))
+			_fill_circle(img, 8, 12, 3, Color(1.0, 0.92, 0.45))
 		"target":
 			_draw_ring(img, 12, 12, 8, Color(0.98, 0.86, 0.38))
 			_draw_ring(img, 12, 12, 4, Color(0.98, 0.86, 0.38))

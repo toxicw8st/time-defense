@@ -21,28 +21,44 @@ const PATH_WAYPOINTS: Array[Vector2] = [
 	Vector2(775, 405),
 ]
 
+## 20 build slots organized strictly into 4 horizontal placement rows (y = 32, 157, 322, 449).
+## Indices 0..13 preserve test pad coordinates while aligning all pads onto the 4 rows.
 const BUILD_PAD_POSITIONS: Array[Vector2] = [
-	Vector2(220, 32),
-	Vector2(380, 32),
-	Vector2(540, 32),
-	Vector2(255, 157),
-	Vector2(380, 157),
-	Vector2(510, 157),
-	Vector2(635, 157),
-	Vector2(785, 115),
-	Vector2(785, 220),
-	Vector2(295, 322),
-	Vector2(430, 322),
-	Vector2(565, 322),
-	Vector2(380, 449),
-	Vector2(630, 449),
+	Vector2(220, 32),  # P1  (Row 1)
+	Vector2(380, 32),  # P2  (Row 1)
+	Vector2(540, 32),  # P3  (Row 1)
+	Vector2(250, 157), # P4  (Row 2)
+	Vector2(380, 157), # P5  (Row 2)
+	Vector2(510, 157), # P6  (Row 2)
+	Vector2(640, 157), # P7  (Row 2)
+	Vector2(770, 157), # P8  (Row 2)
+	Vector2(765, 322), # P9  (Row 3)
+	Vector2(295, 322), # P10 (Row 3)
+	Vector2(430, 322), # P11 (Row 3)
+	Vector2(565, 322), # P12 (Row 3)
+	Vector2(380, 449), # P13 (Row 4)
+	Vector2(570, 449), # P14 (Row 4)
+	Vector2(300, 32),  # P15 (Row 1)
+	Vector2(460, 32),  # P16 (Row 1)
+	Vector2(665, 322), # P17 (Row 3)
+	Vector2(285, 449), # P18 (Row 4)
+	Vector2(475, 449), # P19 (Row 4)
+	Vector2(665, 449), # P20 (Row 4)
+]
+
+const ROW_DEFS: Array[Dictionary] = [
+	{"row": 1, "y": 32.0, "x_min": 200.0, "x_max": 560.0, "label": "ROW 1"},
+	{"row": 2, "y": 157.0, "x_min": 230.0, "x_max": 790.0, "label": "ROW 2"},
+	{"row": 3, "y": 322.0, "x_min": 275.0, "x_max": 785.0, "label": "ROW 3"},
+	{"row": 4, "y": 449.0, "x_min": 265.0, "x_max": 685.0, "label": "ROW 4"},
 ]
 
 const ENEMY_BASE_POS: Vector2 = Vector2(58, 75)
 const PLAYER_BASE_POS: Vector2 = Vector2(842, 405)
 const REFINERY_ANNEX_RECT: Rect2 = Rect2(16, 195, 134, 268)
 const PAD_SIZE: float = 36.0
-const PAD_TOUCH_RADIUS: float = 34.0 # Finger-friendly hit zone (68 px diameter; pads are >=105 px apart)
+const PAD_TOUCH_RADIUS: float = 34.0 # Finger-friendly hit zone (68 px diameter)
+const PAD_DRAG_SNAP_RADIUS: float = 56.0 # Snap radius when dragging a tower onto a row slot
 
 @onready var map_click_area: Control = $MapClickArea
 @onready var enemy_path: Path2D = $EnemyPath
@@ -69,6 +85,61 @@ var economy_ref: Node = null
 var extra_left_margin: float = 0.0
 var extra_right_margin: float = 0.0
 var visual_time: float = 0.0
+var drag_tower_type: String = ""
+var drag_local_pos: Vector2 = Vector2.ZERO
+var drag_snap_pad_index: int = -1
+
+
+static func get_pad_row_number(pad_idx: int) -> int:
+	if pad_idx < 0 or pad_idx >= BUILD_PAD_POSITIONS.size():
+		return 1
+	var py: float = BUILD_PAD_POSITIONS[pad_idx].y
+	for rdef in ROW_DEFS:
+		if absf(py - float(rdef["y"])) <= 6.0:
+			return int(rdef["row"])
+	return 1
+
+
+func find_nearest_open_pad(local_pos: Vector2, max_radius: float = PAD_DRAG_SNAP_RADIUS) -> int:
+	var best_idx: int = -1
+	var best_dist_sq: float = max_radius * max_radius
+	for i in range(BUILD_PAD_POSITIONS.size()):
+		if pad_occupancy[i] != null:
+			continue
+		var d_sq: float = local_pos.distance_squared_to(BUILD_PAD_POSITIONS[i])
+		if d_sq <= best_dist_sq:
+			best_dist_sq = d_sq
+			best_idx = i
+	return best_idx
+
+
+func update_drag_placement(tower_type: String, global_screen_pos: Vector2) -> int:
+	drag_tower_type = tower_type
+	var eff_scale: Vector2 = Vector2(maxf(0.01, scale.x), maxf(0.01, scale.y))
+	drag_local_pos = (global_screen_pos - position) / eff_scale
+	drag_snap_pad_index = find_nearest_open_pad(drag_local_pos, PAD_DRAG_SNAP_RADIUS)
+	hovered_pad_index = drag_snap_pad_index
+	queue_redraw()
+	return drag_snap_pad_index
+
+
+func finish_drag_placement(tower_type: String, global_screen_pos: Vector2) -> TowerUnit:
+	var snap_idx: int = update_drag_placement(tower_type, global_screen_pos)
+	drag_tower_type = ""
+	drag_snap_pad_index = -1
+	hovered_pad_index = -1
+	queue_redraw()
+	if snap_idx >= 0 and pad_occupancy[snap_idx] == null:
+		pending_build_type = ""
+		return build_tower_on_pad(snap_idx, tower_type)
+	return null
+
+
+func cancel_drag_placement() -> void:
+	drag_tower_type = ""
+	drag_snap_pad_index = -1
+	hovered_pad_index = -1
+	queue_redraw()
 
 
 func set_viewport_margins(left_m: float, right_m: float) -> void:
@@ -521,13 +592,27 @@ func _draw() -> void:
 					draw_line(w_r, tip, chev_col, 1.5)
 				d_cur += 68.0
 
-	# 4) 14 Sci-Fi Octagonal Build Pads (P1..P14)
+	# 4) 4 Horizontal Placement Rows + 20 Sci-Fi Octagonal Build Pads (P1..P20)
 	var half: float = PAD_SIZE * 0.5
-	var active_preview_type: String = pending_build_type if pending_build_type != "" else preview_tower_type
+	var active_preview_type: String = drag_tower_type if drag_tower_type != "" else (pending_build_type if pending_build_type != "" else preview_tower_type)
+	var is_placing_any: bool = (drag_tower_type != "" or pending_build_type != "")
+
+	for rdef in ROW_DEFS:
+		var ry: float = float(rdef["y"])
+		var rx0: float = float(rdef["x_min"])
+		var rx1: float = float(rdef["x_max"])
+		var rail_col := Color(0.28, 0.58, 0.78, 0.55) if is_placing_any else Color(0.18, 0.28, 0.42, 0.48)
+		draw_rect(Rect2(Vector2(rx0, ry - 5.0), Vector2(rx1 - rx0, 10.0)), Color(0.08, 0.12, 0.19, 0.78))
+		draw_line(Vector2(rx0, ry - 4.0), Vector2(rx1, ry - 4.0), rail_col, 1.4)
+		draw_line(Vector2(rx0, ry + 4.0), Vector2(rx1, ry + 4.0), rail_col, 1.4)
+		draw_rect(Rect2(Vector2(rx0 - 44.0, ry - 8.0), Vector2(40.0, 16.0)), Color(0.07, 0.11, 0.17, 0.90))
+		draw_rect(Rect2(Vector2(rx0 - 44.0, ry - 8.0), Vector2(40.0, 16.0)), rail_col, false, 1.2)
+		draw_string(font, Vector2(rx0 - 40.0, ry + 4.0), str(rdef["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.62, 0.86, 1.0))
+
 	for i in range(BUILD_PAD_POSITIONS.size()):
 		var p: Vector2 = BUILD_PAD_POSITIONS[i]
 		var is_sel: bool = (i == selected_pad_index)
-		var is_hov: bool = (i == hovered_pad_index)
+		var is_hov: bool = (i == hovered_pad_index or i == drag_snap_pad_index)
 		var is_open: bool = (pad_occupancy[i] == null)
 
 		# Pad shadow & octagonal metallic plate
@@ -536,39 +621,53 @@ func _draw() -> void:
 		var inner_pad := _make_regular_poly(p, half * 0.84, 8, PI * 0.125)
 		var pad_col := Color(0.14, 0.20, 0.29)
 		var border_col := Color(0.36, 0.52, 0.72)
-		if is_sel:
+		if i == drag_snap_pad_index and is_open:
+			pad_col = Color(0.18, 0.42, 0.36)
+			border_col = Color(0.42, 1.0, 0.72)
+		elif is_sel:
 			pad_col = Color(0.22, 0.30, 0.42)
 			border_col = Color(1.0, 0.88, 0.36)
 		elif is_hov:
 			pad_col = Color(0.20, 0.30, 0.44)
 			border_col = Color(0.55, 0.92, 1.0)
-		elif pending_build_type != "" and is_open:
-			border_col = Color(0.42, 0.88, 0.96, 0.75 + 0.25 * sin(visual_time * 6.0))
+		elif is_placing_any and is_open:
+			border_col = Color(0.42, 0.88, 0.96, 0.72 + 0.28 * sin(visual_time * 6.0))
 
 		draw_colored_polygon(outer_pad, Color(0.10, 0.14, 0.21))
 		draw_colored_polygon(inner_pad, pad_col)
 		for s_i in range(8):
-			draw_line(outer_pad[s_i], outer_pad[(s_i + 1) % 8], border_col, 2.2 if is_sel else 1.5)
+			draw_line(outer_pad[s_i], outer_pad[(s_i + 1) % 8], border_col, 2.4 if (is_sel or i == drag_snap_pad_index) else 1.5)
 		if is_open:
 			draw_arc(p, 10.5, 0.0, TAU, 20, Color(0.26, 0.38, 0.54, 0.65), 1.1)
 			draw_string(font, p + Vector2(-7, 4), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.68, 0.82, 0.96))
 
-	# 5) Range ring preview during placement hover or pending placement mode
+	# 5) Range ring & Drag-and-Drop Ghost Preview
 	var preview_pad: int = -1
-	if pending_build_type != "" and hovered_pad_index >= 0 and pad_occupancy[hovered_pad_index] == null:
+	if drag_tower_type != "" and drag_snap_pad_index >= 0:
+		preview_pad = drag_snap_pad_index
+	elif pending_build_type != "" and hovered_pad_index >= 0 and pad_occupancy[hovered_pad_index] == null:
 		preview_pad = hovered_pad_index
 	elif active_preview_type != "" and selected_pad_index >= 0 and selected_pad_index < BUILD_PAD_POSITIONS.size():
 		preview_pad = selected_pad_index
-	if active_preview_type != "" and preview_pad >= 0:
-		var center: Vector2 = BUILD_PAD_POSITIONS[preview_pad]
+	if active_preview_type != "" and (preview_pad >= 0 or drag_tower_type != ""):
+		var center: Vector2 = BUILD_PAD_POSITIONS[preview_pad] if preview_pad >= 0 else drag_local_pos
 		var cfg: Dictionary = Balance.TOWERS[active_preview_type]
 		var r: float = float(cfg["range"]) * GameState.get_tower_range_research_multiplier()
 		var min_r: float = float(cfg.get("min_range", 0.0))
-		draw_circle(center, r, Color(0.38, 0.85, 1.0, 0.08))
-		draw_arc(center, r, 0.0, TAU, 56, Color(0.45, 0.88, 1.0, 0.72), 1.6)
+		var valid_drop: bool = (preview_pad >= 0)
+		var ring_fill := Color(0.35, 0.95, 0.72, 0.10) if (drag_tower_type != "" and valid_drop) else Color(0.38, 0.85, 1.0, 0.08)
+		var ring_stroke := Color(0.42, 1.0, 0.75, 0.85) if (drag_tower_type != "" and valid_drop) else Color(0.45, 0.88, 1.0, 0.72)
+		draw_circle(center, r, ring_fill)
+		draw_arc(center, r, 0.0, TAU, 56, ring_stroke, 1.8)
 		if min_r > 0.0:
 			draw_circle(center, min_r, Color(1.0, 0.35, 0.35, 0.08))
 			draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.75), 1.5)
+		if drag_tower_type != "":
+			draw_circle(center, 15.0, Color(0.35, 0.95, 0.82, 0.38) if valid_drop else Color(1.0, 0.55, 0.35, 0.32))
+			draw_arc(center, 16.0, 0.0, TAU, 24, ring_stroke, 2.2)
+			var drop_txt: String = "DROP -> ROW %d (P%d)" % [get_pad_row_number(preview_pad), preview_pad + 1] if valid_drop else "DRAG TO A ROW SLOT"
+			draw_rect(Rect2(center + Vector2(-58, -34), Vector2(116, 15)), Color(0.05, 0.08, 0.14, 0.92))
+			draw_string(font, center + Vector2(-52, -23), drop_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 1.0, 0.82) if valid_drop else Color(1.0, 0.82, 0.45))
 
 	# 6) Enemy Base Marker (Alien Bio-Spire Hive at path start)
 	var hive_pulse: float = 0.7 + 0.3 * sin(visual_time * 3.8)

@@ -23,10 +23,10 @@ func _ready() -> void:
 	map_node = main_inst.get_node("Map")
 	hud_node = main_inst.get_node("HUD")
 
-	# Verify path length (~1900 px) and 14 non-overlapping build pads.
+	# Verify path length (~1900 px) and 20 non-overlapping row build pads.
 	var path_len: float = map_node.get_path_length()
 	assert(path_len >= 1800.0 and path_len <= 2000.0, "Path length should be ~1900 px, got %.1f" % path_len)
-	assert(GameMap.BUILD_PAD_POSITIONS.size() == 14, "Expected 14 build pads")
+	assert(GameMap.BUILD_PAD_POSITIONS.size() == Balance.TARGET_BUILD_PADS, "Expected %d build pads" % Balance.TARGET_BUILD_PADS)
 
 	var curve: Curve2D = map_node.enemy_path.curve
 	for pad_pos in GameMap.BUILD_PAD_POSITIONS:

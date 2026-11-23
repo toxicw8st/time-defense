@@ -11,7 +11,7 @@ extends RefCounted
 const VIEWPORT_WIDTH: int = 1280
 const VIEWPORT_HEIGHT: int = 720
 const TARGET_PATH_LENGTH_PX: float = 1891.0
-const TARGET_BUILD_PADS: int = 14
+const TARGET_BUILD_PADS: int = 20
 
 # --- Player Base & Starting State ---
 const PLAYER_STARTING_LIVES: int = 20
@@ -131,55 +131,74 @@ const TOWERS: Dictionary = {
 	},
 	"slow": {
 		"name": "Chrono Slow Tower",
-		"role": "Slows 30% for 2s (Jugg 15%) + Time Decay DoT upgrades",
+		"role": "Slows 30% for 2s (Jugg 15%) + flat Time Decay DoT upgrades",
 		"cost": 100, # $100
 		"build_time": 5.0,
-		"damage": 0.0, # Base: 0% decay - slow only, no direct damage
+		"damage": 0.0, # Base: 0 decay - slow only, no direct damage
 		"fire_rate": 1.0, # 1 shot/sec
 		"range": 115.0, # Medium range
 		"min_range": 0.0,
 		"splash_radius": 0.0,
 		"splash_edge_ratio": 1.0,
 		"damage_type": "Time",
-		"damage_type_label": "Time (30% Slow + Decay DoT)",
-		"damage_rating": "0/5/10/20% HP DoT",
+		"damage_type_label": "Time (30% Slow + Flat Decay DoT)",
+		"damage_rating": "0..95/s Time DoT",
 		"speed_rating": "Medium (1.0/s)",
 		"targeting": "first",
 		"slow_pct": 0.30,
 		"slow_duration": 2.0,
 		"decay_ticks": 3,
-		"decay_pct_by_level": [0.0, 0.05, 0.10, 0.20],
+		"decay_flat_by_level": [0.0, 12.0, 26.0, 44.0, 66.0, 95.0],
 	},
 	"railgun": {
 		"name": "Time Decay Rail Gun",
-		"role": "Long-range hitscan rail: Slows 50% for 4s (Jugg 25%) + Time Decay DoT",
+		"role": "Long-range hitscan rail: 140 Time impact + 50% slow 4s (Jugg 25%) + flat Decay DoT",
 		"cost": 375, # $375 (~$350-400)
 		"build_time": 8.0,
-		"damage": 0.0, # Base: 0% decay, Upgrade 1: 5%, Upgrade 2: 10%, Upgrade 3: 20%/tick
+		"damage": 140.0, # Heavy direct Time rail-slug impact damage + flat Time Decay DoT
 		"fire_rate": 0.20, # 1 shot every 5 seconds
 		"range": 310.0, # 2.7x Slow tower range (within 2.5-3x)
 		"min_range": 0.0,
 		"splash_radius": 0.0,
 		"splash_edge_ratio": 1.0,
 		"damage_type": "Time",
-		"damage_type_label": "Time Rail (50% Slow + Decay DoT)",
-		"damage_rating": "0/5/10/20% HP DoT",
+		"damage_type_label": "Time Rail (Impact + 50% Slow + Decay)",
+		"damage_rating": "Very High + DoT",
 		"speed_rating": "Slow (1/5s)",
 		"targeting": "first",
 		"slow_pct": 0.50,
 		"slow_duration": 4.0,
 		"decay_ticks": 3,
-		"decay_pct_by_level": [0.0, 0.05, 0.10, 0.20],
+		"decay_flat_by_level": [25.0, 50.0, 82.0, 120.0, 170.0, 235.0],
+	},
+	"annihilator": {
+		"name": "Gauss Annihilator",
+		"role": "Heavy armor-piercing boss killer (180% vs Juggernaut)",
+		"cost": 240, # $240
+		"build_time": 6.5,
+		"damage": 65.0, # 117 dmg/shot vs Juggernaut at Lv0; 491 dmg/shot vs Juggernaut at Lv5
+		"fire_rate": 0.75, # 48.75 base DPS (87.75 DPS vs Juggernaut at Lv0)
+		"range": 155.0,
+		"min_range": 0.0,
+		"splash_radius": 0.0,
+		"splash_edge_ratio": 1.0,
+		"damage_type": "Piercing",
+		"damage_type_label": "Piercing Heavy (180% vs Juggernaut)",
+		"damage_rating": "Extreme vs Boss",
+		"speed_rating": "Medium",
+		"targeting": "strongest",
 	},
 }
 
-const TOWER_UPGRADE_MAX_LEVEL: int = 3
-const TOWER_UPGRADE_COSTS: Array[int] = [60, 95, 145] # $ per upgrade level (Damage / Decay & Fire Rate)
-const TOWER_RANGE_UPGRADE_COSTS: Array[int] = [75, 160, 320] # Higher cost jump since 2x range ~4x area coverage
-const TOWER_UPGRADE_BUILD_TIMES: Array[float] = [3.0, 4.0, 5.0]
-const TOWER_DAMAGE_PER_LEVEL: float = 0.25
-const TOWER_RANGE_TOTAL_BONUSES: Array[float] = [0.0, 0.25, 0.60, 1.00] # Lv1 +25%, Lv2 +60%, Lv3 +100% (2x total range)
+const TOWER_UPGRADE_MAX_LEVEL: int = 5
+const TOWER_UPGRADE_COSTS: Array[int] = [60, 95, 145, 220, 330] # $ per upgrade level (Damage / Decay & Fire Rate, Lv 1..5)
+const TOWER_RANGE_UPGRADE_COSTS: Array[int] = [75, 160, 320, 440, 580] # Range Lv 1..5
+const TOWER_UPGRADE_BUILD_TIMES: Array[float] = [3.0, 4.0, 5.0, 6.0, 7.0]
+const TOWER_DAMAGE_TOTAL_BONUSES: Array[float] = [0.0, 0.35, 0.80, 1.40, 2.20, 3.20] # Up to 4.20x damage at Lv5
+const TOWER_DAMAGE_PER_LEVEL: float = 0.25 # Legacy fallback constant
+const TOWER_RANGE_TOTAL_BONUSES: Array[float] = [0.0, 0.25, 0.60, 1.00, 1.30, 1.60] # Lv1 +25%, Lv2 +60%, Lv3 +100% (2x), Lv4 +130%, Lv5 +160%
 const TOWER_RANGE_PER_LEVEL: float = 0.25 # Legacy fallback constant
+const TOWER_FIRE_RATE_TOTAL_BONUSES: Array[float] = [0.0, 0.20, 0.45, 0.75, 1.10, 1.50] # Up to 2.50x fire rate at Lv5
 const TOWER_FIRE_RATE_PER_LEVEL: float = 0.15
 const TOWER_SELL_REFUND_RATIO: float = 0.5 # LOCKED 50% refund
 

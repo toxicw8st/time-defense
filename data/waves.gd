@@ -144,7 +144,10 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		return WAVES[wave_number - 1]
 
 	var w: int = maxi(1, wave_number)
-	var budget_s: int = get_target_threat_s_dollars(w, player_assets_spent)
+	var raw_budget_s: int = get_target_threat_s_dollars(w, player_assets_spent)
+	# Ensure Waves 11+ continue smoothly upward from Wave 9/10 (s$210) instead of dipping to s$39
+	var smooth_post10_s: int = int(round(215.0 * pow(1.055, float(maxi(0, w - 11)))))
+	var budget_s: int = maxi(raw_budget_s, smooth_post10_s)
 	var remaining_s: int = budget_s
 	var is_boss_wave: bool = (w % 10 == 0)
 
@@ -177,54 +180,54 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		remaining_s -= rusher_count * 2
 		crawler_count = maxi(0, remaining_s)
 
-	var wave_len: float = Balance.get_wave_length(w)
-	var platoon_gap: float = maxf(60.0, (wave_len - 50.0) * 0.5)
+	# Steady, continuous spawn stream across the wave (no huge 60-115s empty platoon gaps or instant clumped bursts)
+	var spawn_span: float = clampf(38.0 + float(w - 10) * 1.4, 40.0, 95.0)
 	var tracks: Array[Dictionary] = []
 
-	if jugg_count > 0:
+	if crawler_count > 0:
 		tracks.append({
-			"type": "juggernaut",
-			"count": jugg_count,
-			"interval": 2.0,
-			"group_size": maxi(1, int(ceil(float(jugg_count) / 3.0))),
-			"group_delay": platoon_gap,
+			"type": "crawler",
+			"count": crawler_count,
+			"interval": clampf(spawn_span / float(maxi(1, crawler_count)), 0.45, 1.40),
+			"group_size": 0,
+			"group_delay": 0.0,
 			"start_delay": 0.0,
-		})
-	if brute_count > 0:
-		tracks.append({
-			"type": "brute",
-			"count": brute_count,
-			"interval": 1.4,
-			"group_size": maxi(1, int(ceil(float(brute_count) / 3.0))),
-			"group_delay": platoon_gap,
-			"start_delay": 0.4,
-		})
-	if blitzer_count > 0:
-		tracks.append({
-			"type": "blitzer",
-			"count": blitzer_count,
-			"interval": 1.6,
-			"group_size": maxi(1, int(ceil(float(blitzer_count) / 3.0))),
-			"group_delay": platoon_gap,
-			"start_delay": 1.2,
 		})
 	if rusher_count > 0:
 		tracks.append({
 			"type": "rusher",
 			"count": rusher_count,
-			"interval": clampf(4.5 / float(maxi(1, rusher_count)), 0.15, 0.55),
-			"group_size": maxi(1, int(ceil(float(rusher_count) / 3.0))),
-			"group_delay": platoon_gap,
-			"start_delay": 0.8,
+			"interval": clampf(spawn_span / float(maxi(1, rusher_count)), 0.55, 1.80),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 1.2,
 		})
-	if crawler_count > 0:
+	if brute_count > 0:
 		tracks.append({
-			"type": "crawler",
-			"count": crawler_count,
-			"interval": clampf(4.5 / float(maxi(1, crawler_count)), 0.12, 0.45),
-			"group_size": maxi(1, int(ceil(float(crawler_count) / 3.0))),
-			"group_delay": platoon_gap,
-			"start_delay": 0.0,
+			"type": "brute",
+			"count": brute_count,
+			"interval": clampf(spawn_span / float(maxi(1, brute_count)), 3.20, 7.50),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 2.5,
+		})
+	if blitzer_count > 0:
+		tracks.append({
+			"type": "blitzer",
+			"count": blitzer_count,
+			"interval": clampf(spawn_span / float(maxi(1, blitzer_count)), 4.00, 9.00),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 4.0,
+		})
+	if jugg_count > 0:
+		tracks.append({
+			"type": "juggernaut",
+			"count": jugg_count,
+			"interval": clampf(spawn_span / float(maxi(1, jugg_count)), 8.50, 14.00),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 6.0,
 		})
 
 	return {

@@ -72,14 +72,19 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	assert(not hud.get_node("RightPanel/Margin/VBox/Scroll/ContentVBox").has_node("ResearchBox"), "ResearchBox must be removed from in-game RightPanel!")
 	assert(hud.has_node("BetweenLevelsOverlay"), "BetweenLevelsOverlay must exist for between-levels research & level picking")
 
-	# Verify all 5 tower buttons (Blaster, Mortar, Laser, Chrono Slow, Decay Rail) are visible and have procedural icons
+	# Verify all 6 tower buttons (Blaster, Mortar, Laser, Chrono Slow, Decay Rail, Gauss Annihilator) are visible and have procedural icons
 	assert(hud.build_menu_box.visible)
 	assert(hud.build_blaster_button.visible and hud.build_mortar_button.visible and hud.build_laser_button.visible)
-	assert(hud.build_slow_button.visible and hud.build_railgun_button.visible)
+	assert(hud.build_slow_button.visible and hud.build_railgun_button.visible and hud.build_annihilator_button.visible)
 	assert(hud.build_blaster_button.icon != null and hud.build_mortar_button.icon != null and hud.build_laser_button.icon != null)
-	assert(hud.build_slow_button.icon != null and hud.build_railgun_button.icon != null)
+	assert(hud.build_slow_button.icon != null and hud.build_railgun_button.icon != null and hud.build_annihilator_button.icon != null)
 	assert(hud.manip_upgrade_button.icon != null)
 	assert(hud.download_button.visible, "DL / App button must be visible in TopBar Row2")
+
+	# Verify all 20 build pads lie strictly on the 4 horizontal rows (y = 32, 157, 322, 449)
+	assert(GameMap.BUILD_PAD_POSITIONS.size() == 20)
+	for p_pos in GameMap.BUILD_PAD_POSITIONS:
+		assert(p_pos.y in [32.0, 157.0, 322.0, 449.0], "Pad %s must be aligned to one of the 4 horizontal rows!" % str(p_pos))
 
 	# Verify Chrono Slow ($100, 115px) vs Rail Gun ($375, 310px = 2.7x range)
 	assert(int(Balance.TOWERS["slow"]["cost"]) == 100 and is_equal_approx(float(Balance.TOWERS["slow"]["range"]), 115.0))
@@ -108,6 +113,7 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 		hud.build_laser_button,
 		hud.build_slow_button,
 		hud.build_railgun_button,
+		hud.build_annihilator_button,
 		hud.manip_upgrade_button,
 	]
 	for b in buttons_to_hover:
@@ -564,51 +570,67 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	assert(is_equal_approx(j_slow.get_current_move_speed(), j_base_spd * 0.75), "Rail Gun must slow Juggernaut by half (25%)")
 	j_slow.queue_free()
 
-	# 2) Verify Decay DoT math on Standard (1.0x): Base 0%, Upg1 5% -> 14.2625%, Upg2 10% -> 27.1%, Upg3 20% -> 48.8%
-	for case_data in [[0.0, 1.0], [0.05, pow(0.95, 3)], [0.10, pow(0.90, 3)], [0.20, pow(0.80, 3)]]:
-		var raw_pct: float = float(case_data[0])
-		var expected_frac: float = float(case_data[1])
+	# 2) Verify Flat Time Decay DoT math (NOT percentage HP!) on Standard (1.0x): Base 0, Lv1 12/s, Lv2 26/s, Lv3 44/s
+	for case_data in [[0.0, 1000.0], [12.0, 1000.0 - 36.0], [26.0, 1000.0 - 78.0], [44.0, 1000.0 - 132.0]]:
+		var raw_flat: float = float(case_data[0])
+		var expected_hp_left: float = float(case_data[1])
 		var e: EnemyUnit = map.spawn_enemy("crawler", 1)
 		e.max_hp = 1000.0
 		e.hp = 1000.0
-		e.apply_time_hit(0.30, 2.0, raw_pct, 3)
+		e.apply_time_hit(0.30, 2.0, raw_flat, 3)
 		e.step_status_effects(1.0)
 		e.step_status_effects(1.0)
 		e.step_status_effects(1.0)
-		assert(is_equal_approx(e.hp, 1000.0 * expected_frac), "Standard Decay %.0f%% over 3 ticks expected %.2f HP left, got %.2f" % [raw_pct * 100.0, 1000.0 * expected_frac, e.hp])
+		assert(is_equal_approx(e.hp, expected_hp_left), "Standard Flat Decay %.0f/s over 3 ticks expected %.2f HP left, got %.2f" % [raw_flat, expected_hp_left, e.hp])
 		e.queue_free()
 
-	# 3) Verify Juggernaut Decay uses HIGHEST multiplier 150% (NOT 180%) AND caps effective per-tick at 30%!
+	# 3) Verify Juggernaut Flat Decay uses HIGHEST multiplier 150% (NOT 180%) and does NOT melt 5,000 HP bosses by percentage!
 	var jug_decay: EnemyUnit = map.spawn_enemy("juggernaut", 10)
 	jug_decay.max_hp = 5000.0
 	jug_decay.hp = 5000.0
-	# Upg2 (10%) * 1.50 = 15% per tick
-	var dealt_lv2: float = jug_decay.apply_time_decay_tick(0.10)
-	assert(is_equal_approx(dealt_lv2, 5000.0 * 0.15), "Juggernaut Lv2 10%% * 1.50 must deal 15%% = 750, got %.2f" % dealt_lv2)
-	# Upg3 (20%) * 1.50 = 30.0% cap; even raw 25% (* 1.5 = 37.5%) MUST cap at 30%!
-	jug_decay.hp = 5000.0
-	var dealt_cap: float = jug_decay.apply_time_decay_tick(0.25)
-	assert(is_equal_approx(dealt_cap, 5000.0 * 0.30), "Juggernaut effective Time Decay MUST cap at 30%%/tick (1500), got %.2f" % dealt_cap)
+	# Slow Tower Lv2 (26 flat) * 1.50 = 39.0 damage per tick (NOT 750!)
+	var dealt_lv2: float = jug_decay.apply_time_decay_tick(26.0)
+	assert(is_equal_approx(dealt_lv2, 39.0), "Juggernaut Slow Lv2 flat 26 * 1.50 must deal 39.0 (no %%HP boss cheese), got %.2f" % dealt_lv2)
+	# Rail Gun Lv3 (120 flat) * 1.50 = 180.0 damage per tick
+	var dealt_rail: float = jug_decay.apply_time_decay_tick(120.0)
+	assert(is_equal_approx(dealt_rail, 180.0), "Juggernaut Rail Lv3 flat 120 * 1.50 must deal 180.0, got %.2f" % dealt_rail)
 	jug_decay.queue_free()
 
 	# 4) Verify Decay refreshes ticks without stacking, and executes if HP < 1.0
 	var e_ref: EnemyUnit = map.spawn_enemy("crawler", 1)
 	e_ref.max_hp = 100.0
 	e_ref.hp = 100.0
-	e_ref.apply_time_hit(0.30, 2.0, 0.20, 3)
+	e_ref.apply_time_hit(0.30, 2.0, 20.0, 3)
 	e_ref.step_status_effects(1.0) # tick 1 -> 80 HP, 2 ticks left
-	e_ref.apply_time_hit(0.30, 2.0, 0.20, 3) # re-hit refreshes to 3 ticks WITHOUT stacking!
-	e_ref.step_status_effects(1.0) # tick -> 64 HP (not 51.2!)
-	assert(is_equal_approx(e_ref.hp, 64.0), "Re-hit Decay must refresh ticks without stacking (expected 64.0, got %.2f)" % e_ref.hp)
-	e_ref.hp = 1.15
-	e_ref.apply_time_decay_tick(0.20) # 1.15 * 0.80 = 0.92 < 1.0 -> execute!
+	e_ref.apply_time_hit(0.30, 2.0, 20.0, 3) # re-hit refreshes to 3 ticks WITHOUT stacking!
+	e_ref.step_status_effects(1.0) # tick -> 60 HP (not 40!)
+	assert(is_equal_approx(e_ref.hp, 60.0), "Re-hit Decay must refresh ticks without stacking (expected 60.0, got %.2f)" % e_ref.hp)
+	e_ref.hp = 20.8
+	e_ref.apply_time_decay_tick(20.0) # 20.8 - 20.0 = 0.8 < 1.0 -> execute!
 	assert(e_ref.is_dead_or_leaked, "Decay tick dropping HP below 1.0 must execute enemy!")
 	e_ref.queue_free()
+
+	# 4b) Verify Waves 11+ spawn smoothly without huge 60-115s gaps
+	for test_w in [11, 15, 20]:
+		var sched: Array[Dictionary] = WavesData.build_spawn_schedule(test_w)
+		assert(sched.size() >= 15)
+		var max_gap: float = 0.0
+		for s_idx in range(1, sched.size()):
+			var gap: float = float(sched[s_idx]["time"]) - float(sched[s_idx - 1]["time"])
+			max_gap = maxf(max_gap, gap)
+		assert(max_gap <= 15.0, "Wave %d must stream continuously without huge platoon gaps (max gap=%.2fs)" % [test_w, max_gap])
+
+	# 4c) Verify Drag-and-Drop tower placement onto a row slot
+	var hud_ref: CanvasLayer = inst.get_node("HUD")
+	GameState.mission.economy["money"] = 1000
+	var p15_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[14] + map.position # Row 1 Pad P15 (300, 32)
+	var dropped_tower: TowerUnit = hud_ref.drag_and_drop_tower("annihilator", p15_screen + Vector2(10.0, -6.0))
+	assert(dropped_tower != null and dropped_tower.tower_type == "annihilator" and map.pad_occupancy[14] == dropped_tower, "Drag-and-drop must snap to Row 1 Pad P15 and build Gauss Annihilator")
 
 	remove_child(inst)
 	inst.queue_free()
 
-	# 5) Wave 10 Package Test: Piercing Blasters + Chrono Slow & Rail Gun set to Strongest + Haste/Pause + Rewind W9 farm
+	# 5) Wave 10 Package Test: Gauss Annihilators + Piercing Blasters + Chrono Slow & Rail Gun + Lv3-4 upgrades + Pause/Haste
 	GameState.reset_meta_progression()
 	GameState.prompts_muted = true
 	GameState.reset_mission()
@@ -623,24 +645,31 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	GameState.mission.surge_deadline_wave = 11
 	GameState.mission.economy["money"] = 99999
 
-	# Build balanced Piercing + Time Decay Strongest loadout across lanes
-	for pad_idx in [0, 2, 4, 5, 10, 12]:
+	# Build Gauss Annihilators + Piercing Blasters + Chrono Slow + Rail Gun across the 4 rows
+	for pad_idx in [4, 5, 10]:
+		var ann: TowerUnit = map2.build_tower_on_pad(pad_idx, "annihilator")
+		ann.current_job = null
+		ann.is_built = true
+		ann.levels["damage"] = 3
+		ann.levels["fire_rate"] = 2
+		ann.set_target_mode("strongest")
+	for pad_idx in [0, 1, 2, 12]:
 		var b: TowerUnit = map2.build_tower_on_pad(pad_idx, "blaster")
 		b.current_job = null
 		b.is_built = true
-		b.levels["damage"] = 2
-		b.levels["fire_rate"] = 1
+		b.levels["damage"] = 3
+		b.levels["fire_rate"] = 2
 		b.set_target_mode("strongest")
 	var slow1: TowerUnit = map2.build_tower_on_pad(3, "slow")
 	slow1.current_job = null
 	slow1.is_built = true
-	slow1.levels["damage"] = 2 # Lv2 Decay (10%)
+	slow1.levels["damage"] = 2 # Lv2 flat Decay (26/s)
 	slow1.levels["range"] = 1 # +25% range
 	slow1.set_target_mode("strongest")
 	var rail1: TowerUnit = map2.build_tower_on_pad(6, "railgun")
 	rail1.current_job = null
 	rail1.is_built = true
-	rail1.levels["damage"] = 2 # Lv2 Decay (10%)
+	rail1.levels["damage"] = 2 # 140*1.8 hit + 82/s flat Decay
 	rail1.set_target_mode("strongest")
 
 	wm2.start_wave()

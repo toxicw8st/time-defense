@@ -78,7 +78,7 @@ func get_current_move_speed() -> float:
 	return base_speed * speed_multiplier_at_spawn * slow_mult
 
 
-func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_pct: float, ticks: int = 3) -> void:
+func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float, ticks: int = 3) -> void:
 	if is_dead_or_leaked:
 		return
 	# Juggernaut resists slow by half
@@ -87,12 +87,12 @@ func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_pct: float, 
 		slow_pct = eff_slow
 	slow_remaining = maxf(slow_remaining, slow_dur)
 
-	# Decay DoT refreshes 3s / 3-tick timer on re-hit; NEVER stacks
-	if raw_decay_pct > 0.0:
+	# Flat Time Decay DoT refreshes 3s / 3-tick timer on re-hit; NEVER stacks
+	if raw_decay_flat > 0.0:
 		if decay_ticks_remaining > 0:
-			decay_base_pct = maxf(decay_base_pct, raw_decay_pct)
+			decay_base_pct = maxf(decay_base_pct, raw_decay_flat)
 		else:
-			decay_base_pct = raw_decay_pct
+			decay_base_pct = raw_decay_flat
 		decay_ticks_remaining = ticks
 		decay_tick_timer = 1.0
 	queue_redraw()
@@ -120,12 +120,12 @@ func step_status_effects(delta: float) -> void:
 			decay_base_pct = 0.0
 
 
-func apply_time_decay_tick(raw_tick_pct: float) -> float:
-	if is_dead_or_leaked or raw_tick_pct <= 0.0:
+## Applies flat Time Decay damage per tick multiplied by the Time row of DAMAGE_MATRIX (100% Std, 120% Arm, 150% Refl/Jugg).
+func apply_time_decay_tick(raw_flat_dmg: float) -> float:
+	if is_dead_or_leaked or raw_flat_dmg <= 0.0:
 		return 0.0
 	var matrix_mult: float = Balance.get_damage_multiplier("Time", armour_tags)
-	var eff_pct: float = minf(Balance.TIME_DECAY_MAX_TICK_PCT, raw_tick_pct * matrix_mult)
-	var dmg: float = hp * eff_pct
+	var dmg: float = raw_flat_dmg * matrix_mult
 	hp -= dmg
 	# Execute rule: if remaining HP < 1.0 after a tick, kill immediately!
 	if hp < 1.0:

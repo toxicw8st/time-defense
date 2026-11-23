@@ -64,23 +64,29 @@ func uses_decay_upgrades() -> bool:
 	return tower_type == "slow" or tower_type == "railgun"
 
 
-func get_decay_tick_pct() -> float:
+func get_decay_flat_damage() -> float:
 	if not uses_decay_upgrades():
 		return 0.0
-	var ladder: Array = Balance.TOWERS[tower_type].get("decay_pct_by_level", [0.0, 0.05, 0.10, 0.20])
+	var ladder: Array = Balance.TOWERS[tower_type].get("decay_flat_by_level", [0.0, 12.0, 26.0, 44.0, 66.0, 95.0])
 	var lvl: int = clampi(int(levels["damage"]), 0, ladder.size() - 1)
-	return float(ladder[lvl])
+	return float(ladder[lvl]) * GameState.get_tower_damage_research_multiplier()
+
+
+func get_decay_tick_pct() -> float:
+	return get_decay_flat_damage()
 
 
 func get_effective_damage() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["damage"])
-	var upg_mult: float = 1.0 + Balance.TOWER_DAMAGE_PER_LEVEL * float(levels["damage"])
+	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
+	var upg_mult: float = 1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]
 	return base * upg_mult * GameState.get_tower_damage_research_multiplier()
 
 
 func get_effective_fire_rate() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["fire_rate"])
-	var upg_mult: float = 1.0 + Balance.TOWER_FIRE_RATE_PER_LEVEL * float(levels["fire_rate"])
+	var spd_lvl: int = clampi(int(levels["fire_rate"]), 0, Balance.TOWER_FIRE_RATE_TOTAL_BONUSES.size() - 1)
+	var upg_mult: float = 1.0 + Balance.TOWER_FIRE_RATE_TOTAL_BONUSES[spd_lvl]
 	return base * upg_mult * GameState.get_tower_attack_speed_multiplier()
 
 
@@ -262,13 +268,22 @@ func _fire_at(target: EnemyUnit) -> void:
 			var pulse: ProjectileEffect = projectile_scene.instantiate()
 			map_ref.projectiles_container.add_child(pulse)
 			pulse.setup_tracer(position, target.position, Color(0.35, 0.92, 1.0), 3.0, 0.12)
-		target.apply_time_hit(float(cfg["slow_pct"]), float(cfg["slow_duration"]), get_decay_tick_pct(), int(cfg["decay_ticks"]))
+		target.apply_time_hit(float(cfg["slow_pct"]), float(cfg["slow_duration"]), get_decay_flat_damage(), int(cfg["decay_ticks"]))
 	elif tower_type == "railgun":
 		if map_ref != null:
 			var rail: ProjectileEffect = projectile_scene.instantiate()
 			map_ref.projectiles_container.add_child(rail)
 			rail.setup_tracer(position, target.position, Color(0.88, 0.55, 1.0), 4.5, 0.22)
-		target.apply_time_hit(float(cfg["slow_pct"]), float(cfg["slow_duration"]), get_decay_tick_pct(), int(cfg["decay_ticks"]))
+		if dmg > 0.0:
+			target.take_damage(dmg, dtype)
+		if is_instance_valid(target) and not target.is_dead_or_leaked:
+			target.apply_time_hit(float(cfg["slow_pct"]), float(cfg["slow_duration"]), get_decay_flat_damage(), int(cfg["decay_ticks"]))
+	elif tower_type == "annihilator":
+		if map_ref != null:
+			var sabot: ProjectileEffect = projectile_scene.instantiate()
+			map_ref.projectiles_container.add_child(sabot)
+			sabot.setup_tracer(position, target.position, Color(1.0, 0.78, 0.26), 4.2, 0.16)
+		target.take_damage(dmg, dtype)
 	elif tower_type == "mortar":
 		if map_ref != null:
 			var shell: ProjectileEffect = projectile_scene.instantiate()
@@ -363,6 +378,8 @@ func _draw() -> void:
 			accent_col = Color(0.32, 0.92, 1.0)
 		"railgun":
 			accent_col = Color(0.75, 0.46, 1.0)
+		"annihilator":
+			accent_col = Color(1.0, 0.72, 0.24)
 
 	var outer_oct := _make_octagon(16.0)
 	var inner_oct := _make_octagon(13.2)
@@ -466,13 +483,28 @@ func _draw() -> void:
 				draw_circle(fwd * (r_len + 2.0), 5.5, Color(0.95, 0.72, 1.0, 0.95))
 				draw_circle(fwd * (r_len + 2.0), 2.6, Color(1.0, 0.96, 0.72))
 
+		"annihilator":
+			# Heavy Gauss Annihilator anti-boss siege turret
+			var g_len: float = 20.0 - recoil
+			draw_line(-fwd * 4.0 + side * 6.5, fwd * 8.0 + side * 6.5, Color(0.42, 0.24, 0.14), 4.0)
+			draw_line(-fwd * 4.0 - side * 6.5, fwd * 8.0 - side * 6.5, Color(0.42, 0.24, 0.14), 4.0)
+			draw_line(fwd * 2.0, fwd * g_len, Color(0.28, 0.22, 0.18), 7.5)
+			draw_line(fwd * 2.0 + side * 2.2, fwd * g_len + side * 2.2, Color(1.0, 0.78, 0.28), 2.0)
+			draw_line(fwd * 2.0 - side * 2.2, fwd * g_len - side * 2.2, Color(1.0, 0.78, 0.28), 2.0)
+			_draw_rot_poly([Vector2(-9, -8), Vector2(6, -7), Vector2(9, 0), Vector2(6, 7), Vector2(-9, 8)], aim_angle, Color(0.78, 0.34, 0.18))
+			draw_circle(Vector2.ZERO, 4.8, Color(1.0, 0.85, 0.32))
+			draw_circle(Vector2.ZERO, 2.2, Color.WHITE)
+			if muzzle_flash_timer > 0.0:
+				draw_circle(fwd * (g_len + 2.5), 6.2, Color(1.0, 0.82, 0.28, 0.95))
+				draw_circle(fwd * (g_len + 2.5), 3.0, Color.WHITE)
+
 	# Compact target mode pill at bottom of pedestal
 	var tgt_tag: String = str(Balance.TARGETING_SHORT_TAGS.get(target_mode, "1ST"))
 	draw_rect(Rect2(Vector2(-13, 8), Vector2(26, 11)), Color(0.05, 0.08, 0.13, 0.88))
 	draw_rect(Rect2(Vector2(-13, 8), Vector2(26, 11)), accent_col.darkened(0.2), false, 1.0)
 	draw_string(font, Vector2(-10, 17), tgt_tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.98, 0.95, 0.68))
 
-	# Individual color-coded upgrade pips (Damage=Red/Violet, Range=Cyan, FireRate=Gold) + total level badge
+	# Individual color-coded upgrade pips (Damage=Red/Violet, Range=Cyan, FireRate=Gold) + total level badge (up to Lv5 each)
 	var d_lvl: int = int(levels["damage"])
 	var r_lvl: int = int(levels["range"])
 	var s_lvl: int = int(levels["fire_rate"])
@@ -481,8 +513,8 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(-15, -24), Vector2(22, 11)), Color(0.06, 0.09, 0.14, 0.9))
 		draw_string(font, Vector2(-13, -15), "+%d" % total_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.90, 0.38))
 		for i in range(d_lvl):
-			draw_circle(Vector2(10.0, -12.0 + float(i) * 4.5), 1.8, Color(1.0, 0.45, 0.38))
+			draw_circle(Vector2(10.0, -13.0 + float(i) * 3.8), 1.6, Color(1.0, 0.45, 0.38))
 		for i in range(r_lvl):
-			draw_circle(Vector2(14.0, -12.0 + float(i) * 4.5), 1.8, Color(0.38, 0.92, 1.0))
+			draw_circle(Vector2(13.8, -13.0 + float(i) * 3.8), 1.6, Color(0.38, 0.92, 1.0))
 		for i in range(s_lvl):
-			draw_circle(Vector2(18.0, -12.0 + float(i) * 4.5), 1.8, Color(1.0, 0.88, 0.32))
+			draw_circle(Vector2(17.6, -13.0 + float(i) * 3.8), 1.6, Color(1.0, 0.88, 0.32))

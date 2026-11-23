@@ -38,6 +38,7 @@ signal start_wave_requested
 @onready var build_laser_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildLaserButton
 @onready var build_slow_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildSlowButton
 @onready var build_railgun_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildRailgunButton
+@onready var build_annihilator_button: Button = $RightPanel/Margin/VBox/Scroll/ContentVBox/BuildMenuBox/BuildAnnihilatorButton
 
 @onready var tower_panel_box: VBoxContainer = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox
 @onready var tower_header_label: Label = $RightPanel/Margin/VBox/Scroll/ContentVBox/TowerPanelBox/TowerHeaderLabel
@@ -114,7 +115,10 @@ var _icons: Dictionary = {}
 var _hover_descriptions: Dictionary = {}
 var _hovered_button: Button = null
 var _tapped_info_button: Button = null
-var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false, "slow": false, "railgun": false}
+var _armed_style_state: Dictionary = {"blaster": false, "mortar": false, "laser": false, "slow": false, "railgun": false, "annihilator": false}
+var _drag_candidate_type: String = ""
+var _drag_start_screen_pos: Vector2 = Vector2.ZERO
+var _is_dragging_tower: bool = false
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -176,16 +180,26 @@ func _ready() -> void:
 	build_laser_button.pressed.connect(func() -> void: _build_tower("laser"))
 	build_slow_button.pressed.connect(func() -> void: _build_tower("slow"))
 	build_railgun_button.pressed.connect(func() -> void: _build_tower("railgun"))
+	build_annihilator_button.pressed.connect(func() -> void: _build_tower("annihilator"))
 	build_blaster_button.mouse_entered.connect(func() -> void: _set_preview_type("blaster"))
 	build_mortar_button.mouse_entered.connect(func() -> void: _set_preview_type("mortar"))
 	build_laser_button.mouse_entered.connect(func() -> void: _set_preview_type("laser"))
 	build_slow_button.mouse_entered.connect(func() -> void: _set_preview_type("slow"))
 	build_railgun_button.mouse_entered.connect(func() -> void: _set_preview_type("railgun"))
+	build_annihilator_button.mouse_entered.connect(func() -> void: _set_preview_type("annihilator"))
 	build_blaster_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_mortar_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_laser_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_slow_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
 	build_railgun_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
+	build_annihilator_button.mouse_exited.connect(func() -> void: _set_preview_type(""))
+
+	_connect_tower_drag(build_blaster_button, "blaster")
+	_connect_tower_drag(build_mortar_button, "mortar")
+	_connect_tower_drag(build_laser_button, "laser")
+	_connect_tower_drag(build_slow_button, "slow")
+	_connect_tower_drag(build_railgun_button, "railgun")
+	_connect_tower_drag(build_annihilator_button, "annihilator")
 
 	target_mode_button.pressed.connect(_on_cycle_target_mode_pressed)
 	upg_dmg_button.pressed.connect(func() -> void: _upgrade_selected("damage"))
@@ -264,7 +278,7 @@ func _setup_right_panel_buttons() -> void:
 	hover_info_panel.add_theme_stylebox_override("panel", UIIcons.make_button_style(Color(0.10, 0.13, 0.19), Color(0.32, 0.44, 0.62), 1))
 
 	var icon_keys: Array[String] = [
-		"blaster", "mortar", "laser", "slow", "railgun", "target", "damage", "range", "fire_rate", "sell", "manipulator",
+		"blaster", "mortar", "laser", "slow", "railgun", "annihilator", "target", "damage", "range", "fire_rate", "sell", "manipulator",
 		"rapid_cycling", "reinforced_shots", "extended_optics", "efficient_manipulator", "hive_breaker",
 	]
 	for k in icon_keys:
@@ -275,6 +289,7 @@ func _setup_right_panel_buttons() -> void:
 	_init_styled_button(build_laser_button, _icons["laser"], Color(0.85, 0.35, 0.82))
 	_init_styled_button(build_slow_button, _icons["slow"], Color(0.25, 0.82, 0.92))
 	_init_styled_button(build_railgun_button, _icons["railgun"], Color(0.68, 0.42, 0.95))
+	_init_styled_button(build_annihilator_button, _icons["annihilator"], Color(1.0, 0.72, 0.25))
 	_init_styled_button(target_mode_button, _icons["target"], Color(0.95, 0.85, 0.40))
 	_init_styled_button(upg_dmg_button, _icons["damage"], Color(0.92, 0.48, 0.35))
 	_init_styled_button(upg_rng_button, _icons["range"], Color(0.35, 0.82, 0.95))
@@ -368,14 +383,66 @@ func set_references(
 	_refresh_all()
 
 
+func _connect_tower_drag(btn: Button, tower_type: String) -> void:
+	btn.gui_input.connect(func(ev: InputEvent) -> void:
+		if GameState.mission.is_over:
+			return
+		var cost: int = int(Balance.TOWERS[tower_type]["cost"])
+		if GameState.mission.economy["money"] < cost:
+			return
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			_drag_candidate_type = tower_type
+			_drag_start_screen_pos = ev.global_position
+			_is_dragging_tower = false
+		elif ev is InputEventScreenTouch and ev.pressed:
+			_drag_candidate_type = tower_type
+			_drag_start_screen_pos = btn.get_global_transform_with_canvas() * ev.position
+			_is_dragging_tower = false
+	)
+
+
+func drag_and_drop_tower(tower_type: String, target_screen_pos: Vector2) -> TowerUnit:
+	if map_ref == null:
+		return null
+	map_ref.update_drag_placement(tower_type, target_screen_pos)
+	var built: TowerUnit = map_ref.finish_drag_placement(tower_type, target_screen_pos)
+	_refresh_all()
+	return built
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1:
 			debug_panel.visible = not debug_panel.visible
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_ESCAPE:
-			_toggle_pause_menu()
+			if _is_dragging_tower and map_ref != null:
+				map_ref.cancel_drag_placement()
+				_drag_candidate_type = ""
+				_is_dragging_tower = false
+			else:
+				_toggle_pause_menu()
 			get_viewport().set_input_as_handled()
+		return
+
+	if _drag_candidate_type != "":
+		if event is InputEventMouseMotion or event is InputEventScreenDrag:
+			var gpos: Vector2 = event.position
+			if not _is_dragging_tower and gpos.distance_to(_drag_start_screen_pos) >= 8.0:
+				_is_dragging_tower = true
+				if map_ref != null:
+					map_ref.set_pending_build_type(_drag_candidate_type)
+			if _is_dragging_tower and map_ref != null:
+				map_ref.update_drag_placement(_drag_candidate_type, gpos)
+				_refresh_selection_panel()
+		elif (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed) or (event is InputEventScreenTouch and not event.pressed):
+			if _is_dragging_tower and map_ref != null:
+				var built: TowerUnit = map_ref.finish_drag_placement(_drag_candidate_type, event.position)
+				if built != null:
+					map_ref.set_pending_build_type("")
+				_refresh_all()
+			_drag_candidate_type = ""
+			_is_dragging_tower = false
 
 
 func _process(delta: float) -> void:
@@ -657,11 +724,11 @@ func _refresh_selection_panel() -> void:
 		_set_button_description(target_mode_button, "Targeting (%s): First/Last/Strongest/Weakest/Fastest/Slowest." % tlabel)
 
 		if _selected_tower.uses_decay_upgrades():
-			_style_upgrade_button(upg_dmg_button, "Decay DoT", "damage", _selected_tower, money, "5%/10%/20% current HP/s (3 ticks Time DoT, execute <1 HP)")
+			_style_upgrade_button(upg_dmg_button, "Decay DoT", "damage", _selected_tower, money, "Flat Time Decay DoT/sec (3 ticks, 150% vs Refl/Jugg, execute <1 HP)")
 		else:
-			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+25% damage per level")
-		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+25% / +60% / +100% (2x) total range")
-		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+15% fire speed per level")
+			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+35% / +80% / +140% / +220% / +320% total damage")
+		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+25% / +60% / +100% / +130% / +160% total range")
+		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+20% / +45% / +75% / +110% / +150% fire speed")
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
@@ -679,25 +746,30 @@ func _refresh_selection_panel() -> void:
 	elif _selected_pad_idx >= 0:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
-		build_pad_label.text = "BUILD ON PAD P%d" % (_selected_pad_idx + 1)
+		var rnum: int = GameMap.get_pad_row_number(_selected_pad_idx)
+		build_pad_label.text = "BUILD ON ROW %d - PAD P%d" % [rnum, _selected_pad_idx + 1]
 		_style_build_button(build_blaster_button, "blaster", money, false)
 		_style_build_button(build_mortar_button, "mortar", money, false)
 		_style_build_button(build_laser_button, "laser", money, false)
 		_style_build_button(build_slow_button, "slow", money, false)
 		_style_build_button(build_railgun_button, "railgun", money, false)
+		_style_build_button(build_annihilator_button, "annihilator", money, false)
 	else:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
 		var pending: String = map_ref.pending_build_type if map_ref != null else ""
-		if pending != "":
-			build_pad_label.text = "CLICK PAD P1-P14 TO PLACE %s" % Balance.TOWERS[pending]["name"].to_upper()
+		if _is_dragging_tower and _drag_candidate_type != "":
+			build_pad_label.text = "DROP %s ON ANY ROW 1-4 SLOT" % Balance.TOWERS[_drag_candidate_type]["name"].to_upper()
+		elif pending != "":
+			build_pad_label.text = "TAP OR DROP ON ROW 1-4 TO PLACE %s" % Balance.TOWERS[pending]["name"].to_upper()
 		else:
-			build_pad_label.text = "BUILD TOWERS"
+			build_pad_label.text = "BUILD TOWERS (DRAG TO ROW OR TAP)"
 		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
 		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
 		_style_build_button(build_laser_button, "laser", money, pending == "laser")
 		_style_build_button(build_slow_button, "slow", money, pending == "slow")
 		_style_build_button(build_railgun_button, "railgun", money, pending == "railgun")
+		_style_build_button(build_annihilator_button, "annihilator", money, pending == "annihilator")
 
 
 func _refresh_research_panel() -> void:
@@ -815,6 +887,8 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 			accent = Color(0.25, 0.82, 0.92)
 		elif tower_type == "railgun":
 			accent = Color(0.68, 0.42, 0.95)
+		elif tower_type == "annihilator":
+			accent = Color(1.0, 0.72, 0.25)
 		UIIcons.apply_right_button_theme(btn, accent, is_armed)
 
 	var desc: String = "$%d, %ds | %s" % [
@@ -827,9 +901,11 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	elif tower_type == "laser":
 		desc += " - 150% Std, 10% Refl."
 	elif tower_type == "slow":
-		desc += " - 1/s, 30% slow 2s, Decay DoT."
+		desc += " - 30% slow 2s + flat Time Decay."
 	elif tower_type == "railgun":
-		desc += " - 1/5s long rail, 50% slow 4s, Decay."
+		desc += " - 140 hit + 50% slow 4s + Decay."
+	elif tower_type == "annihilator":
+		desc += " - Heavy anti-boss (117-491/hit vs Jugg)."
 	else:
 		desc += " - JUGGERNAUT COUNTER (180%)."
 	_set_button_description(btn, desc)
@@ -849,15 +925,16 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 		btn.text = "%s %s MAX" % [title, pips]
 		btn.disabled = true
 		btn.modulate = Color(0.75, 0.92, 0.78)
-		_set_button_description(btn, "%s MAX (3/3): %s." % [title, desc_detail])
+		_set_button_description(btn, "%s MAX (%d/%d): %s." % [title, Balance.TOWER_UPGRADE_MAX_LEVEL, Balance.TOWER_UPGRADE_MAX_LEVEL, desc_detail])
 		return
 	var cost: int = Balance.get_tower_upgrade_cost(key, lvl)
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
 	btn.text = "%s %s ($%d)" % [title, pips, cost]
 	btn.disabled = not can_buy
-	_set_button_description(btn, "Lvl %d/3 ($%d, %ds): %s. No fire while building." % [
+	_set_button_description(btn, "Lvl %d/%d ($%d, %ds): %s. No fire while building." % [
 		lvl + 1,
+		Balance.TOWER_UPGRADE_MAX_LEVEL,
 		cost,
 		btime,
 		desc_detail,
