@@ -25,6 +25,8 @@ func _ready() -> void:
 	if get_viewport() != null:
 		get_viewport().size_changed.connect(_on_viewport_resized)
 		_on_viewport_resized()
+	if get_parent() == get_tree().root:
+		hud.open_start_menu()
 
 
 func _on_viewport_resized() -> void:

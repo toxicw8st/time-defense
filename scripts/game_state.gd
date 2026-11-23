@@ -82,7 +82,8 @@ var meta_research_ranks: Dictionary = {
 	"efficient_manipulator": 0,
 	"hive_breaker": 0,
 }
-var selected_mission_level: int = Balance.BASE_ATTACK_DEFAULT_LEVEL # Level 1=1 shot, Level 2=2 shots, Level 3=3 shots
+var selected_mission_level: int = Balance.BASE_ATTACK_DEFAULT_LEVEL # 1/N rule: Level 1..5 shots
+var selected_map_level: int = 1 # Map layout 1..5 (Level 1 = Chrono Rows, 2 = Vertical Corridors, 3 = Citadel Islands, 4 = Spiral Labyrinth, 5 = Omega Gauntlet)
 
 
 func _ready() -> void:
@@ -116,11 +117,19 @@ func toggle_speed_pause() -> void:
 	set_speed_paused(not is_speed_paused)
 
 
+func select_level(level_n: int) -> void:
+	var clamped: int = clampi(level_n, 1, Balance.MAX_MISSION_LEVELS)
+	selected_map_level = clamped
+	selected_mission_level = clamped
+	economy_changed.emit()
+
+
 func reset_meta_progression() -> void:
 	meta_research = 0
 	for k in meta_research_ranks.keys():
 		meta_research_ranks[k] = 0
 	selected_mission_level = Balance.BASE_ATTACK_DEFAULT_LEVEL
+	selected_map_level = 1
 	_sync_mission_research_mirror()
 	economy_changed.emit()
 

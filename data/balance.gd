@@ -412,13 +412,52 @@ const MANIPULATOR_UPGRADES: Dictionary = {
 	},
 }
 
-# --- Enemy Base & Hive Destroyer ($450 charge cost, 1/N rule) ---
+# --- Enemy Base & Hive Destroyer ($450 charge cost, 1/N rule across 5 Levels) ---
 const ENEMY_BASE_MAX_HP: int = 500
-const BASE_ATTACK_DEFAULT_LEVEL: int = 3 # Level 3 = 3 shots (167 dmg/shot); Level 1 = 1 shot (500); Level 2 = 2 shots (250)
+const MAX_MISSION_LEVELS: int = 5
+const BASE_ATTACK_DEFAULT_LEVEL: int = 3 # Default 3 shots (167 dmg/shot) for baseline test suite; Levels 1..5 use 1/N rule
 const BASE_ATTACK_TEST_DAMAGE_OVERRIDE: int = 167
 const BASE_ATTACK_COST: int = 450 # $450 per shot (requires multiple waves of savings / Rewind farming)
 const BASE_ATTACK_CHARGE_TIME: float = 30.0
 const BASE_ATTACK_FIRE_WARNING_TIME: float = 1.0
+
+const LEVELS: Dictionary = {
+	1: {
+		"name": "Level 1: Chrono Rows",
+		"short_name": "Lv1: Chrono Rows",
+		"zone_type": "4 Horizontal Row Zones",
+		"shots_required": 1,
+		"description": "Classic S-trench battlefield. Drag & drop towers anywhere along the 4 horizontal row zones (ROW 1-4). 1 Hive Destroyer shot (500 dmg) destroys the Alien Base.",
+	},
+	2: {
+		"name": "Level 2: Vertical Corridors",
+		"short_name": "Lv2: Vertical Corridors",
+		"zone_type": "3 Vertical Column Zones",
+		"shots_required": 2,
+		"description": "Vertical canyon switchbacks. Drag & drop towers inside the 3 tall vertical corridor columns (COL 1-3) between lanes. 2 Hive Destroyer shots (250 dmg/shot) required.",
+	},
+	3: {
+		"name": "Level 3: Twin Citadel Islands",
+		"short_name": "Lv3: Citadel Islands",
+		"zone_type": "4 Central Island Zones",
+		"shots_required": 3,
+		"description": "Wide perimeter loops wrapping around 4 fortified central island plazas (ISLAND NW/NE/SW/SE). 3 Hive Destroyer shots (167 dmg/shot) required.",
+	},
+	4: {
+		"name": "Level 4: Spiral Labyrinth",
+		"short_name": "Lv4: Spiral Labyrinth",
+		"zone_type": "4 Spiral Core & Bastion Pockets",
+		"shots_required": 4,
+		"description": "Aliens spiral clockwise from the outer rim into the central Player Base. Drop towers inside 4 inner bastion pockets. 4 Hive Destroyer shots (125 dmg/shot) required.",
+	},
+	5: {
+		"name": "Level 5: Omega Gauntlet",
+		"short_name": "Lv5: Omega Gauntlet",
+		"zone_type": "5 Switchback Kill-Box Pillboxes",
+		"shots_required": 5,
+		"description": "High-threat 5-turn zig-zag gauntlet. Drag & drop towers into the 5 hairpin switchback pillboxes (PILLBOX 1-5). 5 Hive Destroyer shots (100 dmg/shot) required.",
+	},
+}
 
 
 static func get_wave_length(wave_number: int) -> float:

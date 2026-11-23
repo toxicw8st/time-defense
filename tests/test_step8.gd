@@ -620,12 +620,80 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 			max_gap = maxf(max_gap, gap)
 		assert(max_gap <= 15.0, "Wave %d must stream continuously without huge platoon gaps (max gap=%.2fs)" % [test_w, max_gap])
 
-	# 4c) Verify Drag-and-Drop tower placement onto a row slot
+	# 4c) Verify Area-Based Drag-and-Drop tower placement (both pad-aligned and free-form inside a zone) + rejection outside zones
 	var hud_ref: CanvasLayer = inst.get_node("HUD")
-	GameState.mission.economy["money"] = 1000
+	GameState.mission.economy["money"] = 2000
 	var p15_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[14] + map.position # Row 1 Pad P15 (300, 32)
 	var dropped_tower: TowerUnit = hud_ref.drag_and_drop_tower("annihilator", p15_screen + Vector2(10.0, -6.0))
-	assert(dropped_tower != null and dropped_tower.tower_type == "annihilator" and map.pad_occupancy[14] == dropped_tower, "Drag-and-drop must snap to Row 1 Pad P15 and build Gauss Annihilator")
+	assert(dropped_tower != null and dropped_tower.tower_type == "annihilator" and map.pad_occupancy[14] == dropped_tower, "Drag-and-drop near P15 must snap to Row 1 Pad P15 and build Gauss Annihilator")
+
+	# Free-form drop in Level 1 ROW 1 between P15 (300,32) and P2 (380,32) at (340, 32)
+	var free_row_screen: Vector2 = Vector2(340.0, 32.0) + map.position
+	var free_tower: TowerUnit = hud_ref.drag_and_drop_tower("blaster", free_row_screen)
+	assert(free_tower != null and is_equal_approx(free_tower.position.x, 340.0) and is_equal_approx(free_tower.position.y, 32.0), "Free drag-and-drop inside Level 1 Row 1 area must place tower at (340, 32)")
+
+	# Invalid drop outside placement zones (on the path at (350, 75)) must be rejected and spend $0
+	var money_before_bad_drop: int = GameState.mission.economy["money"]
+	var bad_tower: TowerUnit = hud_ref.drag_and_drop_tower("blaster", Vector2(350.0, 75.0) + map.position)
+	assert(bad_tower == null and GameState.mission.economy["money"] == money_before_bad_drop, "Dropping outside placement zones must fail and cost $0")
+
+	# 4d) Verify Start Menu, all 5 Levels (Levels 1..5), their placement zones, and 1/N Hive shots
+	var ba_ref: BaseAttackManager = inst.get_node("BaseAttackManager")
+	hud_ref.open_start_menu()
+	assert(hud_ref.start_menu_overlay != null and hud_ref.start_menu_overlay.visible, "Start Menu must open")
+	assert(hud_ref.start_level_buttons.size() == 5, "Start Menu must have 5 level buttons")
+	var expected_shots_dmg: Array[int] = [500, 250, 167, 125, 100]
+	for lvl_id in range(1, 6):
+		hud_ref._select_level(lvl_id)
+		map.load_level(lvl_id)
+		assert(GameState.selected_map_level == lvl_id and GameState.selected_mission_level == lvl_id)
+		assert(ba_ref.get_shot_damage() == expected_shots_dmg[lvl_id - 1], "Level %d shot dmg expected %d, got %d" % [lvl_id, expected_shots_dmg[lvl_id - 1], ba_ref.get_shot_damage()])
+		var plen_lvl: float = map.get_path_length()
+		assert(plen_lvl >= 1800.0 and plen_lvl <= 2000.0, "Level %d path length must be ~1900px, got %.1f" % [lvl_id, plen_lvl])
+		assert(map.active_placement_zones.size() >= 3, "Level %d must define placement zones" % lvl_id)
+		assert(map.active_pad_positions.size() == 20, "Level %d must define 20 pad anchor positions" % lvl_id)
+		for p_pt in map.active_pad_positions:
+			var z_hit: int = map.find_zone_for_point(p_pt, 4.0)
+			assert(z_hit >= 0, "Level %d pad %s must lie inside a placement zone!" % [lvl_id, str(p_pt)])
+			var d_path: float = p_pt.distance_to(map.enemy_path.curve.get_closest_point(p_pt))
+			assert(d_path >= 36.5, "Level %d pad %s too close to path: %.1f" % [lvl_id, str(p_pt), d_path])
+
+	# Test 2D island box drag-and-drop on Level 3 (ISLAND NW at (280, 155))
+	hud_ref._select_level(3)
+	map.load_level(3)
+	GameState.mission.economy["money"] = 1000
+	var island_drop: TowerUnit = hud_ref.drag_and_drop_tower("laser", Vector2(280.0, 155.0) + map.position)
+	assert(island_drop != null and is_equal_approx(island_drop.position.x, 280.0) and is_equal_approx(island_drop.position.y, 155.0), "2D area drop inside Level 3 ISLAND NW must place tower at (280, 155)")
+	hud_ref.close_start_menu()
+	assert(not hud_ref.start_menu_overlay.visible)
+
+	# 4e) Verify Base Visual States: Player Base Almost Dead vs About to Surge, plus Alien Base stages
+	GameState.mission.lives = 20
+	GameState.mission.surge_timer_seconds = 950.0
+	GameState.mission.wave_number = 1
+	GameState.mission.surge_deadline_wave = 6
+	var pb_nom: Dictionary = map.get_player_base_visual_state()
+	assert(not pb_nom["almost_dead"] and not pb_nom["surge_imminent"] and pb_nom["visual_style"] == "nominal_citadel")
+
+	GameState.mission.lives = 5
+	var pb_crit: Dictionary = map.get_player_base_visual_state()
+	assert(pb_crit["almost_dead"] and not pb_crit["surge_imminent"] and pb_crit["visual_style"] == "critical_hull_fire_smoke")
+
+	GameState.mission.lives = 20
+	GameState.mission.surge_timer_seconds = 10.0
+	var pb_surge: Dictionary = map.get_player_base_visual_state()
+	assert(not pb_surge["almost_dead"] and pb_surge["surge_imminent"] and pb_surge["visual_style"] == "temporal_overload_lightning")
+
+	GameState.mission.enemy_base_hp = 500
+	assert(map.get_enemy_base_visual_state()["damage_stage"] == "healthy")
+	GameState.mission.enemy_base_hp = 300
+	assert(map.get_enemy_base_visual_state()["damage_stage"] == "damaged")
+	GameState.mission.enemy_base_hp = 120
+	var eb_crit: Dictionary = map.get_enemy_base_visual_state()
+	assert(eb_crit["damage_stage"] == "critical" and eb_crit["almost_dead"])
+	GameState.select_level(1)
+	GameState.selected_mission_level = Balance.BASE_ATTACK_DEFAULT_LEVEL
+	map.load_level(1)
 
 	remove_child(inst)
 	inst.queue_free()

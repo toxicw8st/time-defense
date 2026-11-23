@@ -58,6 +58,8 @@ signal start_wave_requested
 @onready var level_1_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level1Button
 @onready var level_2_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level2Button
 @onready var level_3_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level3Button
+@onready var level_4_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level4Button
+@onready var level_5_button: Button = $BetweenLevelsOverlay/Margin/VBox/LevelRow/Level5Button
 @onready var research_list_box: VBoxContainer = $BetweenLevelsOverlay/Margin/VBox/ResearchButtons
 @onready var launch_level_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/LaunchLevelButton
 @onready var close_lab_button: Button = $BetweenLevelsOverlay/Margin/VBox/BottomButtons/CloseLabButton
@@ -120,6 +122,17 @@ var _drag_candidate_type: String = ""
 var _drag_start_screen_pos: Vector2 = Vector2.ZERO
 var _is_dragging_tower: bool = false
 
+var start_menu_overlay: PanelContainer = null
+var start_level_buttons: Array[Button] = []
+var start_level_title_label: Label = null
+var start_level_desc_label: Label = null
+var start_meta_label: Label = null
+var start_play_button: Button = null
+var start_lab_button: Button = null
+var start_download_button: Button = null
+var pause_main_menu_button: Button = null
+var end_main_menu_button: Button = null
+
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
 	"reinforced_shots",
@@ -160,6 +173,8 @@ func _ready() -> void:
 	level_1_button.pressed.connect(func() -> void: _select_level(1))
 	level_2_button.pressed.connect(func() -> void: _select_level(2))
 	level_3_button.pressed.connect(func() -> void: _select_level(3))
+	level_4_button.pressed.connect(func() -> void: _select_level(4))
+	level_5_button.pressed.connect(func() -> void: _select_level(5))
 	launch_level_button.pressed.connect(_on_launch_level_pressed)
 	close_lab_button.pressed.connect(func() -> void: between_levels_overlay.visible = false)
 
@@ -208,6 +223,7 @@ func _ready() -> void:
 	sell_button.pressed.connect(_on_sell_pressed)
 
 	_build_research_buttons()
+	_build_start_menu()
 	_setup_right_panel_buttons()
 
 	GameState.mission_ended.connect(_on_mission_ended)
@@ -228,8 +244,26 @@ func _exit_tree() -> void:
 		GameState.event_logged.disconnect(_on_event_logged)
 
 
+func open_start_menu() -> void:
+	pause_overlay.visible = false
+	end_overlay.visible = false
+	between_levels_overlay.visible = false
+	get_tree().paused = false
+	if start_menu_overlay != null:
+		start_menu_overlay.visible = true
+	_refresh_all()
+
+
+func close_start_menu() -> void:
+	if start_menu_overlay != null:
+		start_menu_overlay.visible = false
+	_refresh_all()
+
+
 func open_between_levels_screen() -> void:
 	end_overlay.visible = false
+	if start_menu_overlay != null:
+		start_menu_overlay.visible = false
 	between_levels_overlay.visible = true
 	_refresh_all()
 
@@ -240,14 +274,172 @@ func _toggle_between_levels_screen() -> void:
 
 
 func _select_level(level_n: int) -> void:
-	GameState.selected_mission_level = clampi(level_n, 1, 3)
+	GameState.select_level(level_n)
+	if map_ref != null and not GameState.is_wave_active and GameState.mission.wave_number == 1:
+		map_ref.load_level(GameState.selected_map_level)
 	_refresh_all()
 
 
 func _on_launch_level_pressed() -> void:
 	between_levels_overlay.visible = false
+	if start_menu_overlay != null:
+		start_menu_overlay.visible = false
+	if map_ref != null:
+		map_ref.load_level(GameState.selected_map_level)
 	GameState.reset_mission()
 	restart_requested.emit()
+
+
+func _build_start_menu() -> void:
+	start_menu_overlay = PanelContainer.new()
+	start_menu_overlay.name = "StartMenuOverlay"
+	start_menu_overlay.visible = false
+	start_menu_overlay.position = Vector2(180.0, 68.0)
+	start_menu_overlay.size = Vector2(920.0, 560.0)
+	start_menu_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.98), Color(0.38, 0.78, 1.0), 10, 6.0, 6.0))
+	add_child(start_menu_overlay)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	start_menu_overlay.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "TIME DEFENSE: CHRONO COMMAND"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
+	vbox.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "TACTICAL TOWER DEFENSE & TEMPORAL WARFARE — SELECT MISSION SECTOR (LEVELS 1-5)"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 11)
+	subtitle.add_theme_color_override("font_color", Color(0.75, 0.86, 0.98))
+	vbox.add_child(subtitle)
+
+	var sep1 := HSeparator.new()
+	vbox.add_child(sep1)
+
+	var lvl_row := HBoxContainer.new()
+	lvl_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(lvl_row)
+
+	start_level_buttons.clear()
+	for lvl_id in range(1, 6):
+		var lcfg: Dictionary = Balance.LEVELS[lvl_id]
+		var lbtn := Button.new()
+		lbtn.name = "StartLevel%dButton" % lvl_id
+		lbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbtn.custom_minimum_size = Vector2(0, 56)
+		lbtn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbtn.add_theme_font_size_override("font_size", 11)
+		lbtn.text = "%s\n(%s)" % [lcfg["short_name"], lcfg["zone_type"]]
+		var captured_id: int = lvl_id
+		lbtn.pressed.connect(func() -> void: _select_level(captured_id))
+		UIIcons.apply_right_button_theme(lbtn, Color(0.32, 0.68, 0.96))
+		lvl_row.add_child(lbtn)
+		start_level_buttons.append(lbtn)
+
+	var info_panel := PanelContainer.new()
+	info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.12, 0.20, 0.95), Color(0.28, 0.52, 0.78), 6, 12.0, 10.0))
+	vbox.add_child(info_panel)
+
+	var info_vbox := VBoxContainer.new()
+	info_vbox.add_theme_constant_override("separation", 8)
+	info_panel.add_child(info_vbox)
+
+	start_level_title_label = Label.new()
+	start_level_title_label.add_theme_font_size_override("font_size", 15)
+	start_level_title_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.38))
+	info_vbox.add_child(start_level_title_label)
+
+	start_level_desc_label = Label.new()
+	start_level_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	start_level_desc_label.add_theme_font_size_override("font_size", 12)
+	start_level_desc_label.add_theme_color_override("font_color", Color(0.90, 0.95, 1.0))
+	info_vbox.add_child(start_level_desc_label)
+
+	var rules_lbl := Label.new()
+	rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rules_lbl.add_theme_font_size_override("font_size", 11)
+	rules_lbl.add_theme_color_override("font_color", Color(0.68, 0.84, 0.96))
+	rules_lbl.text = "\n".join([
+		"• DRAG & DROP PLACEMENT: Drag any tower from the right shop directly into the highlighted placement zones on the map.",
+		"• BASE VISUAL ALERTS: Watch your Citadel for hull-fire/smoke (Almost Dead) vs violet lightning ripples (Imminent Time Surge).",
+		"• TIME POWERS & WIN CONDITION: Use Rewind, Pause, or Haste every 5 waves to prevent Surge. Charge Hive Destroyer ($450) to destroy the Alien Hive.",
+	])
+	info_vbox.add_child(rules_lbl)
+
+	start_meta_label = Label.new()
+	start_meta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	start_meta_label.add_theme_font_size_override("font_size", 12)
+	start_meta_label.add_theme_color_override("font_color", Color(0.48, 0.92, 1.0))
+	vbox.add_child(start_meta_label)
+
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 14)
+	vbox.add_child(action_row)
+
+	start_play_button = Button.new()
+	start_play_button.name = "StartPlayButton"
+	start_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_play_button.custom_minimum_size = Vector2(0, 46)
+	start_play_button.add_theme_font_size_override("font_size", 14)
+	start_play_button.text = "LAUNCH LEVEL 1"
+	start_play_button.pressed.connect(func() -> void:
+		if GameState.selected_mission_level != GameState.selected_map_level:
+			GameState.select_level(GameState.selected_map_level)
+		_on_launch_level_pressed()
+	)
+	UIIcons.apply_right_button_theme(start_play_button, Color(0.28, 0.88, 0.62))
+	action_row.add_child(start_play_button)
+
+	start_lab_button = Button.new()
+	start_lab_button.name = "StartLabButton"
+	start_lab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_lab_button.custom_minimum_size = Vector2(0, 46)
+	start_lab_button.add_theme_font_size_override("font_size", 13)
+	start_lab_button.text = "RESEARCH LAB (META-UPGRADES)"
+	start_lab_button.pressed.connect(open_between_levels_screen)
+	UIIcons.apply_right_button_theme(start_lab_button, Color(0.42, 0.72, 0.96))
+	action_row.add_child(start_lab_button)
+
+	start_download_button = Button.new()
+	start_download_button.name = "StartDownloadButton"
+	start_download_button.custom_minimum_size = Vector2(170, 46)
+	start_download_button.add_theme_font_size_override("font_size", 12)
+	start_download_button.text = "INSTALL / APP"
+	start_download_button.pressed.connect(_on_download_button_pressed)
+	UIIcons.apply_right_button_theme(start_download_button, Color(0.68, 0.52, 0.95))
+	action_row.add_child(start_download_button)
+
+	# Also add "Main Menu" buttons to PauseOverlay and EndOverlay
+	var pause_btns := get_node_or_null("PauseOverlay/Margin/VBox/PauseButtons") as HBoxContainer
+	if pause_btns != null:
+		pause_main_menu_button = Button.new()
+		pause_main_menu_button.name = "PauseMainMenuButton"
+		pause_main_menu_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pause_main_menu_button.text = "Main Menu"
+		pause_main_menu_button.pressed.connect(open_start_menu)
+		UIIcons.apply_right_button_theme(pause_main_menu_button, Color(0.42, 0.72, 0.96))
+		pause_btns.add_child(pause_main_menu_button)
+
+	var end_vbox := get_node_or_null("EndOverlay/Margin/VBox") as VBoxContainer
+	if end_vbox != null:
+		end_main_menu_button = Button.new()
+		end_main_menu_button.name = "EndMainMenuButton"
+		end_main_menu_button.text = "Return to Main Menu (Select Level 1-5)"
+		end_main_menu_button.pressed.connect(open_start_menu)
+		UIIcons.apply_right_button_theme(end_main_menu_button, Color(0.42, 0.72, 0.96))
+		end_vbox.add_child(end_main_menu_button)
 
 
 func _build_research_buttons() -> void:
@@ -703,7 +895,8 @@ func _refresh_selection_panel() -> void:
 		tower_panel_box.visible = true
 
 		var cfg: Dictionary = Balance.TOWERS[_selected_tower.tower_type]
-		tower_header_label.text = "%s (Pad P%d)" % [cfg["name"], _selected_tower.pad_index + 1]
+		var loc_tag: String = "Pad P%d" % (_selected_tower.pad_index + 1) if _selected_tower.pad_index >= 0 else "Tower Zone"
+		tower_header_label.text = "%s (%s)" % [cfg["name"], loc_tag]
 		tower_ratings_label.text = "%s - Damage: %s, Speed: %s" % [
 			cfg["damage_type_label"],
 			cfg["damage_rating"],
@@ -732,10 +925,9 @@ func _refresh_selection_panel() -> void:
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
-		_set_button_description(sell_button, "Refund $%d (50%% of $%d spent) and free pad P%d." % [
+		_set_button_description(sell_button, "Refund $%d (50%% of $%d spent) and free placement slot." % [
 			refund,
 			_selected_tower.total_spent,
-			_selected_tower.pad_index + 1,
 		])
 		if _sell_confirm_armed:
 			sell_button.text = "CONFIRM SELL (+$%d)" % refund
@@ -743,11 +935,13 @@ func _refresh_selection_panel() -> void:
 		else:
 			sell_button.text = "Sell Tower (+$%d)" % refund
 			sell_button.modulate = Color.WHITE
-	elif _selected_pad_idx >= 0:
+	elif _selected_pad_idx >= 0 or (map_ref != null and map_ref.selected_drop_pos.x >= 0.0):
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
-		var rnum: int = GameMap.get_pad_row_number(_selected_pad_idx)
-		build_pad_label.text = "BUILD ON ROW %d - PAD P%d" % [rnum, _selected_pad_idx + 1]
+		var zlabel: String = map_ref.get_zone_label_for_pad(_selected_pad_idx) if (map_ref != null and _selected_pad_idx >= 0) else "TOWER ZONE"
+		if map_ref != null and map_ref.selected_zone_index >= 0 and map_ref.selected_zone_index < map_ref.active_placement_zones.size():
+			zlabel = str(map_ref.active_placement_zones[map_ref.selected_zone_index]["label"])
+		build_pad_label.text = "BUILD IN %s%s" % [zlabel, (" - PAD P%d" % (_selected_pad_idx + 1)) if _selected_pad_idx >= 0 else ""]
 		_style_build_button(build_blaster_button, "blaster", money, false)
 		_style_build_button(build_mortar_button, "mortar", money, false)
 		_style_build_button(build_laser_button, "laser", money, false)
@@ -758,12 +952,14 @@ func _refresh_selection_panel() -> void:
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
 		var pending: String = map_ref.pending_build_type if map_ref != null else ""
+		var cur_lvl: int = map_ref.current_level_id if map_ref != null else GameState.selected_map_level
+		var z_rule: String = str(Balance.LEVELS.get(cur_lvl, Balance.LEVELS[1])["zone_type"]).to_upper()
 		if _is_dragging_tower and _drag_candidate_type != "":
-			build_pad_label.text = "DROP %s ON ANY ROW 1-4 SLOT" % Balance.TOWERS[_drag_candidate_type]["name"].to_upper()
+			build_pad_label.text = "DROP %s IN ANY %s" % [Balance.TOWERS[_drag_candidate_type]["name"].to_upper(), z_rule]
 		elif pending != "":
-			build_pad_label.text = "TAP OR DROP ON ROW 1-4 TO PLACE %s" % Balance.TOWERS[pending]["name"].to_upper()
+			build_pad_label.text = "TAP OR DROP IN %s TO PLACE %s" % [z_rule, Balance.TOWERS[pending]["name"].to_upper()]
 		else:
-			build_pad_label.text = "BUILD TOWERS (DRAG TO ROW OR TAP)"
+			build_pad_label.text = "DRAG TOWER TO %s" % z_rule
 		_style_build_button(build_blaster_button, "blaster", money, pending == "blaster")
 		_style_build_button(build_mortar_button, "mortar", money, pending == "mortar")
 		_style_build_button(build_laser_button, "laser", money, pending == "laser")
@@ -774,15 +970,39 @@ func _refresh_selection_panel() -> void:
 
 func _refresh_research_panel() -> void:
 	var res: int = GameState.meta_research
-	meta_research_status_label.text = "Persistent Meta-Research: %d R | Selected Level: %d (%d shot%s to destroy Hive)" % [
+	var sel_lvl: int = GameState.selected_mission_level
+	var sel_map: int = GameState.selected_map_level
+	var map_cfg: Dictionary = Balance.LEVELS.get(sel_map, Balance.LEVELS[1])
+	meta_research_status_label.text = "Persistent Meta-Research: %d R | Selected: %s (%s | %d shot%s to destroy Hive)" % [
 		res,
-		GameState.selected_mission_level,
-		GameState.selected_mission_level,
-		"s" if GameState.selected_mission_level > 1 else "",
+		map_cfg["name"],
+		map_cfg["zone_type"],
+		sel_lvl,
+		"s" if sel_lvl > 1 else "",
 	]
-	level_1_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 1 else Color.WHITE
-	level_2_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 2 else Color.WHITE
-	level_3_button.modulate = Color(0.45, 0.95, 1.0) if GameState.selected_mission_level == 3 else Color.WHITE
+	var lvl_btns: Array[Button] = [level_1_button, level_2_button, level_3_button, level_4_button, level_5_button]
+	for idx in range(lvl_btns.size()):
+		if lvl_btns[idx] != null:
+			lvl_btns[idx].modulate = Color(0.45, 0.95, 1.0) if sel_map == (idx + 1) else Color.WHITE
+
+	if start_menu_overlay != null:
+		for idx in range(start_level_buttons.size()):
+			var sbtn: Button = start_level_buttons[idx]
+			var is_active: bool = (sel_map == idx + 1)
+			sbtn.modulate = Color(0.45, 0.98, 1.0) if is_active else Color.WHITE
+		if start_level_title_label != null:
+			start_level_title_label.text = "%s  —  %s (%d Hive Destroyer Shot%s)" % [
+				str(map_cfg["name"]).to_upper(),
+				str(map_cfg["zone_type"]),
+				int(map_cfg["shots_required"]),
+				"s" if int(map_cfg["shots_required"]) > 1 else "",
+			]
+		if start_level_desc_label != null:
+			start_level_desc_label.text = str(map_cfg["description"])
+		if start_meta_label != null:
+			start_meta_label.text = "Persistent Meta-Research Available: %d R (Max %d R earned per mission)" % [res, Balance.MAX_RESEARCH_PER_MISSION]
+		if start_play_button != null:
+			start_play_button.text = "START %s" % str(map_cfg["name"]).to_upper()
 
 	var can_spend_now: bool = not GameState.is_wave_active and (GameState.mission.wave_number == 1 or GameState.mission.is_over)
 	for key in RESEARCH_ORDER:
@@ -1023,8 +1243,12 @@ func _on_refinery_button_pressed() -> void:
 func _build_tower(tower_type: String) -> void:
 	if map_ref == null:
 		return
-	if _selected_pad_idx >= 0 and map_ref.pad_occupancy[_selected_pad_idx] == null:
+	if _selected_pad_idx >= 0 and _selected_pad_idx < map_ref.pad_occupancy.size() and map_ref.pad_occupancy[_selected_pad_idx] == null:
 		map_ref.build_tower_on_pad(_selected_pad_idx, tower_type)
+	elif map_ref.selected_drop_pos.x >= 0.0:
+		var built: TowerUnit = map_ref.build_tower_in_zone(map_ref.selected_drop_pos, tower_type, map_ref.selected_zone_index)
+		if built != null:
+			map_ref.selected_drop_pos = Vector2(-1.0, -1.0)
 	else:
 		if map_ref.pending_build_type == tower_type:
 			map_ref.set_pending_build_type("")
@@ -1192,6 +1416,9 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		between_levels_overlay.size = Vector2(840.0, 444.0)
 		end_overlay.position = Vector2(340.0, 150.0)
 		end_overlay.size = Vector2(600.0, 360.0)
+		if start_menu_overlay != null:
+			start_menu_overlay.position = Vector2(180.0, 68.0)
+			start_menu_overlay.size = Vector2(920.0, 560.0)
 		debug_panel.position = Vector2(16.0, 74.0)
 		return
 
@@ -1235,6 +1462,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
 		_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
 		_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
+		_center_overlay(start_menu_overlay, vp_size, Vector2(920.0, 560.0))
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		return
 
@@ -1274,6 +1502,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
 	_center_overlay(between_levels_overlay, vp_size, Vector2(840.0, 444.0))
 	_center_overlay(end_overlay, vp_size, Vector2(600.0, 360.0))
+	_center_overlay(start_menu_overlay, vp_size, Vector2(920.0, 560.0))
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 
 
