@@ -252,6 +252,15 @@ func _build_research_buttons() -> void:
 
 
 func _setup_right_panel_buttons() -> void:
+	right_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.11, 0.17, 0.96), Color(0.28, 0.42, 0.62), 0, 0.0, 0.0))
+	pause_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.07, 0.10, 0.16, 0.98), Color(0.38, 0.62, 0.92), 8, 4.0, 4.0))
+	between_levels_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.07, 0.10, 0.16, 0.98), Color(0.38, 0.72, 0.96), 8, 4.0, 4.0))
+	end_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.07, 0.10, 0.16, 0.98), Color(0.42, 0.68, 0.96), 8, 4.0, 4.0))
+	debug_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.06, 0.08, 0.13, 0.94), Color(0.32, 0.52, 0.75), 6, 4.0, 4.0))
+	prompt_banner.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.10, 0.15, 0.24, 0.96), Color(0.42, 0.78, 1.0), 6, 8.0, 4.0))
+	surge_banner.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.24, 0.09, 0.14, 0.96), Color(1.0, 0.42, 0.42), 6, 8.0, 4.0))
+	UIIcons.style_progress_bar(enemy_base_bar, Color(0.88, 0.24, 0.30), Color(0.55, 0.25, 0.32))
+	UIIcons.style_progress_bar(surge_bar, Color(0.28, 0.78, 0.98), Color(0.28, 0.45, 0.68))
 	hover_info_panel.add_theme_stylebox_override("panel", UIIcons.make_button_style(Color(0.10, 0.13, 0.19), Color(0.32, 0.44, 0.62), 1))
 
 	var icon_keys: Array[String] = [
@@ -1081,8 +1090,8 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 
 	# 1) Desktop / Standard 16:9 (1280x720) — preserve exact desktop coordinates & RightPanel (340x480)
 	if vp_size.x <= 1285.0 and vp_size.y <= 725.0:
-		top_bar.remove_theme_stylebox_override("panel")
-		bottom_bar.remove_theme_stylebox_override("panel")
+		_apply_bar_safe_margins(top_bar, -2.0)
+		_apply_bar_safe_margins(bottom_bar, 2.0)
 		_set_bottom_button_widths(1.0)
 		top_bar.position = Vector2.ZERO
 		top_bar.size = Vector2(1280.0, 64.0)

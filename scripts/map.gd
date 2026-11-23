@@ -68,6 +68,7 @@ var floating_texts: Array[Dictionary] = []
 var economy_ref: Node = null
 var extra_left_margin: float = 0.0
 var extra_right_margin: float = 0.0
+var visual_time: float = 0.0
 
 
 func set_viewport_margins(left_m: float, right_m: float) -> void:
@@ -126,13 +127,11 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	var needs_redraw: bool = false
+	visual_time += delta
 	if leak_flash_timer > 0.0:
 		leak_flash_timer = maxf(0.0, leak_flash_timer - delta)
-		needs_redraw = true
 	if hive_beam_timer > 0.0:
 		hive_beam_timer = maxf(0.0, hive_beam_timer - delta)
-		needs_redraw = true
 
 	if not floating_texts.is_empty():
 		for i in range(floating_texts.size() - 1, -1, -1):
@@ -140,10 +139,8 @@ func _process(delta: float) -> void:
 			floating_texts[i]["pos"] += Vector2(0.0, -24.0 * delta)
 			if floating_texts[i]["timer"] <= 0.0:
 				floating_texts.remove_at(i)
-		needs_redraw = true
 
-	if needs_redraw:
-		queue_redraw()
+	queue_redraw()
 
 
 func _on_map_gui_input(event: InputEvent) -> void:
@@ -393,26 +390,62 @@ func _find_pad_at(local_pos: Vector2) -> int:
 	return best_idx
 
 
+func _make_regular_poly(center: Vector2, r: float, sides: int, angle_offset: float = 0.0) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in range(sides):
+		var a: float = angle_offset + float(i) * TAU / float(sides)
+		pts.append(center + Vector2(cos(a), sin(a)) * r)
+	return pts
+
+
 func _draw() -> void:
-	# Map background (extends seamlessly across 20:9 widescreen arena margins)
+	var font: Font = ThemeDB.fallback_font
 	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
-	var arena_rect := Rect2(Vector2(-extra_left_margin, 0.0), Vector2(full_w, MAP_HEIGHT))
-	draw_rect(arena_rect, Color(0.09, 0.11, 0.16))
+	var left_x: float = -extra_left_margin
+	var right_x: float = MAP_WIDTH + extra_right_margin
+	var arena_rect := Rect2(Vector2(left_x, 0.0), Vector2(full_w, MAP_HEIGHT))
+
+	# 1) Deep sci-fi tactical terrain background + dual-scale sector grid
+	draw_rect(arena_rect, Color(0.06, 0.08, 0.13))
+	# Subtle environmental sector plates
+	draw_rect(Rect2(Vector2(left_x + 12.0, 12.0), Vector2(full_w - 24.0, MAP_HEIGHT - 24.0)), Color(0.075, 0.10, 0.155))
+
+	# Minor 40 px grid & Major 80 px grid with tactical crosshairs
+	var gx_minor: float = -floorf(extra_left_margin / 40.0) * 40.0
+	while gx_minor <= right_x:
+		draw_line(Vector2(gx_minor, 0.0), Vector2(gx_minor, MAP_HEIGHT), Color(0.10, 0.13, 0.19, 0.38), 1.0)
+		gx_minor += 40.0
+	var gy_minor: float = 40.0
+	while gy_minor < MAP_HEIGHT:
+		draw_line(Vector2(left_x, gy_minor), Vector2(right_x, gy_minor), Color(0.10, 0.13, 0.19, 0.38), 1.0)
+		gy_minor += 40.0
+
 	var gx: float = -floorf(extra_left_margin / 80.0) * 80.0
-	while gx <= MAP_WIDTH + extra_right_margin:
-		draw_line(Vector2(gx, 0.0), Vector2(gx, MAP_HEIGHT), Color(0.13, 0.16, 0.23, 0.55), 1.0)
+	while gx <= right_x:
+		draw_line(Vector2(gx, 0.0), Vector2(gx, MAP_HEIGHT), Color(0.14, 0.19, 0.28, 0.62), 1.0)
+		var cy: float = 80.0
+		while cy < MAP_HEIGHT:
+			draw_line(Vector2(gx - 3.0, cy), Vector2(gx + 3.0, cy), Color(0.24, 0.35, 0.50, 0.55), 1.0)
+			draw_line(Vector2(gx, cy - 3.0), Vector2(gx, cy + 3.0), Color(0.24, 0.35, 0.50, 0.55), 1.0)
+			cy += 80.0
 		gx += 80.0
 	var gy: float = 80.0
 	while gy < MAP_HEIGHT:
-		draw_line(Vector2(-extra_left_margin, gy), Vector2(MAP_WIDTH + extra_right_margin, gy), Color(0.13, 0.16, 0.23, 0.55), 1.0)
+		draw_line(Vector2(left_x, gy), Vector2(right_x, gy), Color(0.14, 0.19, 0.28, 0.62), 1.0)
 		gy += 80.0
-	draw_rect(arena_rect, Color(0.22, 0.27, 0.36), false, 2.0)
 
-	# Refinery Annex area (bottom-left, distinct from tower pads)
-	draw_rect(REFINERY_ANNEX_RECT, Color(0.12, 0.15, 0.19))
-	draw_rect(REFINERY_ANNEX_RECT, Color(0.32, 0.52, 0.46), false, 1.5)
-	var font: Font = ThemeDB.fallback_font
-	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(8, 18), "REFINERY ANNEX", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.85, 0.78))
+	# Decorative atmospheric craters / tactical radar rings in non-pad space
+	draw_arc(Vector2(105.0, 145.0), 26.0, 0.0, TAU, 28, Color(0.13, 0.18, 0.26, 0.55), 1.2)
+	draw_arc(Vector2(865.0, 140.0), 34.0, 0.0, TAU, 32, Color(0.13, 0.18, 0.26, 0.55), 1.2)
+	draw_arc(Vector2(842.0, 405.0), 54.0, 0.0, TAU, 36, Color(0.18, 0.34, 0.52, 0.35), 1.2)
+	draw_arc(Vector2(58.0, 75.0), 48.0, 0.0, TAU, 36, Color(0.48, 0.16, 0.22, 0.35), 1.2)
+
+	# 2) Refinery Annex industrial zone (bottom-left, distinct from tower pads)
+	draw_rect(Rect2(REFINERY_ANNEX_RECT.position + Vector2(2, 3), REFINERY_ANNEX_RECT.size), Color(0.0, 0.0, 0.0, 0.35))
+	draw_rect(REFINERY_ANNEX_RECT, Color(0.09, 0.13, 0.17))
+	draw_rect(Rect2(REFINERY_ANNEX_RECT.position, Vector2(REFINERY_ANNEX_RECT.size.x, 24.0)), Color(0.13, 0.22, 0.22))
+	draw_rect(REFINERY_ANNEX_RECT, Color(0.32, 0.62, 0.54), false, 1.8)
+	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(9, 16), "REFINERY ANNEX", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.68, 0.96, 0.86))
 
 	var ref_count: int = GameState.mission.economy.get("refineries_owned", 0)
 	for i in range(ref_count):
@@ -421,9 +454,16 @@ func _draw() -> void:
 		var rx: float = REFINERY_ANNEX_RECT.position.x + 16.0 + float(col) * 56.0
 		var ry: float = REFINERY_ANNEX_RECT.position.y + 32.0 + float(row) * 44.0
 		if ry + 32.0 <= REFINERY_ANNEX_RECT.end.y:
-			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.24, 0.55, 0.45))
-			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.5, 0.9, 0.75), false, 1.5)
-			draw_string(font, Vector2(rx + 10, ry + 21), "REF", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.95, 1.0, 0.95))
+			var r_rect := Rect2(Vector2(rx, ry), Vector2(44, 32))
+			draw_rect(Rect2(r_rect.position + Vector2(1.5, 2.0), r_rect.size), Color(0.0, 0.0, 0.0, 0.4))
+			draw_rect(r_rect, Color(0.14, 0.30, 0.26))
+			draw_rect(r_rect, Color(0.45, 0.88, 0.72), false, 1.5)
+			# Twin storage silos + pulsing energy core
+			draw_circle(Vector2(rx + 12.0, ry + 16.0), 7.5, Color(0.20, 0.46, 0.38))
+			draw_arc(Vector2(rx + 12.0, ry + 16.0), 7.5, 0.0, TAU, 16, Color(0.58, 0.96, 0.82), 1.2)
+			var r_pulse: float = 0.6 + 0.4 * sin(visual_time * 3.5 + float(i))
+			draw_circle(Vector2(rx + 12.0, ry + 16.0), 3.5, Color(0.48, 1.0, 0.78, r_pulse))
+			draw_string(font, Vector2(rx + 21, ry + 20), "REF", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.92, 1.0, 0.96))
 
 	if economy_ref != null and economy_ref.refinery_job != null:
 		var i: int = ref_count
@@ -433,46 +473,87 @@ func _draw() -> void:
 		var ry: float = REFINERY_ANNEX_RECT.position.y + 32.0 + float(row) * 44.0
 		if ry + 32.0 <= REFINERY_ANNEX_RECT.end.y:
 			var center := Vector2(rx + 22.0, ry + 16.0)
-			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.32, 0.35, 0.22))
+			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.22, 0.25, 0.16))
 			draw_rect(Rect2(Vector2(rx, ry), Vector2(44, 32)), Color(0.95, 0.82, 0.32), false, 1.5)
 			var prog: float = economy_ref.refinery_job.get_progress()
 			draw_arc(center, 14.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 24, Color(0.45, 0.95, 0.65), 2.5)
 			draw_string(font, Vector2(rx + 6, ry + 21), "%.1fs" % economy_ref.refinery_job.remaining_time, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 
-	# Draw S-path (plus widescreen entry/exit corridors when expanded)
+	# 3) Layered S-Path Transit Trench + Animated Directional Flow Chevrons
 	if enemy_path != null and enemy_path.curve != null:
 		var pts: PackedVector2Array = enemy_path.curve.get_baked_points()
 		if extra_left_margin > 0.0:
-			var lead_pts := PackedVector2Array([Vector2(-extra_left_margin, PATH_WAYPOINTS[0].y), PATH_WAYPOINTS[0]])
-			draw_polyline(lead_pts, Color(0.16, 0.20, 0.27), 24.0)
-			draw_polyline(lead_pts, Color(0.24, 0.29, 0.38), 16.0)
+			var lead_pts := PackedVector2Array([Vector2(left_x, PATH_WAYPOINTS[0].y), PATH_WAYPOINTS[0]])
+			draw_polyline(lead_pts, Color(0.11, 0.15, 0.22), 34.0)
+			draw_polyline(lead_pts, Color(0.18, 0.23, 0.32), 24.0)
+			draw_polyline(lead_pts, Color(0.32, 0.42, 0.56, 0.65), 2.0)
 		if extra_right_margin > 0.0:
 			var end_pt: Vector2 = PATH_WAYPOINTS[PATH_WAYPOINTS.size() - 1]
-			var tail_pts := PackedVector2Array([end_pt, Vector2(MAP_WIDTH + extra_right_margin, end_pt.y)])
-			draw_polyline(tail_pts, Color(0.16, 0.20, 0.27), 24.0)
-			draw_polyline(tail_pts, Color(0.24, 0.29, 0.38), 16.0)
+			var tail_pts := PackedVector2Array([end_pt, Vector2(right_x, end_pt.y)])
+			draw_polyline(tail_pts, Color(0.11, 0.15, 0.22), 34.0)
+			draw_polyline(tail_pts, Color(0.18, 0.23, 0.32), 24.0)
+			draw_polyline(tail_pts, Color(0.32, 0.42, 0.56, 0.65), 2.0)
 		if pts.size() >= 2:
-			draw_polyline(pts, Color(0.18, 0.22, 0.30), 32.0)
-			draw_polyline(pts, Color(0.28, 0.33, 0.42), 24.0)
-			draw_polyline(pts, Color(0.42, 0.47, 0.58), 2.0)
+			# Outer trench shadow & armor curbs
+			draw_polyline(pts, Color(0.04, 0.05, 0.08, 0.75), 40.0)
+			draw_polyline(pts, Color(0.22, 0.28, 0.39), 34.0)
+			draw_polyline(pts, Color(0.13, 0.17, 0.24), 26.0)
+			draw_polyline(pts, Color(0.17, 0.22, 0.31), 18.0)
+			# Subtle center energy guide rail
+			var rail_col := Color(0.45, 0.88, 1.0, 0.55) if GameState.is_enemies_frozen else Color(0.36, 0.48, 0.66, 0.50)
+			draw_polyline(pts, rail_col, 2.0)
 
-	# Draw 14 build pads beside path
+			# Animated directional chevrons along the path curve
+			var plen: float = enemy_path.curve.get_baked_length()
+			var flow_offset: float = 0.0 if GameState.is_enemies_frozen else fmod(visual_time * 28.0, 68.0)
+			var d_cur: float = 40.0 + flow_offset
+			while d_cur < plen - 35.0:
+				var c_pos: Vector2 = enemy_path.curve.sample_baked(d_cur, false)
+				var c_next: Vector2 = enemy_path.curve.sample_baked(minf(plen, d_cur + 4.0), false)
+				var dir: Vector2 = (c_next - c_pos).normalized()
+				if dir.length_squared() > 0.01:
+					var perp := Vector2(-dir.y, dir.x)
+					var tip: Vector2 = c_pos + dir * 4.5
+					var w_l: Vector2 = c_pos - dir * 3.5 + perp * 5.0
+					var w_r: Vector2 = c_pos - dir * 3.5 - perp * 5.0
+					var chev_col := Color(0.45, 0.72, 0.96, 0.34)
+					draw_line(w_l, tip, chev_col, 1.5)
+					draw_line(w_r, tip, chev_col, 1.5)
+				d_cur += 68.0
+
+	# 4) 14 Sci-Fi Octagonal Build Pads (P1..P14)
 	var half: float = PAD_SIZE * 0.5
+	var active_preview_type: String = pending_build_type if pending_build_type != "" else preview_tower_type
 	for i in range(BUILD_PAD_POSITIONS.size()):
 		var p: Vector2 = BUILD_PAD_POSITIONS[i]
-		var rect := Rect2(p.x - half, p.y - half, PAD_SIZE, PAD_SIZE)
-		var pad_col := Color(0.19, 0.26, 0.36)
-		var border_col := Color(0.42, 0.56, 0.75)
-		if i == selected_pad_index:
-			border_col = Color(0.95, 0.85, 0.35)
-		elif i == hovered_pad_index:
-			pad_col = Color(0.25, 0.35, 0.48)
-		draw_rect(rect, pad_col)
-		draw_rect(rect, border_col, false, 2.0)
-		draw_string(font, p + Vector2(-7, 4), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.78, 0.92))
+		var is_sel: bool = (i == selected_pad_index)
+		var is_hov: bool = (i == hovered_pad_index)
+		var is_open: bool = (pad_occupancy[i] == null)
 
-	# Range ring preview during placement hover or pending placement mode
-	var active_preview_type: String = pending_build_type if pending_build_type != "" else preview_tower_type
+		# Pad shadow & octagonal metallic plate
+		draw_colored_polygon(_make_regular_poly(p + Vector2(1.5, 2.0), half * 1.06, 8, PI * 0.125), Color(0.0, 0.0, 0.0, 0.42))
+		var outer_pad := _make_regular_poly(p, half * 1.04, 8, PI * 0.125)
+		var inner_pad := _make_regular_poly(p, half * 0.84, 8, PI * 0.125)
+		var pad_col := Color(0.14, 0.20, 0.29)
+		var border_col := Color(0.36, 0.52, 0.72)
+		if is_sel:
+			pad_col = Color(0.22, 0.30, 0.42)
+			border_col = Color(1.0, 0.88, 0.36)
+		elif is_hov:
+			pad_col = Color(0.20, 0.30, 0.44)
+			border_col = Color(0.55, 0.92, 1.0)
+		elif pending_build_type != "" and is_open:
+			border_col = Color(0.42, 0.88, 0.96, 0.75 + 0.25 * sin(visual_time * 6.0))
+
+		draw_colored_polygon(outer_pad, Color(0.10, 0.14, 0.21))
+		draw_colored_polygon(inner_pad, pad_col)
+		for s_i in range(8):
+			draw_line(outer_pad[s_i], outer_pad[(s_i + 1) % 8], border_col, 2.2 if is_sel else 1.5)
+		if is_open:
+			draw_arc(p, 10.5, 0.0, TAU, 20, Color(0.26, 0.38, 0.54, 0.65), 1.1)
+			draw_string(font, p + Vector2(-7, 4), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.68, 0.82, 0.96))
+
+	# 5) Range ring preview during placement hover or pending placement mode
 	var preview_pad: int = -1
 	if pending_build_type != "" and hovered_pad_index >= 0 and pad_occupancy[hovered_pad_index] == null:
 		preview_pad = hovered_pad_index
@@ -483,45 +564,76 @@ func _draw() -> void:
 		var cfg: Dictionary = Balance.TOWERS[active_preview_type]
 		var r: float = float(cfg["range"]) * GameState.get_tower_range_research_multiplier()
 		var min_r: float = float(cfg.get("min_range", 0.0))
-		draw_circle(center, r, Color(0.4, 0.85, 1.0, 0.08))
-		draw_arc(center, r, 0.0, TAU, 48, Color(0.45, 0.85, 1.0, 0.65), 1.5)
+		draw_circle(center, r, Color(0.38, 0.85, 1.0, 0.08))
+		draw_arc(center, r, 0.0, TAU, 56, Color(0.45, 0.88, 1.0, 0.72), 1.6)
 		if min_r > 0.0:
 			draw_circle(center, min_r, Color(1.0, 0.35, 0.35, 0.08))
-			draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.7), 1.5)
+			draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.75), 1.5)
 
-	# Enemy Base marker (path start)
-	var eb_rect := Rect2(ENEMY_BASE_POS - Vector2(28, 28), Vector2(56, 56))
-	var eb_fill := Color(0.98, 0.78, 0.25) if hive_beam_timer > 0.0 else Color(0.45, 0.14, 0.18)
-	draw_rect(eb_rect, eb_fill)
-	draw_rect(eb_rect, Color(0.95, 0.35, 0.35), false, 2.5)
-	draw_string(font, ENEMY_BASE_POS + Vector2(-24, -34), "HIVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.65, 0.65))
+	# 6) Enemy Base Marker (Alien Bio-Spire Hive at path start)
+	var hive_pulse: float = 0.7 + 0.3 * sin(visual_time * 3.8)
+	draw_circle(ENEMY_BASE_POS + Vector2(2, 3), 32.0, Color(0.0, 0.0, 0.0, 0.45))
+	var hive_outer := _make_regular_poly(ENEMY_BASE_POS, 30.0, 8, visual_time * 0.25)
+	var hive_inner := _make_regular_poly(ENEMY_BASE_POS, 22.0, 8, -visual_time * 0.35)
+	var eb_fill := Color(1.0, 0.82, 0.28) if hive_beam_timer > 0.0 else Color(0.32, 0.09, 0.14)
+	draw_colored_polygon(hive_outer, eb_fill)
+	for s_i in range(8):
+		draw_line(hive_outer[s_i], hive_outer[(s_i + 1) % 8], Color(0.95, 0.28, 0.34), 2.4)
+	draw_colored_polygon(hive_inner, Color(0.48, 0.12, 0.20))
+	draw_circle(ENEMY_BASE_POS, 12.0, Color(0.88, 0.18, 0.28, hive_pulse))
+	draw_circle(ENEMY_BASE_POS, 6.0, Color(1.0, 0.65, 0.45))
+	draw_rect(Rect2(ENEMY_BASE_POS + Vector2(-22, -46), Vector2(44, 14)), Color(0.08, 0.05, 0.08, 0.88))
+	draw_string(font, ENEMY_BASE_POS + Vector2(-15, -35), "HIVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.62, 0.62))
 
-	# Hive Destroyer beam effect when firing
+	# 7) Hive Destroyer Orbital Beam Effect
 	if hive_beam_timer > 0.0:
 		var b_alpha: float = clampf(hive_beam_timer / 0.85, 0.0, 1.0)
-		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(0.35, 0.9, 1.0, b_alpha), 10.0)
-		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(1.0, 0.98, 0.75, b_alpha), 4.0)
-		draw_circle(ENEMY_BASE_POS, 38.0 * (1.2 - b_alpha * 0.4), Color(1.0, 0.75, 0.25, b_alpha * 0.5))
+		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(0.25, 0.78, 1.0, b_alpha * 0.35), 24.0)
+		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(0.38, 0.92, 1.0, b_alpha * 0.85), 11.0)
+		draw_line(PLAYER_BASE_POS, ENEMY_BASE_POS, Color(1.0, 0.98, 0.82, b_alpha), 4.2)
+		draw_circle(ENEMY_BASE_POS, 42.0 * (1.25 - b_alpha * 0.4), Color(1.0, 0.75, 0.25, b_alpha * 0.45))
+		draw_arc(ENEMY_BASE_POS, 48.0 * (1.0 - b_alpha * 0.5), 0.0, TAU, 36, Color(0.55, 0.96, 1.0, b_alpha * 0.9), 3.0)
 
-	# Player Base (path end) with leak flash
-	var pb_rect := Rect2(PLAYER_BASE_POS - Vector2(32, 32), Vector2(64, 64))
-	var pb_fill := Color(0.14, 0.32, 0.52)
-	var pb_border := Color(0.35, 0.78, 1.0)
+	# 8) Player Base Citadel & Time Manipulator Chronosphere (at path end)
+	draw_circle(PLAYER_BASE_POS + Vector2(2, 3), 36.0, Color(0.0, 0.0, 0.0, 0.48))
+	var pb_outer := _make_regular_poly(PLAYER_BASE_POS, 34.0, 8, PI * 0.125)
+	var pb_inner := _make_regular_poly(PLAYER_BASE_POS, 25.0, 8, PI * 0.125)
+	var pb_fill := Color(0.11, 0.24, 0.40)
+	var pb_border := Color(0.38, 0.82, 1.0)
 	if leak_flash_timer > 0.0:
-		pb_fill = Color(0.92, 0.22, 0.22)
+		pb_fill = Color(0.88, 0.18, 0.20)
 		pb_border = Color(1.0, 0.85, 0.85)
-	draw_rect(pb_rect, pb_fill)
-	draw_rect(pb_rect, pb_border, false, 3.0)
-	draw_string(font, PLAYER_BASE_POS + Vector2(-20, -38), "BASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.75, 0.92, 1.0))
+	draw_colored_polygon(pb_outer, Color(0.08, 0.14, 0.24))
+	draw_colored_polygon(pb_inner, pb_fill)
+	for s_i in range(8):
+		draw_line(pb_outer[s_i], pb_outer[(s_i + 1) % 8], pb_border, 2.8)
+	# Spinning Time Manipulator Chronosphere Dome inside Base
+	var manip_col := Color(1.0, 0.75, 0.28) if GameState.is_base_locked() else Color(0.45, 0.94, 1.0)
+	draw_arc(PLAYER_BASE_POS, 16.0, visual_time * 1.8, visual_time * 1.8 + PI * 1.35, 24, manip_col, 2.2)
+	draw_arc(PLAYER_BASE_POS, 11.5, -visual_time * 2.5, -visual_time * 2.5 + PI * 1.35, 20, Color(0.75, 0.55, 1.0, 0.9), 2.0)
+	draw_circle(PLAYER_BASE_POS, 6.0, manip_col)
+	draw_circle(PLAYER_BASE_POS, 2.8, Color.WHITE)
+	draw_rect(Rect2(PLAYER_BASE_POS + Vector2(-22, -50), Vector2(44, 14)), Color(0.05, 0.09, 0.16, 0.88))
+	draw_string(font, PLAYER_BASE_POS + Vector2(-16, -39), "BASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.78, 0.94, 1.0))
 
-	# Floating earnings texts (matching separate Money gold + Research cyan colors)
+	# 9) Global Time Power Battlefield Border FX (Pause Stasis Frost / Haste Overclock)
+	if GameState.is_enemies_frozen:
+		draw_rect(arena_rect.grow(-2.0), Color(0.42, 0.88, 1.0, 0.45), false, 3.5)
+	elif GameState.is_haste_active:
+		draw_rect(arena_rect.grow(-2.0), Color(0.35, 1.0, 0.78, 0.40), false, 3.0)
+	draw_rect(arena_rect, Color(0.24, 0.34, 0.48), false, 2.0)
+
+	# 10) Floating earnings texts (with drop shadow for crisp readability)
 	for ft in floating_texts:
 		var alpha: float = clampf(float(ft["timer"]) / float(ft["max_timer"]), 0.0, 1.0)
 		var pos: Vector2 = ft["pos"]
 		if ft.has("custom_text"):
 			var c: Color = ft["custom_color"]
 			c.a = alpha
+			draw_string(font, pos + Vector2(1, 1), ft["custom_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0, 0, 0, alpha * 0.75))
 			draw_string(font, pos, ft["custom_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c)
 		else:
-			draw_string(font, pos, ft["money_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.85, 0.25, alpha))
-			draw_string(font, pos + Vector2(28, 0), ft["research_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.45, 0.88, 1.0, alpha))
+			draw_string(font, pos + Vector2(1, 1), ft["money_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, alpha * 0.75))
+			draw_string(font, pos, ft["money_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.86, 0.28, alpha))
+			draw_string(font, pos + Vector2(29, 1), ft["research_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, alpha * 0.75))
+			draw_string(font, pos + Vector2(28, 0), ft["research_text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.48, 0.92, 1.0, alpha))

@@ -35,6 +35,8 @@ var slow_remaining: float = 0.0
 var decay_base_pct: float = 0.0
 var decay_ticks_remaining: int = 0
 var decay_tick_timer: float = 0.0
+var anim_time: float = 0.0
+var hit_flash_timer: float = 0.0
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
@@ -132,6 +134,7 @@ func apply_time_decay_tick(raw_tick_pct: float) -> float:
 		died.emit(self)
 		queue_free()
 	else:
+		hit_flash_timer = 0.09
 		queue_redraw()
 	return dmg
 
@@ -157,7 +160,12 @@ func advance_along_path(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if not GameState.is_enemies_frozen:
+		anim_time += delta
+	if hit_flash_timer > 0.0:
+		hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
 	advance_along_path(GameState.get_sim_delta(delta))
+	queue_redraw()
 
 
 func _sync_transform_to_path() -> void:
@@ -192,66 +200,175 @@ func take_damage(amount: float, damage_type: String = "") -> void:
 		died.emit(self)
 		queue_free()
 	else:
+		hit_flash_timer = 0.09
 		queue_redraw()
+
+
+func _draw_poly_oriented(local_pts: Array, ang: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for v in local_pts:
+		pts.append((v as Vector2).rotated(ang))
+	draw_colored_polygon(pts, col)
 
 
 func _draw() -> void:
 	var radius: float = 9.5
-	var fill_color := Color(0.92, 0.30, 0.25)
+	var fill_color := Color(0.92, 0.28, 0.24)
 	match enemy_type:
 		"crawler":
 			radius = 9.5
-			fill_color = Color(0.92, 0.30, 0.25)
+			fill_color = Color(0.90, 0.26, 0.22)
 		"rusher":
 			radius = 8.5
-			fill_color = Color(1.0, 0.65, 0.18)
+			fill_color = Color(1.0, 0.62, 0.14)
 		"brute":
 			radius = 14.5
-			fill_color = Color(0.75, 0.16, 0.35)
+			fill_color = Color(0.76, 0.16, 0.34)
 		"blitzer":
 			radius = 10.5
-			fill_color = Color(0.25, 0.90, 0.95)
+			fill_color = Color(0.20, 0.88, 0.96)
 		"juggernaut":
 			radius = 18.0
-			fill_color = Color(0.58, 0.16, 0.72)
+			fill_color = Color(0.56, 0.16, 0.74)
+
+	var ang: float = last_tangent.angle()
+	var fwd: Vector2 = last_tangent.normalized()
+	var side: Vector2 = Vector2(-fwd.y, fwd.x)
 
 	if GameState.is_enemies_frozen:
 		var thaw_stacks: int = GameState.mission.mutations.get("thaw_stacks", 0)
-		var frost_strength: float = clampf(0.35 + 0.12 * float(thaw_stacks), 0.35, 0.85)
-		fill_color = fill_color.lerp(Color(0.45, 0.85, 1.0), frost_strength)
+		var frost_strength: float = clampf(0.38 + 0.12 * float(thaw_stacks), 0.38, 0.85)
+		fill_color = fill_color.lerp(Color(0.48, 0.88, 1.0), frost_strength)
+	if hit_flash_timer > 0.0:
+		fill_color = fill_color.lerp(Color.WHITE, 0.65)
 
-	# Armoured mutation visual cue: thicker gold shell outline
+	# Ground drop shadow
+	draw_circle(Vector2(1.5, 2.5), radius * 0.95, Color(0.0, 0.0, 0.0, 0.38))
+
+	# Armoured mutation visual cue: golden segmented shell aura
 	var armoured_stacks: int = GameState.mission.mutations.get("armoured_stacks", 0)
 	if armoured_stacks > 0:
-		var shell_width: float = 2.0 + minf(4.0, float(armoured_stacks) * 1.2)
-		draw_arc(Vector2.ZERO, radius + shell_width * 0.5, 0.0, TAU, 24, Color(0.95, 0.82, 0.35), shell_width)
+		var shell_width: float = 2.0 + minf(3.5, float(armoured_stacks) * 1.1)
+		draw_arc(Vector2.ZERO, radius + shell_width * 0.55 + 1.0, 0.0, TAU, 24, Color(0.98, 0.84, 0.32, 0.92), shell_width)
 
-	# Swift mutation visual cue: speed lines trailing opposite tangent
+	# Swift mutation visual cue: glowing slipstream chevrons trailing behind
 	if swift_stacks_at_spawn > 0:
-		var back_dir: Vector2 = -last_tangent
-		var perp: Vector2 = Vector2(-back_dir.y, back_dir.x)
+		var back_dir: Vector2 = -fwd
 		for i in range(min(3, swift_stacks_at_spawn)):
 			var offset_perp: float = (float(i) - 1.0) * 5.0
-			var start_p: Vector2 = perp * offset_perp + back_dir * (radius + 2.0)
-			var end_p: Vector2 = start_p + back_dir * (8.0 + float(swift_stacks_at_spawn) * 2.0)
-			draw_line(start_p, end_p, Color(0.4, 0.95, 0.75, 0.85), 2.0)
+			var start_p: Vector2 = side * offset_perp + back_dir * (radius + 2.5)
+			var end_p: Vector2 = start_p + back_dir * (8.5 + float(swift_stacks_at_spawn) * 2.2)
+			draw_line(start_p, end_p, Color(0.38, 0.98, 0.78, 0.88), 2.0)
 
-	draw_circle(Vector2.ZERO, radius, fill_color)
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, Color(0.12, 0.04, 0.04), 1.5)
+	# Distinct alien morphology per enemy type
+	match enemy_type:
+		"crawler":
+			# 6 animated insectoid chitin legs + segmented carapace + pincer mandibles
+			for l_i in range(3):
+				var swing: float = sin(anim_time * 14.0 + float(l_i) * 2.1) * 2.6
+				var lx: float = (float(l_i) - 1.0) * 4.5
+				var root_l: Vector2 = fwd * lx + side * 5.0
+				var tip_l: Vector2 = fwd * (lx + swing) + side * (radius + 3.8)
+				var root_r: Vector2 = fwd * lx - side * 5.0
+				var tip_r: Vector2 = fwd * (lx - swing) - side * (radius + 3.8)
+				draw_line(root_l, tip_l, Color(0.45, 0.12, 0.12), 1.8)
+				draw_line(root_r, tip_r, Color(0.45, 0.12, 0.12), 1.8)
+			draw_circle(-fwd * 3.0, radius * 0.78, fill_color.darkened(0.22))
+			draw_circle(fwd * 1.5, radius * 0.82, fill_color)
+			draw_line(fwd * 7.0 + side * 3.2, fwd * 12.0 + side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
+			draw_line(fwd * 7.0 - side * 3.2, fwd * 12.0 - side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
+			draw_circle(fwd * 5.5 + side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
+			draw_circle(fwd * 5.5 - side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
 
-	# Armour-tag cues (Armored steel rim, Reflective cyan shimmer)
-	if armour_tags.has("Armored"):
-		draw_arc(Vector2.ZERO, radius - 2.0, 0.0, TAU, 20, Color(0.78, 0.82, 0.88, 0.85), 2.0)
-	if armour_tags.has("Reflective"):
-		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 20, Color(0.55, 0.98, 1.0, 0.85), 1.5)
+		"rusher":
+			# Swept-wing raptor swarmer with forward scythes & bio-thruster exhaust
+			var exhaust_len: float = 5.0 + 2.5 * sin(anim_time * 22.0)
+			draw_line(-fwd * 7.0, -fwd * (7.0 + exhaust_len), Color(0.45, 0.96, 1.0, 0.85), 3.2)
+			var wing_pts := [Vector2(11.0, 0.0), Vector2(-6.0, -9.5), Vector2(-3.0, 0.0), Vector2(-6.0, 9.5)]
+			_draw_poly_oriented(wing_pts, ang, fill_color)
+			var core_pts := [Vector2(8.0, 0.0), Vector2(-4.0, -4.5), Vector2(-4.0, 4.5)]
+			_draw_poly_oriented(core_pts, ang, fill_color.lightened(0.32))
+			draw_line(fwd * 5.0 + side * 4.5, fwd * 12.5 + side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
+			draw_line(fwd * 5.0 - side * 4.5, fwd * 12.5 - side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
+
+		"brute":
+			# Hulking armored goliath with heavy steel dorsal plates & battering-ram horns
+			var body_pts := [
+				Vector2(13.0, -6.0), Vector2(13.0, 6.0), Vector2(3.0, 14.5),
+				Vector2(-11.0, 12.0), Vector2(-14.5, 0.0), Vector2(-11.0, -12.0), Vector2(3.0, -14.5)
+			]
+			_draw_poly_oriented(body_pts, ang, fill_color.darkened(0.18))
+			var plate_pts := [
+				Vector2(9.0, -4.5), Vector2(9.0, 4.5), Vector2(1.0, 10.5),
+				Vector2(-9.0, 8.5), Vector2(-9.0, -8.5), Vector2(1.0, -10.5)
+			]
+			_draw_poly_oriented(plate_pts, ang, Color(0.55, 0.60, 0.68) if hit_flash_timer <= 0.0 else Color.WHITE)
+			draw_circle(Vector2.ZERO, 6.5, fill_color)
+			# Ram horns
+			draw_line(fwd * 9.0 + side * 6.5, fwd * 17.5 + side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
+			draw_line(fwd * 9.0 - side * 6.5, fwd * 17.5 - side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
+			draw_line(fwd * 8.5 - side * 4.0, fwd * 8.5 + side * 4.0, Color(1.0, 0.25, 0.25), 2.4)
+
+		"blitzer":
+			# Prismatic diamond interceptor with rotating reflective energy hex-shield
+			var diamond := [Vector2(12.5, 0.0), Vector2(0.0, -9.5), Vector2(-11.0, 0.0), Vector2(0.0, 9.5)]
+			_draw_poly_oriented(diamond, ang, fill_color.darkened(0.15))
+			var inner_d := [Vector2(8.5, 0.0), Vector2(0.0, -5.5), Vector2(-6.5, 0.0), Vector2(0.0, 5.5)]
+			_draw_poly_oriented(inner_d, ang, Color(0.82, 0.98, 1.0))
+			for s_i in range(6):
+				var sa1: float = anim_time * 3.5 + float(s_i) * TAU / 6.0
+				var sa2: float = sa1 + TAU / 6.0
+				draw_line(Vector2(cos(sa1), sin(sa1)) * 12.2, Vector2(cos(sa2), sin(sa2)) * 12.2, Color(0.65, 0.98, 1.0, 0.85), 1.6)
+
+		"juggernaut":
+			# Boss Dreadnought Leviathan (Armored + Reflective)
+			var hull := [
+				Vector2(17.0, -7.5), Vector2(17.0, 7.5), Vector2(5.0, 18.0),
+				Vector2(-13.0, 16.0), Vector2(-18.5, 0.0), Vector2(-13.0, -16.0), Vector2(5.0, -18.0)
+			]
+			_draw_poly_oriented(hull, ang, fill_color.darkened(0.25))
+			var armor_chevron := [
+				Vector2(13.0, -5.5), Vector2(13.0, 5.5), Vector2(3.0, 13.5),
+				Vector2(-10.0, 11.5), Vector2(-10.0, -11.5), Vector2(3.0, -13.5)
+			]
+			_draw_poly_oriented(armor_chevron, ang, Color(0.72, 0.78, 0.88))
+			draw_circle(Vector2.ZERO, 9.5, fill_color)
+			# Pulsing dark-matter reactor core
+			var core_r: float = 4.8 + 1.2 * sin(anim_time * 6.0)
+			draw_circle(Vector2.ZERO, core_r, Color(0.95, 0.52, 1.0))
+			draw_circle(Vector2.ZERO, 2.5, Color.WHITE)
+			# 4 heavy siege tusks
+			draw_line(fwd * 12.0 + side * 8.5, fwd * 22.5 + side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
+			draw_line(fwd * 12.0 - side * 8.5, fwd * 22.5 - side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
+			draw_line(fwd * 14.0 + side * 4.0, fwd * 20.0 + side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
+			draw_line(fwd * 14.0 - side * 4.0, fwd * 20.0 - side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
+			# Rotating outer Reflective prismatic shield
+			for s_i in range(6):
+				var sa1: float = -anim_time * 2.2 + float(s_i) * TAU / 6.0
+				var sa2: float = sa1 + TAU / 6.0
+				draw_line(Vector2(cos(sa1), sin(sa1)) * 20.2, Vector2(cos(sa2), sin(sa2)) * 20.2, Color(0.55, 0.96, 1.0, 0.82), 2.0)
+
+	# Frost crystal overlay when frozen by Pause
+	if GameState.is_enemies_frozen:
+		for f_i in range(3):
+			var fa: float = float(f_i) * PI / 3.0
+			var fv := Vector2(cos(fa), sin(fa)) * (radius + 3.0)
+			draw_line(-fv, fv, Color(0.75, 0.96, 1.0, 0.78), 1.5)
+
+	# Chrono Slow / Time Decay DoT orbital ring
 	if slow_remaining > 0.0 or decay_ticks_remaining > 0:
-		var time_col := Color(0.72, 0.42, 1.0, 0.85) if decay_ticks_remaining > 0 else Color(0.35, 0.85, 1.0, 0.85)
-		draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 20, time_col, 2.0)
+		var time_col := Color(0.82, 0.45, 1.0, 0.92) if decay_ticks_remaining > 0 else Color(0.35, 0.92, 1.0, 0.88)
+		draw_arc(Vector2.ZERO, radius + 4.2, anim_time * 3.0, anim_time * 3.0 + PI * 1.5, 20, time_col, 2.2)
+		if decay_ticks_remaining > 0:
+			for d_i in range(decay_ticks_remaining):
+				var da: float = -anim_time * 4.0 + float(d_i) * TAU / 3.0
+				draw_circle(Vector2(cos(da), sin(da)) * (radius + 4.2), 2.2, Color(0.95, 0.65, 1.0))
 
-	# Mini HP bar
-	var bar_w: float = radius * 2.4
-	var bar_h: float = 4.0
-	var bar_pos := Vector2(-bar_w * 0.5, -radius - 9.0)
-	draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.1, 0.1, 0.12, 0.9))
-	var ratio: float = clampf(hp / max(1.0, max_hp), 0.0, 1.0)
-	draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), Color(0.3, 0.9, 0.4))
+	# Framed color-graded mini HP bar
+	var bar_w: float = maxf(22.0, radius * 2.5)
+	var bar_h: float = 5.5 if enemy_type == "juggernaut" else 4.2
+	var bar_pos := Vector2(-bar_w * 0.5, -radius - 11.0)
+	draw_rect(Rect2(bar_pos - Vector2(1, 1), Vector2(bar_w + 2.0, bar_h + 2.0)), Color(0.04, 0.06, 0.10, 0.92))
+	var ratio: float = clampf(hp / maxf(1.0, max_hp), 0.0, 1.0)
+	var hp_col := Color(0.28, 0.95, 0.48) if ratio > 0.5 else (Color(0.98, 0.78, 0.24) if ratio > 0.25 else Color(0.98, 0.28, 0.28))
+	draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), hp_col)
