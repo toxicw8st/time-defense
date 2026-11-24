@@ -84,6 +84,10 @@ var meta_research_ranks: Dictionary = {
 }
 var selected_mission_level: int = Balance.BASE_ATTACK_DEFAULT_LEVEL # 1/N rule: Level 1..5 shots
 var selected_map_level: int = 1 # Map layout 1..5 (Level 1 = Chrono Rows, 2 = Vertical Corridors, 3 = Citadel Islands, 4 = Spiral Labyrinth, 5 = Omega Gauntlet)
+var is_sandbox_mode: bool = false
+var sandbox_instant_build: bool = true
+var sandbox_no_loss: bool = true
+var sandbox_leaks: int = 0
 
 
 func _ready() -> void:
@@ -117,6 +121,14 @@ func toggle_speed_pause() -> void:
 	set_speed_paused(not is_speed_paused)
 
 
+func set_sandbox_mode(enabled: bool) -> void:
+	is_sandbox_mode = enabled
+	sandbox_leaks = 0
+	if enabled and mission != null:
+		mission.economy["money"] = 999999
+	economy_changed.emit()
+
+
 func select_level(level_n: int) -> void:
 	var clamped: int = clampi(level_n, 1, Balance.MAX_MISSION_LEVELS)
 	selected_map_level = clamped
@@ -130,6 +142,7 @@ func reset_meta_progression() -> void:
 		meta_research_ranks[k] = 0
 	selected_mission_level = Balance.BASE_ATTACK_DEFAULT_LEVEL
 	selected_map_level = 1
+	is_sandbox_mode = false
 	_sync_mission_research_mirror()
 	economy_changed.emit()
 
@@ -144,6 +157,9 @@ func _sync_mission_research_mirror() -> void:
 
 func reset_mission() -> void:
 	mission = MissionState.new()
+	if is_sandbox_mode:
+		mission.economy["money"] = 999999
+	sandbox_leaks = 0
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
 	is_speed_paused = false
@@ -157,7 +173,15 @@ func reset_mission() -> void:
 
 
 func spend_money(amount: int, count_as_asset: bool = false) -> bool:
-	if amount < 0 or mission.economy["money"] < amount:
+	if amount < 0:
+		return false
+	if is_sandbox_mode:
+		mission.economy["money"] = 999999
+		if count_as_asset:
+			mission.total_assets_spent += amount
+		economy_changed.emit()
+		return true
+	if mission.economy["money"] < amount:
 		return false
 	mission.economy["money"] -= amount
 	if count_as_asset:
@@ -168,6 +192,10 @@ func spend_money(amount: int, count_as_asset: bool = false) -> bool:
 
 func add_money(amount: int, count_as_earned: bool = true) -> void:
 	if amount <= 0:
+		return
+	if is_sandbox_mode:
+		mission.economy["money"] = 999999
+		economy_changed.emit()
 		return
 	mission.economy["money"] += amount
 	if count_as_earned:
@@ -225,6 +253,11 @@ func award_kill_earnings(enemy_type: String, money_gained: int, research_gained:
 
 func lose_lives(amount: int, enemy_type: String = "crawler", world_pos: Vector2 = Vector2.ZERO) -> void:
 	if mission.is_over:
+		return
+	if is_sandbox_mode and sandbox_no_loss:
+		sandbox_leaks += amount
+		lives_changed.emit(mission.lives)
+		enemy_leaked.emit(enemy_type, amount, world_pos)
 		return
 	mission.lives = max(0, mission.lives - amount)
 	lives_changed.emit(mission.lives)

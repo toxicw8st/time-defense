@@ -35,6 +35,8 @@ var slow_remaining: float = 0.0
 var decay_base_pct: float = 0.0
 var decay_ticks_remaining: int = 0
 var decay_tick_timer: float = 0.0
+var armor_shred_stacks: int = 0
+var armor_shred_timer: float = 0.0
 var anim_time: float = 0.0
 var hit_flash_timer: float = 0.0
 
@@ -67,6 +69,8 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 	decay_base_pct = 0.0
 	decay_ticks_remaining = 0
 	decay_tick_timer = 0.0
+	armor_shred_stacks = 0
+	armor_shred_timer = 0.0
 	_sync_transform_to_path()
 	queue_redraw()
 
@@ -98,6 +102,35 @@ func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float,
 	queue_redraw()
 
 
+## Called continuously while inside a Chrono Slow Status Bubble: refreshes slow smoothly
+## WITHOUT resetting decay_tick_timer so 1.0s DoT ticks still fire reliably inside the bubble!
+func apply_bubble_aura(raw_slow_pct: float, slow_linger: float, raw_decay_flat: float, ticks: int = 3) -> void:
+	if is_dead_or_leaked:
+		return
+	var eff_slow: float = raw_slow_pct * (0.5 if enemy_type == "juggernaut" else 1.0)
+	if slow_remaining <= 0.0 or eff_slow >= slow_pct:
+		slow_pct = eff_slow
+	slow_remaining = maxf(slow_remaining, slow_linger)
+
+	if raw_decay_flat > 0.0:
+		if decay_ticks_remaining <= 0:
+			decay_base_pct = raw_decay_flat
+			decay_ticks_remaining = ticks
+			decay_tick_timer = 1.0
+		else:
+			decay_base_pct = maxf(decay_base_pct, raw_decay_flat)
+			decay_ticks_remaining = maxi(decay_ticks_remaining, ticks)
+	queue_redraw()
+
+
+func apply_armor_shred(max_stacks: int = 3, duration: float = 3.0) -> void:
+	if is_dead_or_leaked:
+		return
+	armor_shred_stacks = mini(max_stacks, armor_shred_stacks + 1)
+	armor_shred_timer = duration
+	queue_redraw()
+
+
 func step_status_effects(delta: float) -> void:
 	if is_dead_or_leaked or delta <= 0.0:
 		return
@@ -105,6 +138,12 @@ func step_status_effects(delta: float) -> void:
 		slow_remaining = maxf(0.0, slow_remaining - delta)
 		if slow_remaining <= 0.0:
 			slow_pct = 0.0
+			queue_redraw()
+
+	if armor_shred_timer > 0.0:
+		armor_shred_timer = maxf(0.0, armor_shred_timer - delta)
+		if armor_shred_timer <= 0.0:
+			armor_shred_stacks = 0
 			queue_redraw()
 
 	if decay_ticks_remaining > 0 and decay_base_pct > 0.0:
@@ -137,6 +176,10 @@ func apply_time_decay_tick(raw_flat_dmg: float) -> float:
 		hit_flash_timer = 0.09
 		queue_redraw()
 	return dmg
+
+
+func is_alive() -> bool:
+	return not is_dead_or_leaked
 
 
 func advance_along_path(delta: float) -> void:
@@ -186,6 +229,8 @@ func take_damage(amount: float, damage_type: String = "") -> void:
 	var dmg: float = amount
 	if damage_type != "":
 		dmg *= Balance.get_damage_multiplier(damage_type, armour_tags)
+	if armor_shred_stacks > 0 and damage_type != "Time":
+		dmg *= (1.0 + 0.10 * float(armor_shred_stacks))
 	if GameState.is_enemies_frozen:
 		var thaw_stacks: int = GameState.mission.mutations.get("thaw_stacks", 0)
 		var reduction: float = minf(

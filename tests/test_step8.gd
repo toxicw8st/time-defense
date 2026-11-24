@@ -1,5 +1,7 @@
 extends Node
 
+const Visuals = preload("res://scripts/tower_visuals.gd")
+
 ## Comprehensive Overhaul Self-Test + Real UI Input Verification (Checks a-f):
 ## (a) 2 towers alone do NOT clear 5 waves
 ## (b) 4th refinery is NOT affordable before Wave 5
@@ -18,8 +20,9 @@ func _ready() -> void:
 	_test_d_enemy_base_hud_and_multi_wave_cost()
 	_test_e_wave_length_speed_toggle_and_wave_10_tightness()
 	_test_slow_railgun_decay_and_wave10_package()
+	await _test_g_combos_bubble_and_sandbox()
 
-	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok)")
+	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok)")
 	get_tree().quit(0)
 
 
@@ -855,3 +858,129 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	print("CHECK_MORTAR_NERF_PASS solo_mortar_w1_3_lives=%d" % GameState.mission.lives)
 	remove_child(inst3)
 	inst3.queue_free()
+
+
+func _test_g_combos_bubble_and_sandbox() -> void:
+	# 1) Verify all 21 combinations exist in Balance.TOWERS and have bespoke accent colors & visual handlers
+	var base_keys: Array[String] = Balance.BASE_TOWER_KEYS
+	assert(base_keys.size() == 6)
+	var seen_combos: Dictionary = {}
+	for i in range(base_keys.size()):
+		for j in range(i, base_keys.size()):
+			var k: String = Balance.get_combo_key(base_keys[i], base_keys[j])
+			assert(Balance.is_combo_tower(k), "Expected combo key: %s" % k)
+			assert(Balance.TOWERS.has(k), "Missing combo definition: %s" % k)
+			var col: Color = Visuals.get_accent_color(k)
+			assert(col.a > 0.5)
+			seen_combos[k] = true
+	assert(seen_combos.size() == 21, "Must define all 21 2-tower combinations, got %d" % seen_combos.size())
+
+	# 2) Verify Chrono Slow tower Status Bubble mechanics (slower 0.40/s rate, AoE slow, Decay + Radius grow on Damage upgrade)
+	GameState.set_sandbox_mode(false)
+	GameState.reset_meta_progression()
+	GameState.prompts_muted = true
+	GameState.reset_mission()
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var inst: Node = main_scene.instantiate()
+	add_child(inst)
+	await get_tree().process_frame
+
+	var map: GameMap = inst.get_node("Map")
+	var wm: WaveManager = inst.get_node("WaveManager")
+	var hud: CanvasLayer = inst.get_node("HUD")
+	GameState.mission.economy["money"] = 99999
+
+	var slow_t: TowerUnit = map.build_tower_on_pad(0, "slow") # P1 (220, 32) near first path stretch (110..645, 75)
+	assert(slow_t != null)
+	slow_t.current_job = null
+	slow_t.is_built = true
+	assert(is_equal_approx(slow_t.get_effective_fire_rate(), 0.40), "Chrono Slow should fire slower at 0.40/s")
+	assert(slow_t.spawner_creates_bubble(), "Chrono Slow must spawn Status Bubbles")
+	var base_r: float = slow_t.get_effective_bubble_radius()
+	var base_dot: float = slow_t.get_decay_flat_damage()
+	slow_t.levels["damage"] = 3
+	assert(slow_t.get_effective_bubble_radius() > base_r, "Damage upgrade must increase Chrono Bubble radius (was %.1f, now %.1f)" % [base_r, slow_t.get_effective_bubble_radius()])
+	assert(slow_t.get_decay_flat_damage() > base_dot and slow_t.get_decay_flat_damage() < 30.0, "Slow bubble Decay DoT should be lessened vs old single-target")
+
+	# Spawn 2 nearby Crawlers inside P1's range; step tower + projectiles and confirm BOTH get slowed & take Decay ticks
+	var c1: EnemyUnit = map.spawn_enemy("crawler", 1)
+	var c2: EnemyUnit = map.spawn_enemy("crawler", 1)
+	c1.advance_along_path(2.6)
+	c2.advance_along_path(3.1)
+	var hp1_before: float = c1.hp
+	var hp2_before: float = c2.hp
+	var found_bubble: bool = false
+	for _step in range(30): # 3.0s simulation
+		slow_t.advance_tower(0.1)
+		c1.advance_along_path(0.1)
+		c2.advance_along_path(0.1)
+		for p in map.projectiles_container.get_children():
+			if p is ProjectileEffect:
+				if p.is_bubble:
+					found_bubble = true
+				p.advance_projectile(0.1)
+	assert(found_bubble, "Chrono Slow attack must create a ProjectileEffect status bubble")
+	assert(c1.slow_pct >= 0.25 and c2.slow_pct >= 0.25, "Both nearby enemies must be slowed inside Chrono Status Bubble!")
+	assert(c1.hp < hp1_before and c2.hp < hp2_before, "Time Decay inside Chrono Bubble must tick damage cleanly without timer reset starvation")
+	map.clear_all_enemies()
+	map.clear_all_projectiles()
+
+	# 3) Verify Drag-to-Combine (shop onto built base tower) and Two-Tower Merge
+	var b1: TowerUnit = map.build_tower_on_pad(4, "blaster") # P5 (380, 157)
+	b1.current_job = null
+	b1.is_built = true
+	var p5_screen: Vector2 = map.position + b1.position * map.scale
+	var drop_eval: Dictionary = map.evaluate_drop_position(b1.position, "laser")
+	assert(bool(drop_eval["valid"]) and str(drop_eval.get("mode", "")) == "combine" and str(drop_eval.get("combo_type", "")) == "blaster+laser")
+	var combined1: TowerUnit = hud.drag_and_drop_tower("laser", p5_screen)
+	assert(combined1 == b1 and combined1.tower_type == "blaster+laser", "Dropping shop Laser onto Blaster must combine into blaster+laser")
+	combined1.current_job = null
+	combined1.is_built = true
+	assert(not combined1.can_combine(), "Already combined towers cannot merge a third time")
+
+	# Two-tower merge on map (mortar + annihilator -> mortar+annihilator) keeping higher upgrade level
+	var m_t: TowerUnit = map.build_tower_on_pad(5, "mortar")
+	var a_t: TowerUnit = map.build_tower_on_pad(6, "annihilator")
+	m_t.current_job = null
+	m_t.is_built = true
+	a_t.current_job = null
+	a_t.is_built = true
+	a_t.levels["damage"] = 2
+	var merged: TowerUnit = map.combine_two_towers(m_t, a_t)
+	assert(merged == m_t and merged.tower_type == "mortar+annihilator", "Two-tower combine must form mortar+annihilator")
+	assert(int(merged.levels["damage"]) == 2, "Merged tower must inherit higher upgrade rank")
+
+	# 4) Verify Sandbox Mode on any level (e.g. Level 4): infinite money, instant build, Wave 1..45 launch, individual enemy spawns, no game-over on leaks
+	hud._select_level(4)
+	hud._launch_selected_level(true)
+	await get_tree().process_frame
+	assert(GameState.is_sandbox_mode, "Sandbox mode flag must activate")
+	assert(map.current_level_id == 4, "Sandbox must work on any selected level (Level 4)")
+	assert(GameState.mission.economy["money"] >= 999999, "Sandbox mode must grant infinite money")
+	assert(hud.sandbox_panel.visible and hud.money_label.text.contains("SANDBOX"))
+
+	# Instant-build an expensive combo component in Sandbox without starting wave
+	var sb_rail: TowerUnit = map.build_tower_on_pad(0, "railgun")
+	assert(sb_rail != null and sb_rail.is_built and sb_rail.current_job == null, "Sandbox instant-build should finish towers immediately even between waves")
+	assert(GameState.mission.economy["money"] >= 999999, "Spending in Sandbox must preserve infinite money")
+
+	# Spawn Wave 35 & individual Juggernaut, verify leak doesn't end Sandbox
+	var spawned_juggs: Array[EnemyUnit] = map.sandbox_spawn_enemy("juggernaut", 35, 1)
+	assert(spawned_juggs.size() == 1 and spawned_juggs[0].enemy_type == "juggernaut")
+	GameState.lose_lives(99, "juggernaut", Vector2.ZERO)
+	assert(not GameState.mission.is_over, "Leaking in Sandbox Mode must NOT trigger Mission Over")
+	var ran_w35: bool = wm.start_sandbox_wave(35)
+	assert(ran_w35 and GameState.mission.wave_number == 35 and wm.state == WaveManager.State.SPAWNING)
+
+	# Verify SandboxPanel stays inside viewport bounds on Desktop, 20:9 Landscape, and 9:20 Portrait
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		var sb_r: Rect2 = hud.sandbox_panel.get_global_rect()
+		assert(sb_r.position.x >= 0.0 and sb_r.end.x <= test_vp.x + 1.0 and sb_r.end.y <= test_vp.y + 1.0, "SandboxPanel overflow at %s: %s" % [str(test_vp), str(sb_r)])
+
+	GameState.set_sandbox_mode(false)
+	GameState.prompts_muted = false
+	remove_child(inst)
+	inst.queue_free()
+	print("CHECK_COMBOS_BUBBLE_SANDBOX_PASS combos=21 bubble=ok sandbox=ok")

@@ -72,6 +72,7 @@ const MIN_PATH_CLEARANCE: float = 36.5
 
 var enemy_scene: PackedScene = preload("res://scenes/enemy.tscn")
 var tower_scene: PackedScene = preload("res://scenes/tower.tscn")
+var projectile_scene: PackedScene = preload("res://scenes/projectile.tscn")
 
 var current_level_id: int = 1
 var active_path_waypoints: Array[Vector2] = []
@@ -113,6 +114,9 @@ var drag_zone_index: int = -1
 var drag_valid_drop: bool = false
 var drag_drop_pos: Vector2 = Vector2.ZERO
 var drag_status_reason: String = ""
+var drag_merge_target: TowerUnit = null
+var drag_merge_combo_type: String = ""
+var combine_source_tower: TowerUnit = null
 
 
 static func get_level_config(level_id: int) -> Dictionary:
@@ -352,15 +356,39 @@ func clamp_point_to_zone(local_pos: Vector2, zone_idx: int) -> Vector2:
 	return Vector2(cx, cy)
 
 
-func evaluate_drop_position(local_pos: Vector2) -> Dictionary:
+func evaluate_drop_position(local_pos: Vector2, incoming_tower_type: String = "") -> Dictionary:
+	var eff_in_type: String = incoming_tower_type if incoming_tower_type != "" else (drag_tower_type if drag_tower_type != "" else pending_build_type)
+	if eff_in_type != "" and Balance.BASE_TOWER_KEYS.has(eff_in_type):
+		var target_t: TowerUnit = _find_tower_at(local_pos)
+		if target_t != null and target_t.can_combine():
+			var combo_key: String = Balance.get_combo_key(target_t.tower_type, eff_in_type)
+			if Balance.TOWERS.has(combo_key):
+				var total_cost: int = int(Balance.TOWERS[eff_in_type]["cost"]) + Balance.get_merge_surcharge(target_t.tower_type, eff_in_type)
+				var can_pay: bool = GameState.is_sandbox_mode or GameState.mission.economy["money"] >= total_cost
+				return {
+					"valid": can_pay,
+					"mode": "combine",
+					"pos": target_t.position,
+					"zone_idx": find_zone_for_point(target_t.position, ZONE_SNAP_MARGIN),
+					"pad_idx": target_t.pad_index,
+					"zone_label": "COMBINE",
+					"merge_target": target_t,
+					"combo_type": combo_key,
+					"merge_cost": total_cost,
+					"reason": ("COMBINE -> %s ($%d)" % [str(Balance.TOWERS[combo_key]["name"]), total_cost]) if can_pay else ("NEED $%d TO COMBINE" % total_cost),
+				}
+
 	var z_idx: int = find_zone_for_point(local_pos, ZONE_SNAP_MARGIN)
 	if z_idx < 0:
 		return {
 			"valid": false,
+			"mode": "build",
 			"pos": local_pos,
 			"zone_idx": -1,
 			"pad_idx": -1,
 			"zone_label": "",
+			"merge_target": null,
+			"combo_type": "",
 			"reason": "DROP IN A TOWER ZONE",
 		}
 	var z_label: String = str(active_placement_zones[z_idx]["label"])
@@ -381,10 +409,13 @@ func evaluate_drop_position(local_pos: Vector2) -> Dictionary:
 		if candidate_pos.distance_to(t.position) < MIN_TOWER_SPACING:
 			return {
 				"valid": false,
+				"mode": "build",
 				"pos": candidate_pos,
 				"zone_idx": z_idx,
 				"pad_idx": -1,
 				"zone_label": z_label,
+				"merge_target": null,
+				"combo_type": "",
 				"reason": "TOO CLOSE TO TOWER",
 			}
 
@@ -393,19 +424,25 @@ func evaluate_drop_position(local_pos: Vector2) -> Dictionary:
 		if candidate_pos.distance_to(on_path) < MIN_PATH_CLEARANCE:
 			return {
 				"valid": false,
+				"mode": "build",
 				"pos": candidate_pos,
 				"zone_idx": z_idx,
 				"pad_idx": -1,
 				"zone_label": z_label,
+				"merge_target": null,
+				"combo_type": "",
 				"reason": "TOO CLOSE TO PATH",
 			}
 
 	return {
 		"valid": true,
+		"mode": "build",
 		"pos": candidate_pos,
 		"zone_idx": z_idx,
 		"pad_idx": snap_pad,
 		"zone_label": z_label,
+		"merge_target": null,
+		"combo_type": "",
 		"reason": "DROP -> %s" % z_label,
 	}
 
@@ -427,29 +464,36 @@ func update_drag_placement(tower_type: String, global_screen_pos: Vector2) -> in
 	drag_tower_type = tower_type
 	var eff_scale: Vector2 = Vector2(maxf(0.01, scale.x), maxf(0.01, scale.y))
 	drag_local_pos = (global_screen_pos - position) / eff_scale
-	var eval: Dictionary = evaluate_drop_position(drag_local_pos)
+	var eval: Dictionary = evaluate_drop_position(drag_local_pos, tower_type)
 	drag_valid_drop = bool(eval["valid"])
 	drag_drop_pos = eval["pos"]
 	drag_zone_index = int(eval["zone_idx"])
 	drag_snap_pad_index = int(eval["pad_idx"])
 	drag_status_reason = str(eval["reason"])
+	drag_merge_target = eval.get("merge_target", null)
+	drag_merge_combo_type = str(eval.get("combo_type", ""))
 	hovered_pad_index = drag_snap_pad_index
 	queue_redraw()
-	return drag_zone_index if drag_valid_drop else -1
+	return (drag_zone_index if drag_zone_index >= 0 else 0) if drag_valid_drop else -1
 
 
 func finish_drag_placement(tower_type: String, global_screen_pos: Vector2) -> TowerUnit:
 	var eff_scale: Vector2 = Vector2(maxf(0.01, scale.x), maxf(0.01, scale.y))
 	var local_pos: Vector2 = (global_screen_pos - position) / eff_scale
-	var eval: Dictionary = evaluate_drop_position(local_pos)
+	var eval: Dictionary = evaluate_drop_position(local_pos, tower_type)
 	drag_tower_type = ""
 	drag_snap_pad_index = -1
 	drag_zone_index = -1
 	drag_valid_drop = false
+	drag_merge_target = null
+	drag_merge_combo_type = ""
 	hovered_pad_index = -1
 	queue_redraw()
 	if bool(eval["valid"]):
 		pending_build_type = ""
+		if str(eval.get("mode", "build")) == "combine":
+			var merge_t: TowerUnit = eval.get("merge_target", null)
+			return combine_tower_with_shop(merge_t, tower_type)
 		var p_idx: int = int(eval["pad_idx"])
 		if p_idx >= 0 and pad_occupancy[p_idx] == null:
 			return build_tower_on_pad(p_idx, tower_type)
@@ -462,6 +506,8 @@ func cancel_drag_placement() -> void:
 	drag_snap_pad_index = -1
 	drag_zone_index = -1
 	drag_valid_drop = false
+	drag_merge_target = null
+	drag_merge_combo_type = ""
 	hovered_pad_index = -1
 	queue_redraw()
 
@@ -661,28 +707,50 @@ func _on_map_gui_input(event: InputEvent) -> void:
 			hovered_pad_index = new_hover
 			queue_redraw()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-		if pending_build_type != "":
+		if combine_source_tower != null:
+			cancel_combine_partner_pick()
+			map_click_area.accept_event()
+		elif pending_build_type != "":
 			pending_build_type = ""
 			clear_selection()
 			map_click_area.accept_event()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if not in_map:
 			return
-		# 1) If a tower build type is armed, check if click is inside a valid placement zone or open pad
+		# 0) If combining two placed towers, clicking a valid partner merges them
+		if combine_source_tower != null and is_instance_valid(combine_source_tower):
+			var partner: TowerUnit = _find_tower_at(local_pos)
+			if partner != null and partner != combine_source_tower and partner.can_combine():
+				combine_two_towers(combine_source_tower, partner)
+				map_click_area.accept_event()
+				return
+			cancel_combine_partner_pick()
+			if partner != null:
+				select_tower_unit(partner)
+			map_click_area.accept_event()
+			return
+
+		# 1) If a tower build type is armed, check combine target or placement zone / open pad
 		if pending_build_type != "":
+			var eval_armed: Dictionary = evaluate_drop_position(local_pos, pending_build_type)
+			if str(eval_armed.get("mode", "")) == "combine":
+				if bool(eval_armed["valid"]):
+					combine_tower_with_shop(eval_armed.get("merge_target", null), pending_build_type)
+					pending_build_type = ""
+				map_click_area.accept_event()
+				return
 			var clicked_pad_armed: int = _find_pad_at(local_pos)
 			if clicked_pad_armed != -1 and pad_occupancy[clicked_pad_armed] == null:
 				build_tower_on_pad(clicked_pad_armed, pending_build_type)
 				pending_build_type = ""
 				map_click_area.accept_event()
 				return
-			var eval: Dictionary = evaluate_drop_position(local_pos)
-			if bool(eval["valid"]):
-				var p_idx: int = int(eval["pad_idx"])
+			if bool(eval_armed["valid"]):
+				var p_idx: int = int(eval_armed["pad_idx"])
 				if p_idx >= 0 and pad_occupancy[p_idx] == null:
 					build_tower_on_pad(p_idx, pending_build_type)
 				else:
-					build_tower_in_zone(eval["pos"], pending_build_type, int(eval["zone_idx"]))
+					build_tower_in_zone(eval_armed["pos"], pending_build_type, int(eval_armed["zone_idx"]))
 				pending_build_type = ""
 				map_click_area.accept_event()
 				return
@@ -826,6 +894,88 @@ func build_tower_in_zone(drop_pos: Vector2, tower_type: String, zone_idx: int = 
 	return tower
 
 
+func _clear_combine_highlights() -> void:
+	for t in get_all_towers():
+		if t.is_combine_highlighted:
+			t.is_combine_highlighted = false
+			t.queue_redraw()
+
+
+func start_combine_partner_pick(source_tower: TowerUnit) -> int:
+	cancel_combine_partner_pick()
+	if source_tower == null or not is_instance_valid(source_tower) or not source_tower.can_combine():
+		return 0
+	combine_source_tower = source_tower
+	pending_build_type = ""
+	var count: int = 0
+	for t in get_all_towers():
+		if t != source_tower and t.can_combine():
+			t.is_combine_highlighted = true
+			t.queue_redraw()
+			count += 1
+	queue_redraw()
+	return count
+
+
+func cancel_combine_partner_pick() -> void:
+	combine_source_tower = null
+	_clear_combine_highlights()
+	queue_redraw()
+
+
+func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> TowerUnit:
+	if target_tower == null or not is_instance_valid(target_tower) or not target_tower.can_combine():
+		return null
+	if not Balance.BASE_TOWER_KEYS.has(shop_type):
+		return null
+	var combo_key: String = Balance.get_combo_key(target_tower.tower_type, shop_type)
+	if not Balance.TOWERS.has(combo_key):
+		return null
+	var cost: int = int(Balance.TOWERS[shop_type]["cost"]) + Balance.get_merge_surcharge(target_tower.tower_type, shop_type)
+	if not GameState.spend_money(cost, true):
+		return null
+	var b_time: float = Balance.get_merge_build_time(target_tower.tower_type, shop_type)
+	cancel_combine_partner_pick()
+	target_tower.transform_to_combo(combo_key, cost, target_tower.levels.duplicate(), b_time)
+	select_tower_unit(target_tower)
+	spawn_floater(target_tower.position + Vector2(-46.0, -32.0), "COMBINED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
+	queue_redraw()
+	return target_tower
+
+
+func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
+	if tower_a == null or tower_b == null or tower_a == tower_b:
+		return null
+	if not is_instance_valid(tower_a) or not is_instance_valid(tower_b):
+		return null
+	if not tower_a.can_combine() or not tower_b.can_combine():
+		return null
+	var combo_key: String = Balance.get_combo_key(tower_a.tower_type, tower_b.tower_type)
+	if not Balance.TOWERS.has(combo_key):
+		return null
+	var surcharge: int = Balance.get_merge_surcharge(tower_a.tower_type, tower_b.tower_type)
+	if not GameState.spend_money(surcharge, true):
+		return null
+	var merged_levels := {
+		"damage": maxi(int(tower_a.levels["damage"]), int(tower_b.levels["damage"])),
+		"range": maxi(int(tower_a.levels["range"]), int(tower_b.levels["range"])),
+		"fire_rate": maxi(int(tower_a.levels["fire_rate"]), int(tower_b.levels["fire_rate"])),
+	}
+	var added_spent: int = tower_b.total_spent + surcharge
+	var b_pad: int = tower_b.pad_index
+	if b_pad >= 0 and b_pad < pad_occupancy.size() and pad_occupancy[b_pad] == tower_b:
+		pad_occupancy[b_pad] = null
+	placed_towers.erase(tower_b)
+	tower_b.queue_free()
+	var b_time: float = Balance.get_merge_build_time(tower_a.tower_type, tower_b.tower_type)
+	cancel_combine_partner_pick()
+	tower_a.transform_to_combo(combo_key, added_spent, merged_levels, b_time)
+	select_tower_unit(tower_a)
+	spawn_floater(tower_a.position + Vector2(-46.0, -32.0), "MERGED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
+	queue_redraw()
+	return tower_a
+
+
 func sell_tower(tower: TowerUnit) -> int:
 	if tower == null or not is_instance_valid(tower):
 		return 0
@@ -894,6 +1044,7 @@ func _on_mission_reset() -> void:
 	selected_tower = null
 	preview_tower_type = ""
 	pending_build_type = ""
+	combine_source_tower = null
 	next_enemy_id = 1
 	next_tower_id = 1
 	queue_redraw()
@@ -933,6 +1084,13 @@ func get_path_length() -> float:
 	return enemy_path.curve.get_baked_length()
 
 
+func spawn_projectile() -> ProjectileEffect:
+	var proj: ProjectileEffect = projectile_scene.instantiate()
+	if projectiles_container != null:
+		projectiles_container.add_child(proj)
+	return proj
+
+
 func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
 	var enemy: EnemyUnit = enemy_scene.instantiate()
 	enemies_container.add_child(enemy)
@@ -941,6 +1099,36 @@ func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
 	enemy.leaked.connect(_on_unit_leaked)
 	enemy.died.connect(_on_unit_died)
 	return enemy
+
+
+func sandbox_spawn_enemy(enemy_type: String, wave_num: int, count: int = 1) -> Array[EnemyUnit]:
+	var spawned: Array[EnemyUnit] = []
+	if enemy_path == null or enemy_path.curve == null:
+		return spawned
+	var safe_count: int = maxi(1, count)
+	for i in range(safe_count):
+		var e: EnemyUnit = spawn_enemy(enemy_type, maxi(1, wave_num))
+		if i > 0:
+			e.advance_along_path(float(i) * 0.22)
+		spawned.append(e)
+	GameState.event_logged.emit("[SANDBOX] Spawned %dx %s (Wave %d scale)" % [safe_count, Balance.ENEMIES[enemy_type]["name"], maxi(1, wave_num)])
+	return spawned
+
+
+func sandbox_clear_enemies() -> void:
+	clear_all_enemies()
+	clear_all_projectiles()
+	GameState.event_logged.emit("[SANDBOX] Cleared all active enemies & bubbles")
+	queue_redraw()
+
+
+func sandbox_clear_towers() -> void:
+	cancel_combine_partner_pick()
+	clear_all_towers()
+	clear_all_projectiles()
+	clear_selection()
+	GameState.event_logged.emit("[SANDBOX] Cleared all towers")
+	queue_redraw()
 
 
 func _on_unit_leaked(enemy: EnemyUnit) -> void:
@@ -1302,23 +1490,25 @@ func _draw() -> void:
 			center = active_pad_positions[selected_pad_index]
 
 		if show_preview:
-			var cfg: Dictionary = Balance.TOWERS[active_preview_type]
+			var preview_key: String = drag_merge_combo_type if (drag_merge_combo_type != "" and Balance.TOWERS.has(drag_merge_combo_type)) else active_preview_type
+			var cfg: Dictionary = Balance.TOWERS[preview_key]
 			var r: float = float(cfg["range"]) * GameState.get_tower_range_research_multiplier()
 			var min_r: float = float(cfg.get("min_range", 0.0))
-			var ring_fill := Color(0.35, 0.95, 0.72, 0.11) if valid_drop else Color(1.0, 0.32, 0.32, 0.11)
-			var ring_stroke := Color(0.42, 1.0, 0.75, 0.88) if valid_drop else Color(1.0, 0.42, 0.38, 0.88)
+			var is_combine_hover: bool = (drag_merge_target != null and drag_tower_type != "")
+			var ring_fill := Color(1.0, 0.85, 0.28, 0.14) if (is_combine_hover and valid_drop) else (Color(0.35, 0.95, 0.72, 0.11) if valid_drop else Color(1.0, 0.32, 0.32, 0.11))
+			var ring_stroke := Color(1.0, 0.88, 0.35, 0.95) if (is_combine_hover and valid_drop) else (Color(0.42, 1.0, 0.75, 0.88) if valid_drop else Color(1.0, 0.42, 0.38, 0.88))
 			draw_circle(center, r, ring_fill)
 			draw_arc(center, r, 0.0, TAU, 56, ring_stroke, 1.8)
 			if min_r > 0.0:
 				draw_circle(center, min_r, Color(1.0, 0.35, 0.35, 0.08))
 				draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.75), 1.5)
 			if drag_tower_type != "":
-				draw_circle(center, 15.0, Color(0.35, 0.95, 0.82, 0.42) if valid_drop else Color(1.0, 0.38, 0.32, 0.38))
-				draw_arc(center, 16.0, 0.0, TAU, 24, ring_stroke, 2.2)
-				var box_w: float = maxf(124.0, float(status_txt.length()) * 6.5 + 14.0)
-				draw_rect(Rect2(center + Vector2(-box_w * 0.5, -35.0), Vector2(box_w, 16.0)), Color(0.05, 0.08, 0.14, 0.92))
-				draw_rect(Rect2(center + Vector2(-box_w * 0.5, -35.0), Vector2(box_w, 16.0)), ring_stroke, false, 1.1)
-				draw_string(font, center + Vector2(-box_w * 0.5 + 6.0, -23.0), status_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.55, 1.0, 0.82) if valid_drop else Color(1.0, 0.65, 0.55))
+				draw_circle(center, 18.0 if is_combine_hover else 15.0, Color(1.0, 0.86, 0.28, 0.45) if (is_combine_hover and valid_drop) else (Color(0.35, 0.95, 0.82, 0.42) if valid_drop else Color(1.0, 0.38, 0.32, 0.38)))
+				draw_arc(center, 19.0 if is_combine_hover else 16.0, 0.0, TAU, 24, ring_stroke, 2.4)
+				var box_w: float = maxf(130.0, float(status_txt.length()) * 6.5 + 16.0)
+				draw_rect(Rect2(center + Vector2(-box_w * 0.5, -36.0), Vector2(box_w, 16.0)), Color(0.05, 0.08, 0.14, 0.94))
+				draw_rect(Rect2(center + Vector2(-box_w * 0.5, -36.0), Vector2(box_w, 16.0)), ring_stroke, false, 1.2)
+				draw_string(font, center + Vector2(-box_w * 0.5 + 6.0, -24.0), status_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.48) if (is_combine_hover and valid_drop) else (Color(0.55, 1.0, 0.82) if valid_drop else Color(1.0, 0.65, 0.55)))
 
 	# 6) Alien Base (Enemy Hive Bio-Spire) with Animated Tendrils, Progressive Damage States, Spawn Vortex & Target Lock
 	_draw_enemy_base(font)

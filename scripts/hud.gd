@@ -128,10 +128,24 @@ var start_level_title_label: Label = null
 var start_level_desc_label: Label = null
 var start_meta_label: Label = null
 var start_play_button: Button = null
+var start_sandbox_button: Button = null
 var start_lab_button: Button = null
 var start_download_button: Button = null
+var lab_sandbox_button: Button = null
 var pause_main_menu_button: Button = null
 var end_main_menu_button: Button = null
+
+var combine_button: Button = null
+var sandbox_toggle_button: Button = null
+var sandbox_panel: PanelContainer = null
+var sandbox_body_box: VBoxContainer = null
+var sandbox_collapse_button: Button = null
+var sandbox_fast_build_button: Button = null
+var sandbox_wave_label: Label = null
+var sandbox_qty_button: Button = null
+var _sandbox_selected_wave: int = 1
+var _sandbox_spawn_qty: int = 1
+var _sandbox_collapsed: bool = false
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -224,6 +238,7 @@ func _ready() -> void:
 
 	_build_research_buttons()
 	_build_start_menu()
+	_build_combine_and_sandbox_ui()
 	_setup_right_panel_buttons()
 
 	GameState.mission_ended.connect(_on_mission_ended)
@@ -292,7 +307,9 @@ func _select_level(level_n: int) -> void:
 	_refresh_all()
 
 
-func _on_launch_level_pressed() -> void:
+func _launch_selected_level(sandbox_mode: bool = false) -> void:
+	GameState.set_sandbox_mode(sandbox_mode)
+	_sandbox_selected_wave = 1
 	between_levels_overlay.visible = false
 	if start_menu_overlay != null:
 		start_menu_overlay.visible = false
@@ -300,6 +317,14 @@ func _on_launch_level_pressed() -> void:
 		map_ref.load_level(GameState.selected_map_level)
 	GameState.reset_mission()
 	restart_requested.emit()
+	_sandbox_collapsed = false
+	if sandbox_panel != null:
+		sandbox_panel.visible = sandbox_mode
+	_refresh_sandbox_ui()
+
+
+func _on_launch_level_pressed() -> void:
+	_launch_selected_level(false)
 
 
 func _build_start_menu() -> void:
@@ -424,14 +449,27 @@ func _build_start_menu() -> void:
 	start_play_button.name = "StartPlayButton"
 	start_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_play_button.custom_minimum_size = Vector2(0, 48)
-	start_play_button.add_theme_font_size_override("font_size", 14)
+	start_play_button.add_theme_font_size_override("font_size", 13)
 	start_play_button.text = "LAUNCH LEVEL 1"
 	start_play_button.pressed.connect(func() -> void:
 		GameState.select_level(GameState.selected_map_level)
-		_on_launch_level_pressed()
+		_launch_selected_level(false)
 	)
 	UIIcons.apply_right_button_theme(start_play_button, Color(0.28, 0.88, 0.62))
 	action_row.add_child(start_play_button)
+
+	start_sandbox_button = Button.new()
+	start_sandbox_button.name = "StartSandboxButton"
+	start_sandbox_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_sandbox_button.custom_minimum_size = Vector2(0, 48)
+	start_sandbox_button.add_theme_font_size_override("font_size", 12)
+	start_sandbox_button.text = "SANDBOX (LV 1)"
+	start_sandbox_button.pressed.connect(func() -> void:
+		GameState.select_level(GameState.selected_map_level)
+		_launch_selected_level(true)
+	)
+	UIIcons.apply_right_button_theme(start_sandbox_button, Color(0.95, 0.72, 0.25))
+	action_row.add_child(start_sandbox_button)
 
 	start_lab_button = Button.new()
 	start_lab_button.name = "StartLabButton"
@@ -471,6 +509,248 @@ func _build_start_menu() -> void:
 		end_main_menu_button.pressed.connect(open_start_menu)
 		UIIcons.apply_right_button_theme(end_main_menu_button, Color(0.42, 0.72, 0.96))
 		end_vbox.add_child(end_main_menu_button)
+
+
+func _build_combine_and_sandbox_ui() -> void:
+	# 1) Add Combine button to TowerPanelBox (just above SellButton)
+	if tower_panel_box != null and combine_button == null:
+		combine_button = Button.new()
+		combine_button.name = "CombineButton"
+		combine_button.custom_minimum_size = Vector2(0, 32)
+		combine_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		combine_button.add_theme_font_size_override("font_size", 11)
+		combine_button.text = "Combine w/ Tower..."
+		combine_button.pressed.connect(_on_combine_button_pressed)
+		tower_panel_box.add_child(combine_button)
+		if sell_button != null:
+			tower_panel_box.move_child(combine_button, sell_button.get_index())
+
+	# 2) Add Launch Sandbox button inside BetweenLevelsOverlay BottomButtons
+	var lab_bottom := get_node_or_null("BetweenLevelsOverlay/Margin/VBox/BottomButtons") as HBoxContainer
+	if lab_bottom != null and lab_sandbox_button == null:
+		lab_sandbox_button = Button.new()
+		lab_sandbox_button.name = "LabSandboxButton"
+		lab_sandbox_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lab_sandbox_button.text = "Sandbox (Lv 1)"
+		lab_sandbox_button.pressed.connect(func() -> void: _launch_selected_level(true))
+		UIIcons.apply_right_button_theme(lab_sandbox_button, Color(0.95, 0.72, 0.25))
+		lab_bottom.add_child(lab_sandbox_button)
+
+	# 3) Add Sandbox toggle button in TopBar Row2 (visible when in Sandbox Mode)
+	var top_row2 := get_node_or_null("TopBar/VBox/Row2") as HBoxContainer
+	if top_row2 != null and sandbox_toggle_button == null:
+		sandbox_toggle_button = Button.new()
+		sandbox_toggle_button.name = "SandboxToggleButton"
+		sandbox_toggle_button.custom_minimum_size = Vector2(90, 26)
+		sandbox_toggle_button.add_theme_font_size_override("font_size", 11)
+		sandbox_toggle_button.text = "Sandbox"
+		sandbox_toggle_button.visible = false
+		sandbox_toggle_button.pressed.connect(_toggle_sandbox_panel)
+		UIIcons.apply_right_button_theme(sandbox_toggle_button, Color(0.96, 0.74, 0.24))
+		top_row2.add_child(sandbox_toggle_button)
+		if debug_button != null:
+			top_row2.move_child(sandbox_toggle_button, debug_button.get_index())
+
+	# 4) Build Floating Sandbox Tool Panel (hidden unless GameState.is_sandbox_mode)
+	sandbox_panel = PanelContainer.new()
+	sandbox_panel.name = "SandboxPanel"
+	sandbox_panel.visible = false
+	sandbox_panel.position = Vector2(12.0, 72.0)
+	sandbox_panel.size = Vector2(292.0, 232.0)
+	sandbox_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.06, 0.09, 0.16, 0.94), Color(0.96, 0.74, 0.26), 8, 8.0, 6.0))
+	add_child(sandbox_panel)
+
+	var sb_vbox := VBoxContainer.new()
+	sb_vbox.add_theme_constant_override("separation", 5)
+	sandbox_panel.add_child(sb_vbox)
+
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", 6)
+	sb_vbox.add_child(hdr_row)
+
+	var hdr_lbl := Label.new()
+	hdr_lbl.text = "SANDBOX STUDIO ($INF)"
+	hdr_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr_lbl.add_theme_font_size_override("font_size", 11)
+	hdr_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.36))
+	hdr_row.add_child(hdr_lbl)
+
+	sandbox_fast_build_button = Button.new()
+	sandbox_fast_build_button.name = "SandboxFastBuildButton"
+	sandbox_fast_build_button.custom_minimum_size = Vector2(82, 24)
+	sandbox_fast_build_button.add_theme_font_size_override("font_size", 10)
+	sandbox_fast_build_button.text = "Instant: ON"
+	sandbox_fast_build_button.pressed.connect(func() -> void:
+		GameState.sandbox_instant_build = not GameState.sandbox_instant_build
+		_refresh_sandbox_ui()
+	)
+	UIIcons.apply_right_button_theme(sandbox_fast_build_button, Color(0.35, 0.92, 0.68))
+	hdr_row.add_child(sandbox_fast_build_button)
+
+	sandbox_collapse_button = Button.new()
+	sandbox_collapse_button.name = "SandboxCollapseButton"
+	sandbox_collapse_button.custom_minimum_size = Vector2(28, 24)
+	sandbox_collapse_button.add_theme_font_size_override("font_size", 11)
+	sandbox_collapse_button.text = "-"
+	sandbox_collapse_button.pressed.connect(func() -> void:
+		_sandbox_collapsed = not _sandbox_collapsed
+		_refresh_sandbox_ui()
+	)
+	UIIcons.apply_right_button_theme(sandbox_collapse_button, Color(0.55, 0.72, 0.92))
+	hdr_row.add_child(sandbox_collapse_button)
+
+	sandbox_body_box = VBoxContainer.new()
+	sandbox_body_box.name = "SandboxBody"
+	sandbox_body_box.add_theme_constant_override("separation", 5)
+	sb_vbox.add_child(sandbox_body_box)
+
+	# Wave Picker & Launch row
+	var w_row := HBoxContainer.new()
+	w_row.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(w_row)
+
+	var w_minus := Button.new()
+	w_minus.name = "SandboxWavePrev"
+	w_minus.custom_minimum_size = Vector2(30, 26)
+	w_minus.add_theme_font_size_override("font_size", 11)
+	w_minus.text = "-1"
+	w_minus.pressed.connect(func() -> void: _adjust_sandbox_wave(-1))
+	UIIcons.apply_right_button_theme(w_minus, Color(0.38, 0.68, 0.96))
+	w_row.add_child(w_minus)
+
+	sandbox_wave_label = Label.new()
+	sandbox_wave_label.name = "SandboxWaveLabel"
+	sandbox_wave_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sandbox_wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sandbox_wave_label.add_theme_font_size_override("font_size", 11)
+	sandbox_wave_label.text = "Wave: 1"
+	w_row.add_child(sandbox_wave_label)
+
+	var w_plus := Button.new()
+	w_plus.name = "SandboxWaveNext"
+	w_plus.custom_minimum_size = Vector2(30, 26)
+	w_plus.add_theme_font_size_override("font_size", 11)
+	w_plus.text = "+1"
+	w_plus.pressed.connect(func() -> void: _adjust_sandbox_wave(1))
+	UIIcons.apply_right_button_theme(w_plus, Color(0.38, 0.68, 0.96))
+	w_row.add_child(w_plus)
+
+	var w_plus5 := Button.new()
+	w_plus5.name = "SandboxWavePlus5"
+	w_plus5.custom_minimum_size = Vector2(32, 26)
+	w_plus5.add_theme_font_size_override("font_size", 11)
+	w_plus5.text = "+5"
+	w_plus5.pressed.connect(func() -> void: _adjust_sandbox_wave(5))
+	UIIcons.apply_right_button_theme(w_plus5, Color(0.38, 0.68, 0.96))
+	w_row.add_child(w_plus5)
+
+	var w_run := Button.new()
+	w_run.name = "SandboxRunWaveButton"
+	w_run.custom_minimum_size = Vector2(78, 26)
+	w_run.add_theme_font_size_override("font_size", 11)
+	w_run.text = "RUN WAVE"
+	w_run.pressed.connect(_on_sandbox_run_wave_pressed)
+	UIIcons.apply_right_button_theme(w_run, Color(0.28, 0.88, 0.62))
+	w_row.add_child(w_run)
+
+	# Enemy Spawner buttons (2 compact rows)
+	var sp_lbl := Label.new()
+	sp_lbl.text = "Spawn Enemy (Wave Scale):"
+	sp_lbl.add_theme_font_size_override("font_size", 10)
+	sp_lbl.add_theme_color_override("font_color", Color(0.75, 0.86, 0.96))
+	sandbox_body_box.add_child(sp_lbl)
+
+	var sp_row1 := HBoxContainer.new()
+	sp_row1.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(sp_row1)
+	for etype in ["crawler", "rusher", "brute"]:
+		var eb := _make_sandbox_enemy_btn(etype)
+		sp_row1.add_child(eb)
+
+	var sp_row2 := HBoxContainer.new()
+	sp_row2.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(sp_row2)
+	for etype in ["blitzer", "juggernaut"]:
+		var eb := _make_sandbox_enemy_btn(etype)
+		sp_row2.add_child(eb)
+
+	sandbox_qty_button = Button.new()
+	sandbox_qty_button.name = "SandboxQtyButton"
+	sandbox_qty_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sandbox_qty_button.custom_minimum_size = Vector2(0, 26)
+	sandbox_qty_button.add_theme_font_size_override("font_size", 11)
+	sandbox_qty_button.text = "Qty: x1"
+	sandbox_qty_button.pressed.connect(func() -> void:
+		_sandbox_spawn_qty = 5 if _sandbox_spawn_qty == 1 else 1
+		_refresh_sandbox_ui()
+	)
+	UIIcons.apply_right_button_theme(sandbox_qty_button, Color(0.72, 0.56, 0.98))
+	sp_row2.add_child(sandbox_qty_button)
+
+	# Utility clear/exit row
+	var util_row := HBoxContainer.new()
+	util_row.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(util_row)
+
+	var clr_e := Button.new()
+	clr_e.name = "SandboxClearEnemies"
+	clr_e.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clr_e.custom_minimum_size = Vector2(0, 26)
+	clr_e.add_theme_font_size_override("font_size", 10)
+	clr_e.text = "Clear Foes"
+	clr_e.pressed.connect(func() -> void:
+		if map_ref != null:
+			map_ref.sandbox_clear_enemies()
+	)
+	UIIcons.apply_right_button_theme(clr_e, Color(0.95, 0.52, 0.36))
+	util_row.add_child(clr_e)
+
+	var clr_t := Button.new()
+	clr_t.name = "SandboxClearTowers"
+	clr_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clr_t.custom_minimum_size = Vector2(0, 26)
+	clr_t.add_theme_font_size_override("font_size", 10)
+	clr_t.text = "Clear Towers"
+	clr_t.pressed.connect(func() -> void:
+		if map_ref != null:
+			map_ref.sandbox_clear_towers()
+		_refresh_all()
+	)
+	UIIcons.apply_right_button_theme(clr_t, Color(0.95, 0.44, 0.44))
+	util_row.add_child(clr_t)
+
+	var rst_cd := Button.new()
+	rst_cd.name = "SandboxResetCooldowns"
+	rst_cd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rst_cd.custom_minimum_size = Vector2(0, 26)
+	rst_cd.add_theme_font_size_override("font_size", 10)
+	rst_cd.text = "Reset CDs"
+	rst_cd.pressed.connect(func() -> void:
+		if time_powers_ref != null:
+			time_powers_ref.cooldowns = {"rewind": 0.0, "pause": 0.0, "haste": 0.0}
+		GameState.mission.lives = Balance.PLAYER_STARTING_LIVES
+		GameState.mission.surge_timer_seconds = Balance.SURGE_BASE_WINDOW
+		_refresh_all()
+	)
+	UIIcons.apply_right_button_theme(rst_cd, Color(0.36, 0.84, 0.96))
+	util_row.add_child(rst_cd)
+
+
+func _make_sandbox_enemy_btn(enemy_type: String) -> Button:
+	var b := Button.new()
+	b.name = "SandboxSpawn_%s" % enemy_type
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(0, 26)
+	b.add_theme_font_size_override("font_size", 10)
+	b.text = str(Balance.ENEMIES[enemy_type]["name"])
+	var captured: String = enemy_type
+	b.pressed.connect(func() -> void:
+		if map_ref != null:
+			map_ref.sandbox_spawn_enemy(captured, _sandbox_selected_wave, _sandbox_spawn_qty)
+			_refresh_all()
+	)
+	UIIcons.apply_right_button_theme(b, Color(0.88, 0.42, 0.48) if enemy_type == "juggernaut" else Color(0.38, 0.62, 0.88))
+	return b
 
 
 func _build_research_buttons() -> void:
@@ -518,6 +798,8 @@ func _setup_right_panel_buttons() -> void:
 	_init_styled_button(upg_rng_button, _icons["range"], Color(0.35, 0.82, 0.95))
 	_init_styled_button(upg_spd_button, _icons["fire_rate"], Color(0.95, 0.82, 0.32))
 	_init_styled_button(sell_button, _icons["sell"], Color(0.88, 0.72, 0.25))
+	if combine_button != null:
+		_init_styled_button(combine_button, _icons["target"], Color(1.0, 0.82, 0.30))
 	_init_styled_button(manip_upgrade_button, _icons["manipulator"], Color(0.68, 0.52, 0.95))
 
 	for key in RESEARCH_ORDER:
@@ -697,8 +979,9 @@ func _refresh_all() -> void:
 	]
 
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
-	wave_label.text = "Wave %d / %d (Lv %d)" % [m.wave_number, max_w, GameState.selected_mission_level]
-	money_label.text = "Money: $%d" % m.economy["money"]
+	var sb_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else ""
+	wave_label.text = "Wave %d / %d (Lv %d)%s" % [m.wave_number, max_w, GameState.selected_mission_level, sb_tag]
+	money_label.text = "Money: $INF (SANDBOX)" if GameState.is_sandbox_mode else ("Money: $%d" % m.economy["money"])
 	research_label.text = "Research: %d R (%d/%d)" % [
 		GameState.meta_research,
 		int(m.stats["research_earned"]),
@@ -724,6 +1007,7 @@ func _refresh_all() -> void:
 	_refresh_refinery_button()
 	_refresh_charge_button()
 	_refresh_start_wave_button()
+	_refresh_sandbox_ui()
 
 	if debug_panel.visible:
 		_refresh_debug_overlay()
@@ -928,19 +1212,26 @@ func _refresh_selection_panel() -> void:
 		var cfg: Dictionary = Balance.TOWERS[_selected_tower.tower_type]
 		var loc_tag: String = "Pad P%d" % (_selected_tower.pad_index + 1) if _selected_tower.pad_index >= 0 else "Tower Zone"
 		tower_header_label.text = "%s (%s)" % [cfg["name"], loc_tag]
-		tower_ratings_label.text = "%s - Damage: %s, Speed: %s" % [
-			cfg["damage_type_label"],
-			cfg["damage_rating"],
-			cfg["speed_rating"],
-		]
+		if _selected_tower.spawner_creates_bubble():
+			tower_ratings_label.text = "%s | Bubble %.0fpx (%.1fs)" % [
+				cfg["damage_type_label"],
+				_selected_tower.get_effective_bubble_radius(),
+				float(cfg.get("bubble_duration", 3.5)),
+			]
+		else:
+			tower_ratings_label.text = "%s - Damage: %s, Speed: %s" % [
+				cfg["damage_type_label"],
+				cfg["damage_rating"],
+				cfg["speed_rating"],
+			]
 		if _selected_tower.current_job != null:
-			var kind_txt: String = "Building" if not _selected_tower.is_built else "Upgrading %s" % _selected_tower.current_job.target_key.capitalize()
-			var wave_tag: String = "" if GameState.is_wave_active else " [starts in wave]"
+			var kind_txt: String = "Building" if not _selected_tower.is_built else ("Combining..." if _selected_tower.current_job.kind == "tower_combine" else ("Upgrading %s" % _selected_tower.current_job.target_key.capitalize()))
+			var wave_tag: String = "" if (GameState.is_wave_active or GameState.is_sandbox_mode) else " [starts in wave]"
 			tower_status_label.text = "%s: %.1f s left (cannot fire)%s" % [kind_txt, _selected_tower.current_job.remaining_time, wave_tag]
 			tower_status_label.modulate = Color(1.0, 0.85, 0.35)
 		else:
-			tower_status_label.text = "Status: Active"
-			tower_status_label.modulate = Color(0.55, 0.95, 0.65)
+			tower_status_label.text = "Status: Active%s" % (" [COMBINED]" if Balance.is_combo_tower(_selected_tower.tower_type) else "")
+			tower_status_label.modulate = Color(1.0, 0.90, 0.45) if Balance.is_combo_tower(_selected_tower.tower_type) else Color(0.55, 0.95, 0.65)
 
 		var tlabel: String = str(Balance.TARGETING_LABELS.get(_selected_tower.target_mode, "First"))
 		target_mode_button.text = "Target: %s (tap to cycle)" % tlabel
@@ -948,11 +1239,28 @@ func _refresh_selection_panel() -> void:
 		_set_button_description(target_mode_button, "Targeting (%s): First/Last/Strongest/Weakest/Fastest/Slowest." % tlabel)
 
 		if _selected_tower.uses_decay_upgrades():
-			_style_upgrade_button(upg_dmg_button, "Decay DoT", "damage", _selected_tower, money, "Flat Time Decay DoT/sec (3 ticks, 150% vs Refl/Jugg, execute <1 HP)")
+			var decay_desc: String = "Decay DoT + Bubble Radius (%.0fpx)" % _selected_tower.get_effective_bubble_radius() if _selected_tower.spawner_creates_bubble() else "Flat Time Decay DoT/sec (150%% vs Refl/Jugg)"
+			_style_upgrade_button(upg_dmg_button, "Decay+Rad" if _selected_tower.spawner_creates_bubble() else "Decay DoT", "damage", _selected_tower, money, decay_desc)
 		else:
 			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+35% / +80% / +140% / +220% / +320% total damage")
 		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+25% / +60% / +100% / +130% / +160% total range")
 		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+20% / +45% / +75% / +110% / +150% fire speed")
+
+		if combine_button != null:
+			var is_already_combo: bool = Balance.is_combo_tower(_selected_tower.tower_type)
+			combine_button.visible = not is_already_combo
+			if not is_already_combo:
+				var is_picking: bool = (map_ref != null and map_ref.combine_source_tower == _selected_tower)
+				if is_picking:
+					combine_button.text = "Click Partner Tower (Tap Cancel)"
+					combine_button.disabled = false
+					combine_button.modulate = Color(1.0, 0.90, 0.35)
+					_set_button_description(combine_button, "Click another base tower on map to combine, or tap to cancel.")
+				else:
+					combine_button.text = "Combine w/ Another Tower..."
+					combine_button.disabled = not _selected_tower.can_combine()
+					combine_button.modulate = Color.WHITE
+					_set_button_description(combine_button, "Merge 2 base towers (or drag a shop tower onto it) for 21 combos.")
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
@@ -1034,6 +1342,10 @@ func _refresh_research_panel() -> void:
 			start_meta_label.text = "Persistent Meta-Research Available: %d R (Max %d R earned per mission)" % [res, Balance.MAX_RESEARCH_PER_MISSION]
 		if start_play_button != null:
 			start_play_button.text = "START %s" % str(map_cfg["name"]).to_upper()
+		if start_sandbox_button != null:
+			start_sandbox_button.text = "SANDBOX (LV %d)" % sel_map
+	if lab_sandbox_button != null:
+		lab_sandbox_button.text = "Sandbox (Lv %d)" % sel_map
 
 	var can_spend_now: bool = not GameState.is_wave_active and (GameState.mission.wave_number == 1 or GameState.mission.is_over)
 	for key in RESEARCH_ORDER:
@@ -1123,7 +1435,7 @@ func _refresh_refinery_button() -> void:
 func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: bool = false) -> void:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var cost: int = int(cfg["cost"])
-	var affordable: bool = money >= cost and not GameState.mission.is_over
+	var affordable: bool = (GameState.is_sandbox_mode or money >= cost) and not GameState.mission.is_over
 	var armed_prefix: String = "[CLICK PAD] " if is_armed else ""
 	btn.text = "%s%s ($%d)" % [armed_prefix, cfg["name"], cost]
 	btn.disabled = not affordable
@@ -1152,7 +1464,7 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	elif tower_type == "laser":
 		desc += " - 150% Std, 10% Refl."
 	elif tower_type == "slow":
-		desc += " - 30% slow 2s + flat Time Decay."
+		desc = "$%d, %ds | Chrono Bubble (0.4/s): 30%% slow + Decay (Dmg grows radius)." % [cost, int(cfg["build_time"])]
 	elif tower_type == "railgun":
 		desc += " - 140 hit + 50% slow 4s + Decay."
 	elif tower_type == "annihilator":
@@ -1312,6 +1624,66 @@ func _on_sell_pressed() -> void:
 		map_ref.sell_tower(_selected_tower)
 
 
+func _on_combine_button_pressed() -> void:
+	if _selected_tower == null or not is_instance_valid(_selected_tower) or map_ref == null:
+		return
+	if map_ref.combine_source_tower == _selected_tower:
+		map_ref.cancel_combine_partner_pick()
+		_refresh_selection_panel()
+		return
+	var partner_count: int = map_ref.start_combine_partner_pick(_selected_tower)
+	if partner_count == 0:
+		GameState.event_logged.emit("Drag any shop tower onto this tower OR build another base tower to combine!")
+	else:
+		GameState.event_logged.emit("Click a highlighted base tower on the map to combine (%d valid)." % partner_count)
+	_refresh_selection_panel()
+
+
+func _toggle_sandbox_panel() -> void:
+	if not GameState.is_sandbox_mode:
+		return
+	if sandbox_panel != null:
+		sandbox_panel.visible = not sandbox_panel.visible
+		_refresh_sandbox_ui()
+
+
+func _adjust_sandbox_wave(delta_w: int) -> void:
+	_sandbox_selected_wave = clampi(_sandbox_selected_wave + delta_w, 1, 45)
+	_refresh_sandbox_ui()
+
+
+func _on_sandbox_run_wave_pressed() -> void:
+	if wave_manager_ref != null:
+		wave_manager_ref.start_sandbox_wave(_sandbox_selected_wave)
+		_refresh_all()
+
+
+func _refresh_sandbox_ui() -> void:
+	var in_sb: bool = GameState.is_sandbox_mode
+	if sandbox_toggle_button != null:
+		sandbox_toggle_button.visible = in_sb
+	if sandbox_panel == null:
+		return
+	if not in_sb:
+		sandbox_panel.visible = false
+		return
+	if not sandbox_panel.visible and sandbox_toggle_button != null and sandbox_toggle_button.visible:
+		# Keep visible by default on first entry to sandbox unless manually hidden
+		pass
+	if sandbox_body_box != null:
+		sandbox_body_box.visible = not _sandbox_collapsed
+	if sandbox_collapse_button != null:
+		sandbox_collapse_button.text = "+" if _sandbox_collapsed else "-"
+	if sandbox_fast_build_button != null:
+		sandbox_fast_build_button.text = "Instant: ON" if GameState.sandbox_instant_build else "Instant: OFF"
+		sandbox_fast_build_button.modulate = Color(0.45, 1.0, 0.72) if GameState.sandbox_instant_build else Color(0.88, 0.88, 0.92)
+	if sandbox_wave_label != null:
+		sandbox_wave_label.text = "Wave: %d" % _sandbox_selected_wave
+	if sandbox_qty_button != null:
+		sandbox_qty_button.text = "Qty: x%d" % _sandbox_spawn_qty
+	sandbox_panel.size = Vector2(292.0, 38.0 if _sandbox_collapsed else 232.0)
+
+
 func _on_pad_selected(pad_idx: int) -> void:
 	_selected_pad_idx = pad_idx
 	_selected_tower = null
@@ -1459,6 +1831,8 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
 		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 68.0), Vector2(920.0, 560.0))
 		debug_panel.position = Vector2(16.0, 74.0)
+		if sandbox_panel != null:
+			sandbox_panel.position = Vector2(12.0, 70.0)
 		return
 
 	# 2) Pixel 11 Pro 20:9 Widescreen Landscape (e.g. 1600x720 / 1603x720)
@@ -1503,6 +1877,8 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_center_overlay(end_overlay, vp_size, Vector2(640.0, 400.0))
 		_center_overlay(start_menu_overlay, vp_size, Vector2(1060.0, 560.0))
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
+		if sandbox_panel != null:
+			sandbox_panel.position = Vector2(safe_x + 12.0, top_h + 8.0)
 		return
 
 	# 3) Pixel 11 Pro 9:20 Tall Portrait Fallback (e.g. 1280x2844 when Auto-Rotate is OFF)
@@ -1545,6 +1921,8 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	_center_overlay(end_overlay, vp_size, Vector2(820.0, 480.0))
 	_center_overlay(start_menu_overlay, vp_size, Vector2(1160.0, 780.0))
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
+	if sandbox_panel != null:
+		sandbox_panel.position = Vector2(16.0, safe_top + p_top_h + 8.0)
 
 
 func _on_selection_cleared() -> void:

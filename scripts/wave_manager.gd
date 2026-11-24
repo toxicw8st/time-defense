@@ -96,6 +96,18 @@ func start_wave(is_replay: bool = false) -> bool:
 	return true
 
 
+func start_sandbox_wave(wave_num: int) -> bool:
+	if GameState.mission.is_over:
+		return false
+	if map_ref != null:
+		map_ref.clear_all_enemies()
+	var w: int = clampi(wave_num, 1, 45)
+	GameState.mission.wave_number = w
+	_begin_wave_internal(w, false)
+	GameState.event_logged.emit("[SANDBOX] Launched Wave %d" % w)
+	return true
+
+
 func restart_wave_for_rewind() -> void:
 	if map_ref != null:
 		map_ref.clear_all_enemies()
@@ -165,6 +177,10 @@ func _complete_current_wave() -> void:
 	_last_seen_mutations = GameState.mission.mutations.duplicate()
 
 	if wave_num >= max_waves_limit:
+		if GameState.is_sandbox_mode:
+			state = State.BUILD
+			state_changed.emit(state)
+			return
 		if not GameState.mission.is_over and GameState.mission.enemy_base_hp > 0:
 			GameState.end_mission("stalled", "Survived %d waves, but the Enemy Base still stands." % max_waves_limit)
 		return

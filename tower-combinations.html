@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TimeDefense — Tower Combination Guide (All 21 Combinations)</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --bg-panel: #111824;
+      --bg-card: #141d2b;
+      --bg-chip: #192436;
+      --border: #2b3e5c;
+      --border-bright: #4986c7;
+      --text: #e6effa;
+      --muted: #93a8c7;
+      --cyan: #5ae8ff;
+      --blue: #4fa3ff;
+      --green: #5ce69a;
+      --purple: #b873ff;
+      --magenta: #f05ee0;
+      --gold: #ffcf56;
+      --red: #ff6363;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top right, #162236 0%, var(--bg) 55%);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 18, 28, 0.94);
+      padding: 26px 24px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(8px);
+    }
+    .container {
+      max-width: 1380px;
+      margin: 0 auto;
+    }
+    .title-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: 0.5px;
+      color: var(--cyan);
+    }
+    .badge-count {
+      background: #17283d;
+      border: 1px solid var(--border-bright);
+      color: var(--gold);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
+    main {
+      padding: 22px 24px 60px;
+    }
+    section {
+      margin-bottom: 28px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      color: #a9d6ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .panel h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--gold);
+    }
+    .panel p, .panel li {
+      margin: 4px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .panel ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+    }
+    .base-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+      gap: 10px;
+    }
+    .base-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .base-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .base-name {
+      font-weight: 700;
+      font-size: 13.5px;
+      color: #fff;
+    }
+    .base-cost {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .base-meta {
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .matrix-table-wrap {
+      overflow-x: auto;
+    }
+    table.combo-matrix {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      font-size: 12px;
+    }
+    table.combo-matrix th, table.combo-matrix td {
+      border: 1px solid var(--border);
+      padding: 7px 8px;
+      text-align: center;
+    }
+    table.combo-matrix th {
+      background: #162235;
+      color: #cfe6ff;
+      font-weight: 700;
+    }
+    table.combo-matrix td.matrix-cell {
+      background: #121a28;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      vertical-align: middle;
+    }
+    table.combo-matrix td.matrix-cell:hover {
+      background: #1d2f49;
+    }
+    table.combo-matrix td.matrix-same {
+      background: #182238;
+      border-color: #4f6ba8;
+    }
+    .cell-name {
+      display: block;
+      font-weight: 700;
+      color: #f0f6ff;
+      font-size: 11.5px;
+    }
+    .cell-cost {
+      display: block;
+      color: var(--gold);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    button.pill {
+      background: var(--bg-chip);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button.pill:hover {
+      border-color: var(--blue);
+    }
+    button.pill.active {
+      background: #1f456e;
+      border-color: var(--cyan);
+      color: #ffffff;
+    }
+    .search-sort {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    input[type="search"], select {
+      background: #0d131d;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 12.5px;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 480px) {
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+    .combo-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      scroll-margin-top: 125px;
+    }
+    .combo-card.highlight {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px rgba(90, 232, 255, 0.35);
+    }
+    .card-top {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+    .art-box {
+      width: 96px;
+      height: 96px;
+      flex-shrink: 0;
+      background: radial-gradient(circle, #182334 0%, #0d131e 80%);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card-title-block {
+      flex: 1;
+      min-width: 0;
+    }
+    .combo-recipe {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .combo-name {
+      margin: 2px 0 6px;
+      font-size: 16.5px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+    }
+    .t-piercing { background: rgba(79, 163, 255, 0.16); color: #7ac1ff; border-color: rgba(79, 163, 255, 0.45); }
+    .t-normal { background: rgba(92, 230, 154, 0.14); color: #7ff2b3; border-color: rgba(92, 230, 154, 0.4); }
+    .t-laser { background: rgba(240, 94, 224, 0.15); color: #ff8df2; border-color: rgba(240, 94, 224, 0.42); }
+    .t-time { background: rgba(184, 115, 255, 0.16); color: #cfa2ff; border-color: rgba(184, 115, 255, 0.45); }
+    .t-same { background: rgba(255, 207, 86, 0.14); color: var(--gold); border-color: rgba(255, 207, 86, 0.42); }
+    .cost-strip {
+      background: #0f1622;
+      border: 1px solid #24344d;
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .cost-formula {
+      color: #c2d4eb;
+    }
+    .cost-total {
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--gold);
+    }
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .stat-cell {
+      background: #101724;
+      border: 1px solid #223047;
+      border-radius: 6px;
+      padding: 5px 7px;
+      text-align: center;
+    }
+    .stat-lbl {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .stat-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .detail-block {
+      font-size: 12.5px;
+      color: #cfdcf0;
+    }
+    .detail-block strong {
+      color: var(--cyan);
+    }
+    .matrix-mini {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+      font-size: 11px;
+      text-align: center;
+    }
+    .m-chip {
+      background: #0e141f;
+      border: 1px solid #223047;
+      border-radius: 5px;
+      padding: 3px 4px;
+    }
+    .m-chip b { display: block; font-size: 10px; color: var(--muted); }
+    .combo-footer {
+      border-top: 1px solid #22314a;
+      padding-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .good-note { color: var(--green); }
+    .warn-note { color: #ff9c8a; }
+    .dmg-matrix-ref {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .dmg-matrix-ref th, .dmg-matrix-ref td {
+      border: 1px solid var(--border);
+      padding: 5px 8px;
+      text-align: center;
+    }
+    .dmg-matrix-ref th { background: #162235; color: #cde2ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="title-row">
+        <h1>TIME DEFENSE — COMPLETE TOWER COMBINATION GUIDE</h1>
+        <span class="badge-count" id="visible-count-badge">21 / 21 Combinations</span>
+      </div>
+      <p class="subtitle">
+        Design blueprint covering all <strong>21 unique 2-tower combinations</strong> (6 same-type merges + 15 cross-type hybrids) built directly on TimeDefense's exact stats, <strong>4&times;3 Damage Matrix</strong>, and zone-slot economy (<code>$</code>, <code>s$</code>, <code>b$</code>).
+      </p>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 1. Mechanics & Cost Formula -->
+    <section>
+      <h2>1. Merge Rules, Economy &amp; Damage Matrix</h2>
+      <div class="rule-grid">
+        <div class="panel">
+          <h3>Merge Cost &amp; Build-Time Formula</h3>
+          <ul>
+            <li><strong>How to Merge:</strong> Drag any tower onto another built tower inside a Placement Zone (or tap Upgrade &rarr; Combine).</li>
+            <li><strong>Total Asset Cost (<code>$</code>):</strong> <code>Base A ($A) + Base B ($B) + 30% Merge Surcharge</code> (rounded to nearest <code>$5</code>).</li>
+            <li><strong>Construction Time:</strong> <code>round((Build A + Build B) &times; 0.65)</code> seconds during active waves (<strong>+50% faster</strong> with <em>Haste</em>; paused between waves).</li>
+            <li><strong>50% Sell Rule Preserved:</strong> Selling a combined tower refunds <code>50%</code> of total <code>$</code> invested (both base towers + merge surcharge + any Lv 1&ndash;5 upgrades).</li>
+          </ul>
+        </div>
+
+        <div class="panel">
+          <h3>4&times;3 Damage Matrix &amp; Balance Guardrails</h3>
+          <table class="dmg-matrix-ref">
+            <thead>
+              <tr>
+                <th>Damage Type</th>
+                <th>Standard</th>
+                <th>Armored</th>
+                <th>Reflective</th>
+                <th>Juggernaut</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Normal</td><td>100%</td><td>50%</td><td>110%</td><td>55%</td></tr>
+              <tr><td>Piercing</td><td>75%</td><td>150%</td><td>120%</td><td><strong>180%</strong></td></tr>
+              <tr><td>Laser</td><td><strong>150%</strong></td><td>85%</td><td>10%</td><td>8.5%</td></tr>
+              <tr><td>Time (Decay)</td><td>100%</td><td>120%</td><td><strong>150%</strong></td><td><strong>150%*</strong></td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:8px;">
+            *<strong>Locked Boss Rules:</strong> Time Decay stays strictly <strong>flat DoT</strong> (never <code>% HP</code>, capped at 30%/tick, uses <strong>150%</strong> highest-only vs Juggernaut). Juggernaut slows are halved (e.g., 30% &rarr; 15%).
+          </p>
+        </div>
+
+        <div class="panel">
+          <h3>Why Merge? (Zone Efficiency vs. Coverage)</h3>
+          <ul>
+            <li><strong>Frees Placement Zone Space:</strong> Turns 2 towers into 1 stronger unit, opening tight spots in <em>Level 1 Row Zones</em> or <em>Level 5 Hairpin Pillboxes</em>.</li>
+            <li><strong>Dual-Matrix Hybrids:</strong> Cross-type merges combine two mechanics (e.g. Splash + Chrono Bubble, or Laser + Piercing) on a single shared <strong>Lv 1&ndash;5 Upgrade Track</strong>.</li>
+            <li><strong>Chrono Status Bubble Update:</strong> Chrono Slow &amp; its Slow-hybrids fire slower pulsing bolts that deploy an AoE <strong>Status Bubble</strong> on the target; upgrading <strong>Damage</strong> boosts lessened Decay DoT AND expands bubble radius.</li>
+            <li><strong>In-Game Sandbox Studio:</strong> Launch any level (1&ndash;5) in <strong>Sandbox Mode</strong> for infinite <code>$</code>, instant builds, any Wave <code>1&ndash;45</code> runner, and single/squad enemy spawning to test all 21 combinations.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Base 6 Towers Reference -->
+    <section>
+      <h2>2. Base 6 Towers (Current Live Game Stats)</h2>
+      <div class="base-grid" id="base-towers-grid"></div>
+    </section>
+
+    <!-- 3. 6x6 Interactive Combination Lookup Matrix -->
+    <section>
+      <h2>3. 6&times;6 Combination Matrix (Click Any Cell to Inspect)</h2>
+      <div class="panel matrix-table-wrap">
+        <table class="combo-matrix" id="combo-matrix-table"></table>
+      </div>
+    </section>
+
+    <!-- 4. Filterable Catalogue of All 21 Combinations -->
+    <section>
+      <h2>4. All 21 Tower Combinations — Visuals, Cost &amp; Combat Behavior</h2>
+      <div class="controls-bar">
+        <div class="filter-pills" id="filter-pills">
+          <button class="pill active" data-filter="all">All (21)</button>
+          <button class="pill" data-filter="same">Same-Type Merges (6)</button>
+          <button class="pill" data-filter="hybrid">Cross-Type Hybrids (15)</button>
+          <button class="pill" data-filter="boss">Boss / Juggernaut Killers</button>
+          <button class="pill" data-filter="aoe">Crowd / Splash</button>
+          <button class="pill" data-filter="slow">Slow &amp; Time Control</button>
+          <button class="pill" data-filter="budget">Early Game (&le;$300)</button>
+          <button class="pill" data-filter="endgame">Late Game ($600+)</button>
+        </div>
+        <div class="search-sort">
+          <input type="search" id="search-input" placeholder="Search tower, role, enemy..." />
+          <select id="sort-select">
+            <option value="order">Sort: Matrix Order</option>
+            <option value="cost-asc">Sort: Cost Low &rarr; High</option>
+            <option value="cost-desc">Sort: Cost High &rarr; Low</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cards-grid" id="combos-grid"></div>
+    </section>
+  </main>
+
+  <script>
+    const BASE_TOWERS = {
+      blaster: {
+        id: "blaster", name: "Blaster Turret", cost: 90, build: 4.0, dmg: 11.5, rate: 1.2, range: 108,
+        type: "Piercing", color: "#4fa3ff", target: "First",
+        summary: "Twin-barrel autocannon. 13.8 base DPS; 180% vs Juggernaut."
+      },
+      mortar: {
+        id: "mortar", name: "Cluster Mortar", cost: 110, build: 7.0, dmg: 22.0, rate: 0.20, range: 135,
+        type: "Normal", color: "#5ce69a", target: "First",
+        summary: "Heavy 5s-reload splash shell (70px AoE, 60px blind spot)."
+      },
+      laser: {
+        id: "laser", name: "Laser Spire", cost: 100, build: 5.0, dmg: 6.2, rate: 2.5, range: 112,
+        type: "Laser", color: "#f05ee0", target: "First",
+        summary: "2.5/s crystal beam. 150% vs Standard, 10% vs Reflective."
+      },
+      slow: {
+        id: "slow", name: "Chrono Slow Tower", cost: 100, build: 5.0, dmg: 0, rate: 0.40, range: 115,
+        type: "Time", color: "#40e8ff", target: "First",
+        summary: "0.40/s Chrono Status Bubble (42->74px radius w/ Dmg upg): 30% AoE slow (15% Jugg) + lessened 0..38/s Decay."
+      },
+      railgun: {
+        id: "railgun", name: "Time Decay Rail Gun", cost: 375, build: 8.0, dmg: 140.0, rate: 0.20, range: 310,
+        type: "Time", color: "#b873ff", target: "First",
+        summary: "310px hitscan: 140 Time hit + 50% slow 4s (25% Jugg) + 25..235/s Decay."
+      },
+      annihilator: {
+        id: "annihilator", name: "Gauss Annihilator", cost: 240, build: 6.5, dmg: 65.0, rate: 0.75, range: 155,
+        type: "Piercing", color: "#ffaf38", target: "Strongest",
+        summary: "Anti-boss rail cannon. 65 dmg @ 0.75/s (117/hit vs Jugg at Lv0)."
+      }
+    };
+
+    const TOWER_ORDER = ["blaster", "mortar", "laser", "slow", "railgun", "annihilator"];
+
+    const COMBINATIONS = [
+      // === 6 SAME-TYPE MERGES ===
+      {
+        id: "blaster+blaster", a: "blaster", b: "blaster", same: true,
+        name: "Twin-Linked Vulcan Battery",
+        categories: ["same", "boss", "budget"],
+        types: ["Piercing"],
+        mergeCost: 55, buildTime: 5.0,
+        range: "125 px", rate: "2.60 /s (4-round burst)", dmgText: "13.0 /shot (33.8 base DPS)",
+        target: "First / Strongest",
+        matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
+        look: "Wide reinforced gunmetal octagon cradling four staggered cyan-rimmed rotary barrels and dual ammo feed drums under a spinning radar visor.",
+        does: "Fires rapid 4-round Piercing salvos at more than double a Blaster's cadence. Every 4th consecutive hit on the same alien deals a +25% Armor-Crack bonus, shredding Brutes, Blitzers, and early Juggernaut armor without needing expensive late-game slots.",
+        bestFor: "Waves 5-10 Armored Brutes, Reflective Blitzers & mid-tier Juggernaut chip",
+        weakness: "Still takes 75% penalty vs dense Standard Crawler/Rusher swarms."
+      },
+      {
+        id: "mortar+mortar", a: "mortar", b: "mortar", same: true,
+        name: "MIRV Siege Howitzer",
+        categories: ["same", "aoe", "budget"],
+        types: ["Normal"],
+        mergeCost: 65, buildTime: 9.0,
+        range: "155 px (min 60 px)", rate: "0.22 /s (4.5s reload)", dmgText: "18.0 x 3 sub-shells (80 px splash)",
+        target: "First",
+        matrix: { std: "100%", arm: "50%", refl: "110%", jugg: "55%" },
+        look: "Massive triple-bore olive siege turret anchored by six heavy hydraulic recoil struts, glowing amber warhead loader belts, and twin rangefinder pods.",
+        does: "Lobs a heavy cluster canister that splits mid-air into 3 staggered sub-shells forming a tight triangle blast zone (80 px splash each). Overlapping blasts hit slow bunched crowds multiple times while keeping the 60 px min-range blind spot and slow reload.",
+        bestFor: "Waves 4-9 dense Crawler & Rusher packs at bends",
+        weakness: "Very slow 4.5s reload and 50% penalty vs Brutes; fast Blitzers can dodge without Slow support."
+      },
+      {
+        id: "laser+laser", a: "laser", b: "laser", same: true,
+        name: "Prismatic Focus Obelisk",
+        categories: ["same", "budget"],
+        types: ["Laser"],
+        mergeCost: 60, buildTime: 6.5,
+        range: "130 px", rate: "3.2 /s (continuous thermal ticks)", dmgText: "7.5 ramping up to 16.0 /tick",
+        target: "First",
+        matrix: { std: "150%", arm: "85%", refl: "10%", jugg: "8.5%" },
+        look: "Tall twin-crystal magenta pyramid surrounded by six orbiting cyan resonator nodes that converge into a thick white-pink hyper-beam.",
+        does: "Locks a sustained thermal beam onto one target, ramping from 24 base DPS up to 51 base DPS (+150% vs Standard) after 2.5s on the same target; beams refract a 35% intensity arc onto 1 nearby Standard unit within 55 px.",
+        bestFor: "Deleting Standard waves (Crawlers & Rushers) + finishing wounded Brutes",
+        weakness: "Hard-walled by Reflective units (10% vs Blitzers, 8.5% vs Juggernauts)."
+      },
+      {
+        id: "slow+slow", a: "slow", b: "slow", same: true,
+        name: "Stasis Singularity Pylon",
+        categories: ["same", "slow", "aoe", "budget"],
+        types: ["Time"],
+        mergeCost: 60, buildTime: 6.5,
+        range: "135 px", rate: "0.45 /s (2.2s bubble cycle)", dmgText: "4.2s Bubble (56->96px) | 40% Slow | 0..56/s Decay",
+        target: "First",
+        matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
+        look: "Dual counter-spinning cyan & violet clockwork rings suspended over an orbiting chrono-core that projects wide Status Bubbles.",
+        does: "Fires a compressed stasis bolt at 0.45/s that blooms into an oversized Chrono Status Bubble (56 px base, expanding up to 96 px with Damage upgrades) for 4.2s. Slows ALL enemies entering the bubble by 40% (Juggernaut 20%) while ticking lessened flat Time Decay across the entire pack.",
+        bestFor: "Hairpin chokes where Slow + Mortar or Blaster overlap (mass bubble control)",
+        weakness: "Slower attack cadence & lessened single-target Decay DoT; relies on DPS teammates to kill Juggernauts."
+      },
+      {
+        id: "railgun+railgun", a: "railgun", b: "railgun", same: true,
+        name: "Chrono-Breach Supercollider",
+        categories: ["same", "boss", "slow", "endgame"],
+        types: ["Time"],
+        mergeCost: 225, buildTime: 10.5,
+        range: "380 px", rate: "0.22 /s (4.5s recharge)", dmgText: "260 Time line-pierce + 55..310/s Decay",
+        target: "Strongest / First",
+        matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
+        look: "Overlength twin-tiered violet magnetic accelerator spanning two coil racks with floating golden capacitor rings and a glowing plasma breech.",
+        does: "Fires a map-spanning Time rail slug that punches straight through up to 3 lined-up enemies along the shot line, dealing 260 base Time damage (390 vs Reflective/Juggernaut before upgrades), 55% slow for 4.5s (Jugg 27.5%), and heavy flat Time Decay DoT.",
+        bestFor: "Long straight lanes (Level 1 Row 2, Level 2 Col 1-3) Waves 12-45",
+        weakness: "Massive $975 total cost & 10.5s build lock; wasted if aimed across curved corners."
+      },
+      {
+        id: "annihilator+annihilator", a: "annihilator", b: "annihilator", same: true,
+        name: "Hyper-Velocity MAC Cannon",
+        categories: ["same", "boss", "endgame"],
+        types: ["Piercing"],
+        mergeCost: 145, buildTime: 8.5,
+        range: "190 px", rate: "0.85 /s", dmgText: "145.0 /shot (261/hit vs Jugg at Lv0)",
+        target: "Strongest",
+        matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
+        look: "Colossal bronze-and-gold double-rail siege cannon with heavy hydraulic stabilizer claws and glowing amber muzzle shock rings.",
+        does: "Launches tungsten-core Piercing sabot slugs built specifically as a boss assassin: 145 base dmg (261 vs Juggernaut at Lv0, over 1,090/hit at Lv5 Damage!) plus a 0.35s micro-stagger on non-bosses and +20% bonus damage while target is above 50% HP.",
+        bestFor: "Deleting Wave 10 Juggernauts and Waves 15-45 multi-boss waves",
+        weakness: "Single-target only; completely overwhelmed by 40+ Rusher swarms without backup."
+      },
+
+      // === 15 CROSS-TYPE HYBRIDS ===
+      {
+        id: "blaster+mortar", a: "blaster", b: "mortar", same: false,
+        name: "Flak Barrage Battery",
+        categories: ["hybrid", "aoe", "budget"],
+        types: ["Piercing", "Normal"],
+        mergeCost: 60, buildTime: 7.0,
+        range: "135 px (no blind spot)", rate: "0.95 /s (shrapnel bursts)", dmgText: "14 Piercing direct + 12 Normal shrapnel (55px)",
+        target: "First",
+        matrix: { std: "85%", arm: "105%", refl: "115%", jugg: "125%" },
+        look: "Short fat twin-muzzle green-blue flak cannon on a reinforced rotary drum with brass shell-hopper pods.",
+        does: "Replaces the Mortar's blind spot and 5s delay with rapid airburst flak shells: main target takes Piercing impact while a 55 px shrapnel cone splashes surrounding enemies with Normal fragment damage.",
+        bestFor: "Mid-game all-purpose defense against mixed Rushers + Brutes",
+        weakness: "Lower peak single-target damage vs full bosses than pure Piercing."
+      },
+      {
+        id: "blaster+laser", a: "blaster", b: "laser", same: false,
+        name: "Pulse-Plasma Carbine",
+        categories: ["hybrid", "budget"],
+        types: ["Piercing", "Laser"],
+        mergeCost: 55, buildTime: 6.0,
+        range: "122 px", rate: "2.20 /s", dmgText: "9.0 /shot (auto-picks optimal Piercing/Laser ratio)",
+        target: "First",
+        matrix: { std: "135%", arm: "135%", refl: "95%", jugg: "140%" },
+        look: "Sleek cyan-and-magenta prism-barreled carbine combining dual blaster rails with a glowing violet crystal emitter core.",
+        does: "Fires alternating high-frequency kinetic-plasma bolts with smart matrix calibration: hits Standard units using the Laser beam profile (150%) and Armored/Reflective units using Piercing bolts (150% / 120%), eliminating the Laser Spire's Reflective blind spot.",
+        bestFor: "Waves 3-9 flexible early-to-mid anchor covering every armor type",
+        weakness: "Jack-of-all-trades ceiling; outscaled in Wave 15+ by dedicated boss killers."
+      },
+      {
+        id: "blaster+slow", a: "blaster", b: "slow", same: false,
+        name: "Chrono-Kinetic Suppressor",
+        categories: ["hybrid", "slow", "aoe", "budget"],
+        types: ["Piercing", "Time"],
+        mergeCost: 55, buildTime: 6.0,
+        range: "120 px", rate: "0.75 /s (suppressor burst)", dmgText: "10 Piercing + 3.0s Bubble (40->70px) + 0..32/s Decay",
+        target: "First / Fastest",
+        matrix: { std: "85%", arm: "140%", refl: "130%", jugg: "170%" },
+        look: "Twin-barrel Blaster turret encircled by a spinning cyan clockwork halo with twin cryo-capacitor canisters.",
+        does: "Fires slower kinetic-stasis rounds (0.75/s) that deal 10 Piercing damage on hit and burst into a 3.0s Chrono Status Bubble (40 px -> 70 px with Damage upgrades), slowing nearby Blitzers/Rushers by 30% (15% Jugg) while ticking lessened flat Decay.",
+        bestFor: "Intercepting Wave 8-9 Blitzers & keeping pack speed pinned inside Blaster lanes",
+        weakness: "Lower sustained fire rate than pure Blaster and smaller bubble than Stasis Singularity."
+      },
+      {
+        id: "blaster+railgun", a: "blaster", b: "railgun", same: false,
+        name: "Hyper-Cycle Rail Rifle",
+        categories: ["hybrid", "boss", "slow", "endgame"],
+        types: ["Piercing", "Time"],
+        mergeCost: 140, buildTime: 8.0,
+        range: "260 px", rate: "0.45 /s (2.2s cycle)", dmgText: "92 Time + 20 Piercing shrapnel + Slow/Decay",
+        target: "Strongest / First",
+        matrix: { std: "95%", arm: "130%", refl: "145%", jugg: "160%" },
+        look: "Long sleek violet-and-cyan dual-rail carbine with rapid-cooling fin vents and triple accelerator coils.",
+        does: "Sacrifices a bit of the Rail Gun's maximum range (310 -> 260 px) to more than DOUBLE its fire rate (0.20 -> 0.45/s), delivering steady long-range 45% slows (Jugg 22.5%), 112 hybrid hit damage, and permanent flat Decay uptime across distant lanes.",
+        bestFor: "Long-range sniping across two rows in Level 1 or Level 3 Islands",
+        weakness: "Costs $605 total; requires an unobstructed cross-map firing lane to shine."
+      },
+      {
+        id: "blaster+annihilator", a: "blaster", b: "annihilator", same: false,
+        name: "Autocannon Siege Shredder",
+        categories: ["hybrid", "boss"],
+        types: ["Piercing"],
+        mergeCost: 100, buildTime: 7.0,
+        range: "148 px", rate: "1.15 /s", dmgText: "48.0 Piercing /shot (86/hit vs Jugg at Lv0)",
+        target: "Strongest",
+        matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
+        look: "Heavy orange-gold Gauss chassis twin-mounted with cyan Blaster recoil barrels and a rapid rotary breech.",
+        does: "Blends the Annihilator's heavy armor-piercing punch with the Blaster's faster firing cadence (`0.75/s -> 1.15/s`). Smooths out overkill waste against Brutes while still hitting Wave 10 Juggernauts for ~100 base Piercing DPS.",
+        bestFor: "Wave 7-15 Brute squads and early Wave 10 Juggernaut focus fire",
+        weakness: "Low crowd AoE and weaker against cheap Standard swarms (75%)."
+      },
+      {
+        id: "mortar+laser", a: "mortar", b: "laser", same: false,
+        name: "Solar Plasma Artillery",
+        categories: ["hybrid", "aoe", "budget"],
+        types: ["Normal", "Laser"],
+        mergeCost: 65, buildTime: 8.0,
+        range: "145 px (min 50 px)", rate: "0.38 /s (2.6s reload)", dmgText: "18 Normal blast + 14 Laser thermal burn (65 px)",
+        target: "First",
+        matrix: { std: "125%", arm: "68%", refl: "60%", jugg: "32%" },
+        look: "Armored emerald mortar tube topped with a glowing magenta focusing crystal that fires superheated pink plasma globes.",
+        does: "Lobs glowing plasma shells that detonate into a 65 px searing Laser+Normal explosion, melting Standard Crawler & Rusher swarms on impact and leaving a 1.5s thermal scorch glow.",
+        bestFor: "Waves 4-12 massive Standard hordes (150% Laser portion shreds Crawlers)",
+        weakness: "Bad vs Juggernauts (32%) and Armored Brutes; needs Piercing/Time teammates."
+      },
+      {
+        id: "mortar+slow", a: "mortar", b: "slow", same: false,
+        name: "Cryo-Cluster Bombard",
+        categories: ["hybrid", "aoe", "slow", "budget"],
+        types: ["Normal", "Time"],
+        mergeCost: 65, buildTime: 8.0,
+        range: "145 px (min 50 px)", rate: "0.24 /s (4.2s reload)", dmgText: "15 Normal blast + 4.0s Bubble (54->84px) | 35% Slow",
+        target: "First",
+        matrix: { std: "100%", arm: "85%", refl: "130%", jugg: "102%" },
+        look: "Frosted teal siege mortar wrapped in glowing chrono-runes and twin cryogenic canisters launching ice-blue stasis bombs.",
+        does: "Heavy shell detonates into a 15 Normal blast AND leaves behind a huge 4.0s Chrono Status Bubble (54 px -> 84 px with Damage upgrades), trapping entire platoons in a 35% slow field (17.5% Jugg) with lessened flat Time Decay DoT.",
+        bestFor: "Level 3 Islands & Level 5 Switchbacks; locks whole platoons inside kill zones",
+        weakness: "4.2s reload & 50 px blind spot; lower shell burst damage than pure Mortar."
+      },
+      {
+        id: "mortar+railgun", a: "mortar", b: "railgun", same: false,
+        name: "Orbital Temporal Howitzer",
+        categories: ["hybrid", "aoe", "slow", "endgame"],
+        types: ["Time", "Normal"],
+        mergeCost: 145, buildTime: 10.0,
+        range: "285 px (min 40 px)", rate: "0.24 /s (4.2s fire)", dmgText: "125 Time direct + 40 splash (75px) + 50% Slow",
+        target: "Strongest / First",
+        matrix: { std: "100%", arm: "100%", refl: "140%", jugg: "120%" },
+        look: "Long violet railgun cradle mounted vertically like a heavy siege howitzer, launching arcing purple-gold shock shells across the map.",
+        does: "Launches long-range temporal shells 285 px across the map—bypassing terrain bends to detonate for a 125 Time core strike + 40 Normal/Time splash (75 px) + 50% slow + flat Time Decay to the entire blast group.",
+        bestFor: "Cross-map crowd suppression & hitting spawn lanes early in Level 4 Spiral",
+        weakness: "Expensive ($630) and slow 4.2s cycle; best paired with faster cleanup towers."
+      },
+      {
+        id: "mortar+annihilator", a: "mortar", b: "annihilator", same: false,
+        name: "Armor-Cracker Siege Cannon",
+        categories: ["hybrid", "aoe", "boss"],
+        types: ["Piercing", "Normal"],
+        mergeCost: 105, buildTime: 9.0,
+        range: "160 px (min 45 px)", rate: "0.42 /s (2.4s reload)", dmgText: "68 Piercing center hit + 24 splash (65 px)",
+        target: "Strongest",
+        matrix: { std: "85%", arm: "125%", refl: "118%", jugg: "148%" },
+        look: "Monstrous copper-and-olive siege cannon with twin Gauss stabilizer rails guiding heavy armor-piercing warhead shells.",
+        does: "Fires direct-arc bunker-buster shells: the primary target suffers a massive 68 Piercing core impact (122 vs Juggernaut at Lv0) while nearby escorts take 24 splash damage in a 65 px shock ring—wiping Brute packs alongside bosses.",
+        bestFor: "Wave 8-20 escort waves where Brutes & Crawlers body-block Juggernauts",
+        weakness: "45 px min-range deadzone right around its own pad; slower than pure Annihilator."
+      },
+      {
+        id: "laser+slow", a: "laser", b: "slow", same: false,
+        name: "Stasis Beam Projector",
+        categories: ["hybrid", "slow", "aoe", "budget"],
+        types: ["Laser", "Time"],
+        mergeCost: 60, buildTime: 6.5,
+        range: "125 px", rate: "0.65 /s (prism pulse)", dmgText: "7 Laser hit + 3.5s Burn Bubble (46->76px) + 32% Slow",
+        target: "First",
+        matrix: { std: "135%", arm: "100%", refl: "65%", jugg: "65%" },
+        look: "Magenta-and-cyan crystal prism spire spinning inside a frost-blue chrono ring with tri-lens optics.",
+        does: "Fires a refracting prism pulse at 0.65/s that spawns a chromatic Chrono Status Bubble (46 px -> 76 px with Damage upgrades) for 3.5s—slowing all enemies inside by 32% (16% Jugg) while searing them with thermal-Decay pulses.",
+        bestFor: "Cooking compressed Standard Rusher packs inside a glowing slow dome",
+        weakness: "Much slower cadence than Laser Spire and weaker vs Reflective shields."
+      },
+      {
+        id: "laser+railgun", a: "laser", b: "railgun", same: false,
+        name: "Chrono-Lance Thermal Beam",
+        categories: ["hybrid", "boss", "slow", "endgame"],
+        types: ["Time", "Laser"],
+        mergeCost: 145, buildTime: 8.5,
+        range: "290 px", rate: "0.50 /s (2.0s pulse lance)", dmgText: "85 Time+Laser beam + 45% Slow + Decay",
+        target: "First / Strongest",
+        matrix: { std: "130%", arm: "110%", refl: "95%", jugg: "100%" },
+        look: "Crystal-tipped violet rail barrel projecting a razor-thin 290 px magenta-white temporal lance with capacitor rings along the beam.",
+        does: "Sweeps a high-range thermal-chronon lance every 2.0s across 290 px, instantly striking distant targets with 85 hybrid damage (amplified 150% vs Standard squads and 150% Decay vs Reflective), leaving a 45% slow & Decay burn.",
+        bestFor: "Sniping incoming Rushers/Crawlers & Blitzers right as they leave the Hive",
+        weakness: "Not as cost-efficient vs Juggernauts as Railgun + Annihilator."
+      },
+      {
+        id: "laser+annihilator", a: "laser", b: "annihilator", same: false,
+        name: "Thermal Melter Rail-Spire",
+        categories: ["hybrid", "boss"],
+        types: ["Piercing", "Laser"],
+        mergeCost: 100, buildTime: 7.5,
+        range: "152 px", rate: "1.10 /s", dmgText: "44 Piercing/Laser hybrid /shot (up to 1.35x melt)",
+        target: "Strongest",
+        matrix: { std: "120%", arm: "130%", refl: "85%", jugg: "135%" },
+        look: "Orange-gold Annihilator housing fused with a blazing magenta crystal emitter between its Gauss rails.",
+        does: "Every Gauss slug superheats the target's armor for 3s (+10% vulnerability to follow-up shots, stacking to +30%), combining fast 1.10/s Laser-paced precision with heavy Piercing penetrators.",
+        bestFor: "Primary boss debuffer amplifying all nearby Blasters & Annihilators",
+        weakness: "Lower raw 1-shot Juggernaut multiplier than pure Piercing unless stacked."
+      },
+      {
+        id: "slow+railgun", a: "slow", b: "railgun", same: false,
+        name: "Absolute Zero Chrono-Cannon",
+        categories: ["hybrid", "boss", "slow", "aoe", "endgame"],
+        types: ["Time"],
+        mergeCost: 145, buildTime: 8.5,
+        range: "330 px", rate: "0.20 /s (5.0s shot)", dmgText: "95 Time + 4.5s Super-Bubble (52->84px) | 55% Slow",
+        target: "Strongest / First",
+        matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
+        look: "Obsidian clockwork dial fused to twin 330 px ice-violet rail barrels with four capacitor coils and ticking hands.",
+        does: "Long-range Time-Control sniper: fires every 5.0s across 330 px, dealing 95 direct Time damage and detonating an Absolute Zero Status Bubble (52 px -> 84 px with Damage upgrades) that slows the entire escort group by 55% (27.5% Jugg) with flat Decay.",
+        bestFor: "Stalling Wave 10+ Juggernauts and their entire Brute/Blitzer escort across the map",
+        weakness: "5.0s reload and lessened rail burst vs single targets compared to Omega Gauss-Rail."
+      },
+      {
+        id: "slow+annihilator", a: "slow", b: "annihilator", same: false,
+        name: "Temporal Lock Rail-Breaker",
+        categories: ["hybrid", "boss", "slow", "aoe"],
+        types: ["Piercing", "Time"],
+        mergeCost: 100, buildTime: 7.5,
+        range: "165 px", rate: "0.48 /s (2.1s cycle)", dmgText: "46 Piercing + 3.5s Stasis Bubble (44->74px) + 32% Slow",
+        target: "Strongest",
+        matrix: { std: "85%", arm: "145%", refl: "135%", jugg: "175%" },
+        look: "Heavy bronze-gold Annihilator turret framed by angled shoulder plates and a rotating cyan-violet Chrono ring around the breech.",
+        does: "Anti-boss stasis breaker: fires 46 Piercing sabot rounds every 2.1s (82 vs Juggernaut at Lv0) that open a 3.5s Chrono Status Bubble (44 px -> 74 px with Damage upgrades) around the boss—slowing it 16% (escorts 32%) while ticking flat Decay.",
+        bestFor: "Wave 10 & Waves 15-45 Juggernauts (keeps bosses pinned in its 165 px zone)",
+        weakness: "Slower fire rate & lower single-hit burst than pure Gauss Annihilator."
+      },
+      {
+        id: "railgun+annihilator", a: "railgun", b: "annihilator", same: false,
+        name: "Omega Singularity Gauss-Rail",
+        categories: ["hybrid", "boss", "slow", "endgame"],
+        types: ["Piercing", "Time"],
+        mergeCost: 185, buildTime: 9.5,
+        range: "275 px", rate: "0.40 /s (2.5s charge)", dmgText: "185 Piercing/Time hybrid + 50% Slow 4s + Decay",
+        target: "Strongest",
+        matrix: { std: "90%", arm: "145%", refl: "140%", jugg: "172%" },
+        look: "Towering endgame gold-and-violet dual-accelerator turret with four glowing magnetic rings and a hyper-dense plasma core.",
+        does: "Apex anti-boss superweapon: combines Annihilator's Piercing punch with Rail Gun's 275 px reach, 50% slow (25% Jugg), and flat Time Decay DoT. Fires 185 hybrid damage every 2.5s (~318 damage per hit vs Juggernauts at Lv0, >1,300/hit at Lv5) from across the battlefield.",
+        bestFor: "Waves 15-45 multi-Juggernaut & High-Mutation Endgame Boss Deletion",
+        weakness: "Highest hybrid price ($800 total) and 9.5s construction lock."
+      }
+    ];
+
+    function buildComboSVG(aKey, bKey, same) {
+      const aCol = BASE_TOWERS[aKey].color;
+      const bCol = BASE_TOWERS[bKey].color;
+      const accent = same ? aCol : bCol;
+      let barrels = "";
+
+      if (same) {
+        if (aKey === "blaster") {
+          barrels = `
+            <rect x="46" y="34" width="38" height="5" rx="2" fill="#89d2ff"/>
+            <rect x="46" y="42" width="42" height="5" rx="2" fill="#b8e7ff"/>
+            <rect x="46" y="49" width="42" height="5" rx="2" fill="#b8e7ff"/>
+            <rect x="46" y="57" width="38" height="5" rx="2" fill="#89d2ff"/>
+            <polygon points="32,33 56,37 62,48 56,59 32,63" fill="#1e5391" stroke="#6cc2ff" stroke-width="1.5"/>`;
+        } else if (aKey === "mortar") {
+          barrels = `
+            <circle cx="48" cy="48" r="22" fill="#183f2c" stroke="#5ce69a" stroke-width="2"/>
+            <line x1="48" y1="48" x2="78" y2="33" stroke="#7ff2b3" stroke-width="7" stroke-linecap="round"/>
+            <line x1="48" y1="48" x2="82" y2="48" stroke="#5ce69a" stroke-width="8" stroke-linecap="round"/>
+            <line x1="48" y1="48" x2="78" y2="63" stroke="#7ff2b3" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="48" cy="48" r="10" fill="#ffcf56"/>`;
+        } else if (aKey === "laser") {
+          barrels = `
+            <polygon points="48,20 62,48 48,76 34,48" fill="#a82c9c" stroke="#ff8df2" stroke-width="2"/>
+            <polygon points="48,28 57,48 48,68 39,48" fill="#ff6eeb"/>
+            <line x1="48" y1="48" x2="90" y2="48" stroke="#ff8df2" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="30" cy="30" r="3.5" fill="#5ae8ff"/>
+            <circle cx="66" cy="30" r="3.5" fill="#5ae8ff"/>
+            <circle cx="30" cy="66" r="3.5" fill="#5ae8ff"/>
+            <circle cx="66" cy="66" r="3.5" fill="#5ae8ff"/>`;
+        } else if (aKey === "slow") {
+          barrels = `
+            <circle cx="48" cy="48" r="24" fill="none" stroke="#40e8ff" stroke-width="3" stroke-dasharray="10 4"/>
+            <circle cx="48" cy="48" r="16" fill="none" stroke="#b873ff" stroke-width="2.5" stroke-dasharray="7 4"/>
+            <line x1="48" y1="48" x2="48" y2="29" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="48" y1="48" x2="63" y2="48" stroke="#9cf5ff" stroke-width="2.2" stroke-linecap="round"/>
+            <circle cx="48" cy="48" r="6" fill="#b873ff"/>`;
+        } else if (aKey === "railgun") {
+          barrels = `
+            <rect x="28" y="37" width="60" height="4" rx="1.5" fill="#d29eff"/>
+            <rect x="28" y="55" width="60" height="4" rx="1.5" fill="#d29eff"/>
+            <line x1="34" y1="48" x2="88" y2="48" stroke="#ffcf56" stroke-width="3"/>
+            <line x1="54" y1="33" x2="54" y2="63" stroke="#fff0b8" stroke-width="2.2"/>
+            <line x1="68" y1="33" x2="68" y2="63" stroke="#fff0b8" stroke-width="2.2"/>
+            <polygon points="28,34 52,37 56,48 52,59 28,62" fill="#5b2a96" stroke="#e1bdff" stroke-width="1.5"/>`;
+        } else {
+          barrels = `
+            <rect x="44" y="38" width="43" height="20" rx="3" fill="#463225" stroke="#ffcf56" stroke-width="2"/>
+            <rect x="48" y="40" width="40" height="4" fill="#ffcf56"/>
+            <rect x="48" y="52" width="40" height="4" fill="#ffcf56"/>
+            <polygon points="26,31 56,34 62,48 56,62 26,65" fill="#a8431e" stroke="#ffcf56" stroke-width="2"/>
+            <circle cx="44" cy="48" r="7" fill="#ffe680"/>`;
+        }
+      } else {
+        const key = `${aKey}+${bKey}`;
+        switch (key) {
+          case "blaster+mortar":
+            barrels = `
+              <rect x="44" y="34" width="38" height="10" rx="2" fill="#2d4c4e" stroke="#62e39a" stroke-width="1.4"/>
+              <rect x="44" y="52" width="38" height="10" rx="2" fill="#2d4c4e" stroke="#4fa3ff" stroke-width="1.4"/>
+              <rect x="28" y="32" width="14" height="10" rx="2" fill="#c99335"/>
+              <rect x="28" y="54" width="14" height="10" rx="2" fill="#c99335"/>
+              <polygon points="32,37 58,39 64,48 58,57 32,59" fill="#204f68" stroke="#7de8ff" stroke-width="1.5"/>
+              <circle cx="48" cy="48" r="5" fill="#ffb84d"/>`;
+            break;
+          case "blaster+laser":
+            barrels = `
+              <rect x="48" y="34" width="35" height="4.5" rx="1.5" fill="#6cc2ff"/>
+              <rect x="48" y="57.5" width="35" height="4.5" rx="1.5" fill="#6cc2ff"/>
+              <polygon points="36,48 48,37 82,48 48,59" fill="#9c298f" stroke="#ff73ec" stroke-width="1.5"/>
+              <polygon points="44,48 52,43 74,48 52,53" fill="#ff9cf3"/>
+              <circle cx="48" cy="48" r="4.5" fill="#ffffff"/>`;
+            break;
+          case "blaster+slow":
+            barrels = `
+              <circle cx="48" cy="48" r="23" fill="none" stroke="#40e8ff" stroke-width="2.4" stroke-dasharray="9 4"/>
+              <rect x="46" y="37" width="38" height="5" rx="2" fill="#70bfff"/>
+              <rect x="46" y="54" width="38" height="5" rx="2" fill="#70bfff"/>
+              <polygon points="33,38 54,41 58,48 54,55 33,58" fill="#1b4d7d" stroke="#40e8ff" stroke-width="1.5"/>
+              <line x1="46" y1="48" x2="46" y2="35" stroke="#ffffff" stroke-width="1.8"/>
+              <circle cx="46" cy="48" r="5.5" fill="#40e8ff"/>`;
+            break;
+          case "blaster+railgun":
+            barrels = `
+              <rect x="28" y="36" width="58" height="4" rx="1.5" fill="#c080ff"/>
+              <rect x="28" y="56" width="58" height="4" rx="1.5" fill="#c080ff"/>
+              <rect x="46" y="45" width="34" height="6" rx="2" fill="#5ce1ff"/>
+              <line x1="60" y1="33" x2="60" y2="63" stroke="#ffdf70" stroke-width="2"/>
+              <line x1="72" y1="33" x2="72" y2="63" stroke="#ffdf70" stroke-width="2"/>
+              <polygon points="28,35 50,38 54,48 50,58 28,61" fill="#3a256e" stroke="#9ce6ff" stroke-width="1.5"/>`;
+            break;
+          case "blaster+annihilator":
+            barrels = `
+              <rect x="44" y="34" width="36" height="4" rx="1.5" fill="#6cc2ff"/>
+              <rect x="44" y="58" width="36" height="4" rx="1.5" fill="#6cc2ff"/>
+              <rect x="46" y="42" width="42" height="12" rx="2" fill="#443022" stroke="#ffba42" stroke-width="1.8"/>
+              <line x1="48" y1="48" x2="88" y2="48" stroke="#ffe270" stroke-width="2.5"/>
+              <polygon points="27,32 54,35 60,48 54,61 27,64" fill="#8f3b1e" stroke="#62bfff" stroke-width="1.6"/>`;
+            break;
+          case "mortar+laser":
+            barrels = `
+              <circle cx="48" cy="48" r="19" fill="#1e4b38" stroke="#5ce69a" stroke-width="2"/>
+              <rect x="42" y="39" width="40" height="18" rx="4" fill="#2a6849" stroke="#f05ee0" stroke-width="1.8"/>
+              <polygon points="56,48 70,38 86,48 70,58" fill="#e64fd1" stroke="#ffd1f8" stroke-width="1.4"/>
+              <circle cx="70" cy="48" r="4.5" fill="#ffffff"/>
+              <circle cx="32" cy="34" r="3" fill="#ff73ec"/>
+              <circle cx="32" cy="62" r="3" fill="#ff73ec"/>`;
+            break;
+          case "mortar+slow":
+            barrels = `
+              <circle cx="48" cy="48" r="24" fill="rgba(64,232,255,0.12)" stroke="#40e8ff" stroke-width="2.2" stroke-dasharray="10 4"/>
+              <rect x="40" y="40" width="38" height="16" rx="4" fill="#1e5c4c" stroke="#75f5ff" stroke-width="2"/>
+              <circle cx="77" cy="48" r="7" fill="#10252b" stroke="#40e8ff" stroke-width="2"/>
+              <circle cx="30" cy="36" r="5" fill="#35d0ff"/>
+              <circle cx="30" cy="60" r="5" fill="#35d0ff"/>
+              <line x1="48" y1="48" x2="48" y2="33" stroke="#ffffff" stroke-width="2"/>`;
+            break;
+          case "mortar+railgun":
+            barrels = `
+              <rect x="30" y="34" width="54" height="5" rx="2" fill="#c78eff"/>
+              <rect x="30" y="57" width="54" height="5" rx="2" fill="#c78eff"/>
+              <rect x="42" y="41" width="34" height="14" rx="3" fill="#2a5743" stroke="#ffcf56" stroke-width="1.6"/>
+              <line x1="62" y1="31" x2="62" y2="65" stroke="#ffdf75" stroke-width="2"/>
+              <polygon points="27,36 47,38 51,48 47,58 27,60" fill="#4f2682" stroke="#5ce69a" stroke-width="1.6"/>`;
+            break;
+          case "mortar+annihilator":
+            barrels = `
+              <line x1="34" y1="31" x2="54" y2="41" stroke="#6d8272" stroke-width="4.5" stroke-linecap="round"/>
+              <line x1="34" y1="65" x2="54" y2="55" stroke="#6d8272" stroke-width="4.5" stroke-linecap="round"/>
+              <rect x="40" y="37" width="44" height="22" rx="4" fill="#3c2f24" stroke="#ffaf38" stroke-width="2"/>
+              <circle cx="83" cy="48" r="8" fill="#1d1814" stroke="#5ce69a" stroke-width="2.4"/>
+              <polygon points="27,33 50,36 55,48 50,60 27,63" fill="#8f3b1e" stroke="#5ce69a" stroke-width="1.6"/>`;
+            break;
+          case "laser+slow":
+            barrels = `
+              <circle cx="48" cy="48" r="24" fill="rgba(64,232,255,0.12)" stroke="#40e8ff" stroke-width="2.4"/>
+              <polygon points="36,48 48,30 78,48 48,66" fill="#702c94" stroke="#ff7bf0" stroke-width="1.8"/>
+              <polygon points="43,48 50,39 68,48 50,57" fill="#40e8ff"/>
+              <circle cx="30" cy="30" r="3" fill="#ff73ec"/>
+              <circle cx="66" cy="30" r="3" fill="#40e8ff"/>
+              <circle cx="66" cy="66" r="3" fill="#ff73ec"/>
+              <circle cx="30" cy="66" r="3" fill="#40e8ff"/>`;
+            break;
+          case "laser+railgun":
+            barrels = `
+              <rect x="30" y="38" width="56" height="4" rx="1.5" fill="#b873ff"/>
+              <rect x="30" y="54" width="56" height="4" rx="1.5" fill="#b873ff"/>
+              <polygon points="34,48 50,41 86,48 50,55" fill="#f05ee0" stroke="#ffffff" stroke-width="1.4"/>
+              <line x1="60" y1="34" x2="60" y2="62" stroke="#5ce8ff" stroke-width="2"/>
+              <polygon points="28,35 48,38 52,48 48,58 28,61" fill="#4e227d" stroke="#f05ee0" stroke-width="1.5"/>`;
+            break;
+          case "laser+annihilator":
+            barrels = `
+              <rect x="44" y="35" width="41" height="6" rx="2" fill="#a8431e" stroke="#ffaf38" stroke-width="1.5"/>
+              <rect x="44" y="55" width="41" height="6" rx="2" fill="#a8431e" stroke="#ffaf38" stroke-width="1.5"/>
+              <polygon points="42,48 54,40 84,48 54,56" fill="#f05ee0" stroke="#ffe073" stroke-width="1.6"/>
+              <polygon points="27,32 52,35 58,48 52,61 27,64" fill="#632620" stroke="#ffaf38" stroke-width="1.8"/>`;
+            break;
+          case "slow+railgun":
+            barrels = `
+              <circle cx="42" cy="48" r="22" fill="none" stroke="#40e8ff" stroke-width="2.4" stroke-dasharray="8 4"/>
+              <rect x="34" y="38" width="54" height="4.5" rx="1.5" fill="#40e8ff"/>
+              <rect x="34" y="53.5" width="54" height="4.5" rx="1.5" fill="#b873ff"/>
+              <line x1="60" y1="34" x2="60" y2="62" stroke="#ffd859" stroke-width="2"/>
+              <line x1="72" y1="34" x2="72" y2="62" stroke="#ffd859" stroke-width="2"/>
+              <line x1="42" y1="48" x2="42" y2="33" stroke="#ffffff" stroke-width="2.2"/>
+              <line x1="42" y1="48" x2="54" y2="48" stroke="#9cf5ff" stroke-width="1.8"/>
+              <circle cx="42" cy="48" r="5" fill="#b873ff"/>`;
+            break;
+          case "slow+annihilator":
+            barrels = `
+              <circle cx="44" cy="48" r="23" fill="none" stroke="#40e8ff" stroke-width="2.6" stroke-dasharray="10 4"/>
+              <rect x="44" y="40" width="42" height="16" rx="3" fill="#4f3320" stroke="#ffaf38" stroke-width="2"/>
+              <line x1="56" y1="36" x2="56" y2="60" stroke="#40e8ff" stroke-width="2.2"/>
+              <polygon points="28,33 52,36 58,48 52,60 28,63" fill="#8f3b1e" stroke="#40e8ff" stroke-width="1.8"/>
+              <circle cx="44" cy="48" r="6.5" fill="#40e8ff"/>
+              <circle cx="44" cy="48" r="2.8" fill="#ffffff"/>`;
+            break;
+          case "railgun+annihilator":
+          default:
+            barrels = `
+              <rect x="28" y="32" width="58" height="5.5" rx="2" fill="#d29eff"/>
+              <rect x="28" y="58.5" width="58" height="5.5" rx="2" fill="#d29eff"/>
+              <rect x="40" y="41" width="48" height="14" rx="3" fill="#522c24" stroke="#ffcf56" stroke-width="2"/>
+              <line x1="56" y1="29" x2="56" y2="67" stroke="#ffd859" stroke-width="2.4"/>
+              <line x1="70" y1="29" x2="70" y2="67" stroke="#ffd859" stroke-width="2.4"/>
+              <polygon points="26,31 54,34 61,48 54,62 26,65" fill="#702d73" stroke="#ffcf56" stroke-width="2"/>
+              <circle cx="45" cy="48" r="6" fill="#ffdf70"/>`;
+            break;
+        }
+      }
+
+      return `<svg viewBox="0 0 96 96" width="84" height="84" aria-hidden="true">
+        <polygon points="34,12 62,12 84,34 84,62 62,84 34,84 12,62 12,34" fill="#17202e" stroke="${aCol}" stroke-width="2.5"/>
+        <polygon points="37,18 59,18 78,37 78,59 59,78 37,78 18,59 18,37" fill="#101722" stroke="${accent}" stroke-width="1.2" opacity="0.85"/>
+        ${barrels}
+      </svg>`;
+    }
+
+    function renderBaseTowers() {
+      const grid = document.getElementById("base-towers-grid");
+      grid.innerHTML = TOWER_ORDER.map((k) => {
+        const t = BASE_TOWERS[k];
+        return `<div class="base-card">
+          <div class="base-head">
+            <div style="flex-shrink:0">${buildComboSVG(k, k, true).replace('width="84" height="84"', 'width="48" height="48"')}</div>
+            <div>
+              <div class="base-name">${t.name}</div>
+              <div class="base-cost">$${t.cost} &middot; ${t.type} &middot; ${t.build}s build</div>
+            </div>
+          </div>
+          <div class="base-meta">${t.summary}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderMatrix() {
+      const table = document.getElementById("combo-matrix-table");
+      let html = "<thead><tr><th>Tower A \\ Tower B</th>";
+      for (const b of TOWER_ORDER) {
+        html += `<th>${BASE_TOWERS[b].name}<br/><span style="color:#ffcf56;font-weight:600">$${BASE_TOWERS[b].cost}</span></th>`;
+      }
+      html += "</tr></thead><tbody>";
+
+      for (let i = 0; i < TOWER_ORDER.length; i++) {
+        const a = TOWER_ORDER[i];
+        html += `<tr><th>${BASE_TOWERS[a].name}<br/><span style="color:#ffcf56;font-weight:600">$${BASE_TOWERS[a].cost}</span></th>`;
+        for (let j = 0; j < TOWER_ORDER.length; j++) {
+          const b = TOWER_ORDER[j];
+          const k1 = i <= j ? `${a}+${b}` : `${b}+${a}`;
+          const combo = COMBINATIONS.find((c) => c.id === k1);
+          const total = BASE_TOWERS[combo.a].cost + BASE_TOWERS[combo.b].cost + combo.mergeCost;
+          const sameCls = combo.same ? " matrix-same" : "";
+          html += `<td class="matrix-cell${sameCls}" onclick="jumpToCombo('${combo.id}')" title="Click to view ${combo.name}">
+            <span class="cell-name">${combo.name}</span>
+            <span class="cell-cost">$${total}</span>
+          </td>`;
+        }
+        html += "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+    }
+
+    function typeTagClass(t) {
+      if (t === "Piercing") return "t-piercing";
+      if (t === "Normal") return "t-normal";
+      if (t === "Laser") return "t-laser";
+      return "t-time";
+    }
+
+    let currentFilter = "all";
+    let currentSearch = "";
+    let currentSort = "order";
+
+    function renderCards() {
+      const grid = document.getElementById("combos-grid");
+      let list = COMBINATIONS.map((c) => {
+        const baseA = BASE_TOWERS[c.a].cost;
+        const baseB = BASE_TOWERS[c.b].cost;
+        return { ...c, baseA, baseB, totalCost: baseA + baseB + c.mergeCost };
+      });
+
+      if (currentFilter !== "all") {
+        if (currentFilter === "budget") list = list.filter((c) => c.totalCost <= 300);
+        else if (currentFilter === "endgame") list = list.filter((c) => c.totalCost >= 600);
+        else list = list.filter((c) => c.categories.includes(currentFilter));
+      }
+
+      if (currentSearch.trim() !== "") {
+        const q = currentSearch.trim().toLowerCase();
+        list = list.filter((c) =>
+          c.name.toLowerCase().includes(q) ||
+          BASE_TOWERS[c.a].name.toLowerCase().includes(q) ||
+          BASE_TOWERS[c.b].name.toLowerCase().includes(q) ||
+          c.does.toLowerCase().includes(q) ||
+          c.bestFor.toLowerCase().includes(q) ||
+          c.types.join(" ").toLowerCase().includes(q)
+        );
+      }
+
+      if (currentSort === "cost-asc") list.sort((x, y) => x.totalCost - y.totalCost);
+      else if (currentSort === "cost-desc") list.sort((x, y) => y.totalCost - x.totalCost);
+
+      document.getElementById("visible-count-badge").textContent = `${list.length} / 21 Combinations`;
+
+      grid.innerHTML = list.map((c) => {
+        const typeTags = c.types.map((t) => `<span class="tag ${typeTagClass(t)}">${t}</span>`).join("");
+        const mergeBadge = c.same ? `<span class="tag t-same">2-OF-A-KIND MERGE</span>` : "";
+        return `<article class="combo-card" id="card-${c.id}">
+          <div class="card-top">
+            <div class="art-box">${buildComboSVG(c.a, c.b, c.same)}</div>
+            <div class="card-title-block">
+              <div class="combo-recipe">${BASE_TOWERS[c.a].name} + ${BASE_TOWERS[c.b].name}</div>
+              <h3 class="combo-name">${c.name}</h3>
+              <div class="tag-row">${typeTags}${mergeBadge}</div>
+            </div>
+          </div>
+
+          <div class="cost-strip">
+            <span class="cost-formula">$${c.baseA} + $${c.baseB} + $${c.mergeCost} merge (${c.buildTime}s)</span>
+            <span class="cost-total">Total: $${c.totalCost}</span>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat-cell"><div class="stat-lbl">Damage</div><div class="stat-val">${c.dmgText}</div></div>
+            <div class="stat-cell"><div class="stat-lbl">Fire Rate</div><div class="stat-val">${c.rate}</div></div>
+            <div class="stat-cell"><div class="stat-lbl">Range</div><div class="stat-val">${c.range}</div></div>
+            <div class="stat-cell"><div class="stat-lbl">Target</div><div class="stat-val">${c.target}</div></div>
+          </div>
+
+          <div class="detail-block"><strong>Look:</strong> ${c.look}</div>
+          <div class="detail-block"><strong>Effect:</strong> ${c.does}</div>
+
+          <div class="matrix-mini">
+            <div class="m-chip"><b>Standard</b>${c.matrix.std}</div>
+            <div class="m-chip"><b>Armored</b>${c.matrix.arm}</div>
+            <div class="m-chip"><b>Reflective</b>${c.matrix.refl}</div>
+            <div class="m-chip"><b>Juggernaut</b>${c.matrix.jugg}</div>
+          </div>
+
+          <div class="combo-footer">
+            <span class="good-note"><strong>Best:</strong> ${c.bestFor}</span>
+            <span class="warn-note"><strong>Trade-off:</strong> ${c.weakness}</span>
+          </div>
+        </article>`;
+      }).join("");
+    }
+
+    window.jumpToCombo = function (id) {
+      currentFilter = "all";
+      currentSearch = "";
+      document.getElementById("search-input").value = "";
+      document.querySelectorAll("#filter-pills .pill").forEach((p) => {
+        p.classList.toggle("active", p.dataset.filter === "all");
+      });
+      renderCards();
+      const el = document.getElementById("card-" + id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("highlight");
+        setTimeout(() => el.classList.remove("highlight"), 1800);
+      }
+    };
+
+    document.getElementById("filter-pills").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button.pill");
+      if (!btn) return;
+      currentFilter = btn.dataset.filter;
+      document.querySelectorAll("#filter-pills .pill").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      renderCards();
+    });
+
+    document.getElementById("search-input").addEventListener("input", (ev) => {
+      currentSearch = ev.target.value;
+      renderCards();
+    });
+
+    document.getElementById("sort-select").addEventListener("change", (ev) => {
+      currentSort = ev.target.value;
+      renderCards();
+    });
+
+    renderBaseTowers();
+    renderMatrix();
+    renderCards();
+  </script>
+</body>
+</html>
