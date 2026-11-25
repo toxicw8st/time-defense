@@ -606,14 +606,20 @@
         }
       }
 
-      const dpdVals = [];
+      const comboDpdVals = [], baseDpdVals = [];
       const towers = Object.values(towerMap).map(t => {
         const dpd = t.spent > 0 ? t.damage / t.spent : 0;
-        if (t.built > 0 && t.damage > 0) dpdVals.push(dpd);
+        if (t.built > 0 && t.damage > 0) {
+          if (t.is_combo) comboDpdVals.push(dpd);
+          else if (t.spent >= 350) baseDpdVals.push(dpd);
+        }
         return { ...t, dmg_per_dollar: dpd, pick_rate_pct: runs.length ? (t.runs_used / runs.length) * 100 : 0, win_rate_pct: t.runs_used ? (t.wins_used / t.runs_used) * 100 : 0 };
       });
-      dpdVals.sort((a, b) => a - b);
-      const medianDpd = dpdVals.length ? dpdVals[Math.floor(dpdVals.length / 2)] : 0;
+      comboDpdVals.sort((a, b) => a - b);
+      baseDpdVals.sort((a, b) => a - b);
+      const comboMedDpd = comboDpdVals.length ? comboDpdVals[Math.floor(comboDpdVals.length / 2)] : 0;
+      const baseMedDpd = baseDpdVals.length ? baseDpdVals[Math.floor(baseDpdVals.length / 2)] : 0;
+      const medianDpd = comboMedDpd || baseMedDpd;
 
       const waves = Object.values(waveMap).map(w => {
         let topCulprit = "", topC = 0;
@@ -649,9 +655,11 @@
           diags.push({ cls: "info", text: `[UPGRADE HABIT] Range upgrades are only ${((upgrades.range / totalUpg) * 100).toFixed(0)}% of all upgrades (${upgrades.range}/${totalUpg}) — Range cost may feel too high vs Damage/Speed.` });
         }
         for (const t of towers) {
-          if (medianDpd > 1 && t.built >= 1) {
-            if (t.dmg_per_dollar >= medianDpd * 1.85) diags.push({ cls: "warn", text: `[OP CANDIDATE] ${t.name} deals ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${(t.dmg_per_dollar / medianDpd).toFixed(1)}x median ${medianDpd.toFixed(1)}).` });
-            else if (t.damage > 0 && t.dmg_per_dollar <= medianDpd * 0.45 && t.type !== "slow" && t.type !== "slow+slow") diags.push({ cls: "info", text: `[WEAK CANDIDATE] ${t.name} averages ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${((t.dmg_per_dollar / medianDpd) * 100).toFixed(0)}% of median).` });
+          const peerMed = t.is_combo ? comboMedDpd : baseMedDpd;
+          if (!t.is_combo && t.spent < 350) continue;
+          if (peerMed > 1 && t.built >= 1) {
+            if (t.dmg_per_dollar >= peerMed * 1.85 && (t.built >= 2 || t.damage >= 500000)) diags.push({ cls: "warn", text: `[OP CANDIDATE] ${t.name} deals ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${(t.dmg_per_dollar / peerMed).toFixed(1)}x ${t.is_combo ? "combo" : "base"} median ${peerMed.toFixed(1)}).` });
+            else if (t.damage > 0 && t.built >= 2 && t.dmg_per_dollar <= peerMed * 0.45 && t.type !== "slow" && t.type !== "slow+slow") diags.push({ cls: "info", text: `[WEAK CANDIDATE] ${t.name} averages ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${((t.dmg_per_dollar / peerMed) * 100).toFixed(0)}% of ${t.is_combo ? "combo" : "base"} median).` });
           }
         }
         if (!diags.length) diags.push({ cls: "good", text: `[SWEET SPOT] Challenge Score (${avgChallenge.toFixed(0)}/100), kill path (${avgKillPen.toFixed(0)}%), and tower Dmg/$ are balanced across ${runs.length} run(s).` });

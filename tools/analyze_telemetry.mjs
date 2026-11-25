@@ -103,10 +103,11 @@ function analyze(allRuns) {
   let totalTaps = 0, touchTaps = 0, totalScrolls = 0, guideDismissed = 0, guideCompleted = 0;
   const upgrades = { damage: 0, range: 0, fire_rate: 0 };
   const powers = { rewind: 0, pause: 0, haste: 0 };
-  let wins = 0, losses = 0, sumCs = 0, sumKp = 0, kpCnt = 0, sumBp = 0, bpCnt = 0, sumSpd = 0, surges = 0;
+  let wins = 0, losses = 0, stalled = 0, chargesTotal = 0, sumCs = 0, sumKp = 0, kpCnt = 0, sumBp = 0, bpCnt = 0, sumSpd = 0, surges = 0;
 
   for (const r of runs) {
-    if (r.outcome === "won") wins++; else if (r.outcome === "lost") losses++;
+    if (r.outcome === "won") wins++; else if (r.outcome === "lost") losses++; else if (r.outcome === "stalled") stalled++;
+    chargesTotal += Number(r.charges_fired || 0);
     sumCs += r.challenge_score;
     sumSpd += r.avg_game_speed;
     surges += r.surges_suffered;
@@ -146,11 +147,13 @@ function analyze(allRuns) {
     }
 
     for (const [tk, rec] of Object.entries(r.tower_stats || {})) {
-      if (!towerMap[tk]) towerMap[tk] = { type: tk, name: rec.name || tk, is_combo: !!rec.is_combo || tk.includes("+"), built: 0, spent: 0, damage: 0, kills: 0, runs: 0, wins: 0 };
+      if (!towerMap[tk]) towerMap[tk] = { type: tk, name: rec.name || tk, is_combo: !!rec.is_combo || tk.includes("+"), built: 0, spent: 0, damage: 0, kills: 0, upgTotal: 0, runs: 0, wins: 0 };
       const t = towerMap[tk];
       t.runs++; if (r.outcome === "won") t.wins++;
       t.built += Number(rec.built || 0); t.spent += Number(rec.spent || 0);
       t.damage += Number(rec.damage || 0); t.kills += Number(rec.kills || 0);
+      const u = rec.upgrades || {};
+      t.upgTotal += Number(u.damage || 0) + Number(u.range || 0) + Number(u.fire_rate || 0);
     }
   }
 
@@ -160,7 +163,11 @@ function analyze(allRuns) {
     pickPct: runs.length ? (t.runs / runs.length) * 100 : 0,
     winPct: t.runs ? (t.wins / t.runs) * 100 : 0
   })).sort((a, b) => b.dpd - a.dpd);
-  const dpds = towers.filter(t => t.built > 0 && t.damage > 0).map(t => t.dpd).sort((a, b) => a - b);
+  const comboDpds = towers.filter(t => t.is_combo && t.built > 0 && t.damage > 0).map(t => t.dpd).sort((a, b) => a - b);
+  const baseDpds = towers.filter(t => !t.is_combo && t.built > 0 && t.damage > 0 && (t.upgTotal > 0 || comboDpds.length < 3)).map(t => t.dpd).sort((a, b) => a - b);
+  const comboMedDpd = comboDpds.length ? comboDpds[Math.floor(comboDpds.length / 2)] : 0;
+  const baseMedDpd = baseDpds.length ? baseDpds[Math.floor(baseDpds.length / 2)] : 0;
+  const dpds = comboDpds.length ? comboDpds : towers.filter(t => t.built > 0 && t.damage > 0).map(t => t.dpd).sort((a, b) => a - b);
   const medDpd = dpds.length ? dpds[Math.floor(dpds.length / 2)] : 0;
 
   const waves = Object.values(waveMap).map(w => ({
@@ -175,7 +182,7 @@ function analyze(allRuns) {
   const avgKp = kpCnt ? sumKp / kpCnt : 0;
   const avgBp = bpCnt ? sumBp / bpCnt : 0;
   const avgSpd = runs.length ? sumSpd / runs.length : 1.0;
-  const fin = wins + losses;
+  const fin = wins + losses + stalled;
   const wr = fin ? (wins / fin) * 100 : 0;
 
   if (runs.length > 0) {
@@ -186,11 +193,16 @@ function analyze(allRuns) {
       proposals.push(`BUFF BOSS DURABILITY (data/balance.gd): Bosses only reach ${avgBp.toFixed(0)}% of path on average — increase Juggernaut/Colossus HP by +15% or reduce Piercing boss mult slightly.`);
     }
     for (const t of towers) {
-      if (medDpd > 1 && t.built >= 2 && t.dpd >= medDpd * 1.8) {
-        proposals.push(`NERF OUTLIER ${t.type} (data/balance.gd): ${t.dpd.toFixed(1)} Dmg/$ (${(t.dpd / medDpd).toFixed(1)}x median ${medDpd.toFixed(1)}) across ${t.built} builds — reduce damage ~10-15% or raise merge/cost.`);
-      } else if (medDpd > 1 && t.built >= 2 && t.damage > 0 && t.dpd <= medDpd * 0.45 && t.type !== "slow" && t.type !== "slow+slow") {
-        proposals.push(`BUFF UNDERPERFORMER ${t.type} (data/balance.gd): ${t.dpd.toFixed(1)} Dmg/$ (${((t.dpd / medDpd) * 100).toFixed(0)}% of median) — buff damage +15-20% or lower cost.`);
+      const peerMed = t.is_combo ? comboMedDpd : baseMedDpd;
+      if (!t.is_combo && t.upgTotal === 0 && comboDpds.length >= 3) continue; // Ignore un-upgraded merge ingredient base towers
+      if (peerMed > 1 && (t.built >= 2 || t.damage >= 500000) && t.dpd >= peerMed * 1.8) {
+        proposals.push(`NERF OUTLIER ${t.type} (data/balance.gd): ${t.dpd.toFixed(1)} Dmg/$ (${(t.dpd / peerMed).toFixed(1)}x ${t.is_combo ? "combo" : "base"} median ${peerMed.toFixed(1)}) across ${t.built} build(s) — reduce damage ~15-25% or raise merge/cost.`);
+      } else if (peerMed > 1 && t.built >= 2 && t.damage > 0 && t.dpd <= peerMed * 0.45 && t.type !== "slow" && t.type !== "slow+slow") {
+        proposals.push(`BUFF UNDERPERFORMER ${t.type} (data/balance.gd): ${t.dpd.toFixed(1)} Dmg/$ (${((t.dpd / peerMed) * 100).toFixed(0)}% of ${t.is_combo ? "combo" : "base"} median) — buff damage +15-20% or lower cost.`);
       }
+    }
+    if (stalled >= 1 && chargesTotal === 0) {
+      proposals.push(`HIVE DESTROYER VISIBILITY (scripts/hud.gd): ${stalled} run(s) reached Wave 45 with 0 Hive Destroyer shots fired — consider highlighting the win condition more clearly.`);
     }
     const totUpg = upgrades.damage + upgrades.range + upgrades.fire_rate;
     if (totUpg >= 8 && upgrades.range / totUpg < 0.12) {
@@ -206,7 +218,7 @@ function analyze(allRuns) {
   }
 
   return {
-    totalRuns: runs.length, wins, losses, winRatePct: Number(wr.toFixed(1)),
+    totalRuns: runs.length, wins, losses, stalled, winRatePct: Number(wr.toFixed(1)),
     avgChallenge: Number(avgCs.toFixed(1)), avgKillPathPct: Number(avgKp.toFixed(1)),
     avgBossPeakPct: Number(avgBp.toFixed(1)), avgGameSpeed: Number(avgSpd.toFixed(2)),
     avgSurgesPerRun: runs.length ? Number((surges / runs.length).toFixed(2)) : 0,
@@ -235,7 +247,7 @@ if (asJson) {
 } else {
   console.log("=== TIMEDEFENSE CLOSED-LOOP TELEMETRY REPORT ===");
   console.log(`Source: ${sb.note} | Local Desktop/Folder runs: ${localRuns.length} | Unique merged: ${mergedMap.size}`);
-  console.log(`Filtered Runs: ${report.totalRuns} (W:${report.wins} L:${report.losses} WR:${report.winRatePct}%) | Challenge: ${report.avgChallenge}/100 | KillPath: ${report.avgKillPathPct}% | BossPeak: ${report.avgBossPeakPct}% | AvgSpd: ${report.avgGameSpeed}x`);
+  console.log(`Filtered Runs: ${report.totalRuns} (W:${report.wins} L:${report.losses} S:${report.stalled} WR:${report.winRatePct}%) | Challenge: ${report.avgChallenge}/100 | KillPath: ${report.avgKillPathPct}% | BossPeak: ${report.avgBossPeakPct}% | AvgSpd: ${report.avgGameSpeed}x`);
   console.log(`Powers R:${report.powers.rewind} P:${report.powers.pause} H:${report.powers.haste} | Upgrades D:${report.upgrades.damage} R:${report.upgrades.range} S:${report.upgrades.fire_rate} | Med Dmg/$: ${report.medianDpd}`);
   console.log("\n--- Patch Comparison ---");
   for (const v of report.byVersion) console.log(`  ${v.version}: runs=${v.runs} W=${v.wins} L=${v.losses} avgCS=${(v.sumCs / v.runs).toFixed(0)}/100 avgKillPath=${v.kpCnt ? (v.sumKp / v.kpCnt).toFixed(0) : 0}%`);

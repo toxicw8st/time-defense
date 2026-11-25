@@ -500,13 +500,21 @@ func _on_wave_started(wave_num: int) -> void:
 	_active_wave_open = true
 
 
-func _on_wave_cleared(_wave_num: int) -> void:
+func _on_wave_cleared(wave_num: int) -> void:
 	if current_run.is_empty():
 		return
 	_close_active_wave(true)
 	var snap: Dictionary = _upsert_current_run()
 	save_analytics()
-	if not snap.is_empty():
+	# If this is the final wave and Enemy Base still stands, mission_ended("stalled") fires immediately after — let it send the final authoritative upsert!
+	var will_stall_now: bool = (
+		wave_num >= WavesData.MISSION_TARGET_WAVE
+		and not GameState.is_endless_mode
+		and not GameState.is_sandbox_mode
+		and GameState.mission != null
+		and GameState.mission.enemy_base_hp > 0
+	)
+	if not snap.is_empty() and not will_stall_now:
 		sync_run_to_supabase(snap)
 
 
@@ -1258,20 +1266,36 @@ func _compute_balance_recommendations(s: Dictionary) -> Array[String]:
 				int(h0["wave"]), float(h0["avg_money_end"])
 			])
 
-	var med_dpd: float = float(s["median_dmg_per_dollar"])
+	# Compare combos against combo median and standalone base towers against base median (ignoring base towers immediately fused into combos)
+	var combo_dpds: Array[float] = []
+	var base_dpds: Array[float] = []
 	var used_combos: int = 0
 	for tb in s["tower_board"]:
 		if bool(tb["is_combo"]) and int(tb["built"]) > 0:
 			used_combos += 1
-		if med_dpd > 1.0 and int(tb["built"]) >= 2:
+			if float(tb["damage"]) > 0.0:
+				combo_dpds.append(float(tb["dmg_per_dollar"]))
+		elif not bool(tb["is_combo"]) and int(tb["built"]) > 0 and float(tb["damage"]) > 0.0 and int(tb["spent"]) >= 350:
+			base_dpds.append(float(tb["dmg_per_dollar"]))
+	combo_dpds.sort()
+	base_dpds.sort()
+	var combo_med: float = combo_dpds[combo_dpds.size() / 2] if not combo_dpds.is_empty() else float(s["median_dmg_per_dollar"])
+	var base_med: float = base_dpds[base_dpds.size() / 2] if not base_dpds.is_empty() else 0.0
+
+	for tb in s["tower_board"]:
+		var is_c: bool = bool(tb["is_combo"])
+		var peer_med: float = combo_med if is_c else base_med
+		if peer_med > 1.0 and int(tb["built"]) >= 1:
 			var dpd: float = float(tb["dmg_per_dollar"])
-			if dpd >= med_dpd * 1.85:
-				recs.append("[OP CANDIDATE] %s deals %.1f Dmg/$ (%.1fx median %.1f) across %d builds." % [
-					str(tb["name"]), dpd, dpd / med_dpd, med_dpd, int(tb["built"])
+			if not is_c and int(tb["spent"]) < 350:
+				continue
+			if dpd >= peer_med * 1.85 and (int(tb["built"]) >= 2 or float(tb["damage"]) >= 500000.0):
+				recs.append("[OP CANDIDATE] %s deals %.1f Dmg/$ (%.1fx %s median %.1f) across %d build(s)." % [
+					str(tb["name"]), dpd, dpd / peer_med, "combo" if is_c else "base", peer_med, int(tb["built"])
 				])
-			elif dpd > 0.0 and dpd <= med_dpd * 0.45 and str(tb["type"]) != "slow" and str(tb["type"]) != "slow+slow":
-				recs.append("[WEAK CANDIDATE] %s averages %.1f Dmg/$ (%.0f%% of median) — buff candidate." % [
-					str(tb["name"]), dpd, (dpd / med_dpd) * 100.0
+			elif dpd > 0.0 and int(tb["built"]) >= 2 and dpd <= peer_med * 0.45 and str(tb["type"]) != "slow" and str(tb["type"]) != "slow+slow":
+				recs.append("[WEAK CANDIDATE] %s averages %.1f Dmg/$ (%.0f%% of %s median) — buff candidate." % [
+					str(tb["name"]), dpd, (dpd / peer_med) * 100.0, "combo" if is_c else "base"
 				])
 
 	if total_runs >= 2 and used_combos < 5:

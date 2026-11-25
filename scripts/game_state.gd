@@ -432,7 +432,10 @@ func get_enemy_speed_multiplier() -> float:
 func get_enemy_bounty_multiplier() -> float:
 	var diff_mult: float = float(get_difficulty_cfg().get("bounty_mult", 1.0))
 	var lvl_mult: float = 1.0 + float(get_level_cfg().get("bounty_bonus", 0.0))
-	return diff_mult * lvl_mult
+	# Preserve exact W1-20 bounties; smoothly taper W21-45 kill bounties (down to 0.55x) to curb late-game cash bloat
+	var wave_n: int = mission.wave_number if mission != null else 1
+	var late_taper: float = maxf(0.55, 1.0 - 0.018 * float(maxi(0, wave_n - 20)))
+	return diff_mult * lvl_mult * late_taper
 
 
 func get_level_tower_range_multiplier() -> float:

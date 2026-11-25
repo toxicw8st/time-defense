@@ -145,8 +145,8 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 
 	var w: int = maxi(1, wave_number)
 	var raw_budget_s: int = get_target_threat_s_dollars(w, player_assets_spent)
-	# Smooth post-Wave 10 escalation (255 * 1.095^(w-11)) so Waves 11-45 never collapse into an idle curve
-	var smooth_post10_s: int = int(round(255.0 * pow(1.095, float(maxi(0, w - 11)))))
+	# Data-tuned post-Wave 10 escalation (285 * 1.112^(w-11)) so Waves 11-45 keep boss pressure high even vs maxed combos
+	var smooth_post10_s: int = int(round(285.0 * pow(1.112, float(maxi(0, w - 11)))))
 	var budget_s: int = maxi(raw_budget_s, smooth_post10_s)
 	var remaining_s: int = budget_s
 	var is_boss_wave: bool = (w % 10 == 0)
@@ -159,7 +159,7 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 	var crawler_count: int = 0
 
 	if w >= 16:
-		var col_share: float = 0.45 if is_boss_wave else 0.25
+		var col_share: float = 0.55 if is_boss_wave else 0.34
 		colossus_count = int(floor(float(remaining_s) * col_share / 95.0))
 		remaining_s -= colossus_count * 95
 
@@ -186,8 +186,8 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		remaining_s -= rusher_count * 2
 		crawler_count = maxi(0, remaining_s)
 
-	# Steady, continuous spawn stream across the wave (no huge empty platoon gaps or instant clumped bursts)
-	var spawn_span: float = clampf(38.0 + float(w - 10) * 1.4, 40.0, 95.0)
+	# Steady, tighter continuous spawn stream so late-game bosses compress into real siege pressure
+	var spawn_span: float = clampf(34.0 + float(w - 10) * 1.15, 36.0, 82.0)
 	var tracks: Array[Dictionary] = []
 
 	if crawler_count > 0:

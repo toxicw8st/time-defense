@@ -144,6 +144,34 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	GameState.mission.economy["money"] = Balance.STARTING_MONEY
 	hud._refresh_all()
 
+	# Verify full-screen interposing Guide Vex overlay (~1/4-screen bust, pauses combat while talking, hides cleanly on ack!)
+	assert(not hud.prompt_banner.visible, "Legacy PromptBanner tips must stay hidden")
+	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("VEX"), "Guide Vex must show Wave 1 build beat on first playthrough")
+	assert(get_tree().paused, "Vex full-screen interposing guide must pause gameplay while speaking")
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		var gp_r: Rect2 = hud.guide_panel.get_global_rect()
+		var port_r: Rect2 = hud.guide_portrait.get_global_rect()
+		var box_r: Rect2 = hud.guide_speech_box.get_global_rect()
+		var vp_area: float = test_vp.x * test_vp.y
+		var port_frac: float = (port_r.size.x * port_r.size.y) / vp_area
+		assert(is_equal_approx(gp_r.size.x, test_vp.x) and is_equal_approx(gp_r.size.y, test_vp.y), "GuidePanel must cover entire viewport at %s, got %s" % [str(test_vp), str(gp_r)])
+		assert(port_frac >= 0.18 and port_frac <= 0.34, "Vex bust must occupy ~1/4 of screen at %s (got %.1f%%)" % [str(test_vp), port_frac * 100.0])
+		assert(box_r.position.x >= 0.0 and box_r.end.x <= test_vp.x + 1.0 and box_r.end.y <= test_vp.y + 1.0, "GuideSpeechBox overflow at %s: %s" % [str(test_vp), str(box_r)])
+		assert(not port_r.intersects(box_r), "Vex bust must not overlap speech callout box at %s" % str(test_vp))
+	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+	await get_tree().process_frame
+	hud._on_guide_ack_pressed()
+	assert(not hud.guide_panel.visible and not get_tree().paused, "Acknowledging Vex must hide overlay and immediately unpause gameplay")
+
+	# Verify one-tap Auto-Wave button on TopBar syncs with GameState & Pause menu checkbox
+	assert(hud.auto_wave_button != null and hud.auto_wave_button.visible and hud.auto_wave_button.text == "Auto:OFF")
+	hud.auto_wave_button.pressed.emit()
+	assert(GameState.auto_wave_enabled and hud.auto_wave_button.text == "Auto:ON" and hud.pause_auto_wave_check.button_pressed)
+	hud.auto_wave_button.pressed.emit()
+	assert(not GameState.auto_wave_enabled and hud.auto_wave_button.text == "Auto:OFF" and not hud.pause_auto_wave_check.button_pressed)
+
 	# Verify touch-friendly 34px hit zone selects Pad P1 even when tapped +24px off-center!
 	await _send_left_click(map, Vector2(220.0 + 24.0, 96.0))
 	assert(map.selected_pad_index == 0, "Mobile 34px touch pad hitbox must select Pad P1 at +24px offset")
@@ -174,18 +202,17 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	assert(lines.size() <= 9)
 	assert(htw.contains("Armoured") and htw.contains("Thaw-hardened") and htw.contains("Swift") and htw.contains("SURGE"))
 
-	# Verify witty Guide Vex replaces dry tips (first playthrough Wave 1-2 beats + startup dismiss)
-	assert(not hud.prompt_banner.visible, "Legacy PromptBanner tips must stay hidden")
-	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("VEX"), "Guide Vex must show Wave 1 build beat on first playthrough")
-	hud._on_guide_ack_pressed()
-	assert(not hud.guide_panel.visible)
+	# Verify Wave 1 combat & Wave 2 combat Vex beats interpose and unpause cleanly
 	wm.start_wave()
-	assert(hud.guide_panel.visible and hud.guide_body_label.text.contains("0.5x"), "Guide Vex must explain new 0.5x / 1x / 1.5x speed during Wave 1 combat")
+	assert(hud.guide_panel.visible and get_tree().paused and hud.guide_body_label.text.contains("0.5x"), "Guide Vex must interpose & pause to explain 0.5x / 1x / 1.5x speed during Wave 1 combat")
 	hud._on_guide_ack_pressed()
+	assert(not hud.guide_panel.visible and not get_tree().paused)
 	while wm.is_wave_active():
 		wm.step_wave(1.0)
 		for e in map.get_active_enemies():
 			e.take_damage(9999.0)
+	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("3/8"), "Guide Vex must present Wave 2 Combine beat")
+	hud._on_guide_ack_pressed()
 	wm.start_wave()
 	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("4/8"), "Guide Vex must present Wave 2 Time Powers beat")
 	hud._on_guide_ack_pressed()
@@ -205,9 +232,10 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
 	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
 	assert(hud.right_panel.position == Vector2(1220.0, 70.0) and hud.right_panel.size.x == 380.0)
+	assert(hud.tower_buttons_grid.columns == 2, "Phone Landscape must use 2-col tower upgrades to eliminate vertical scrolling")
 	assert(hud.build_blaster_button.custom_minimum_size.y >= 36.0, "Phone landscape shop buttons must be bigger (>=36px)")
 	assert(map.scale.x >= 0.95)
-	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "GuidePanel"]:
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
 		var r := Rect2(ctrl.position, ctrl.size)
 		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
@@ -227,7 +255,7 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	assert(hud.right_panel.position.x == 0.0 and is_equal_approx(hud.right_panel.size.x, 1280.0))
 	assert(hud.right_panel.position.y >= map.position.y + GameMap.MAP_HEIGHT * map.scale.y - 1.0)
 	assert(hud.bottom_bar.position.x == 0.0 and is_equal_approx(hud.bottom_bar.size.x, 1280.0))
-	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "GuidePanel"]:
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
 		var r := Rect2(ctrl.position, ctrl.size)
 		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
@@ -236,10 +264,10 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
 	assert(hud.build_buttons_grid.columns == 1 and hud.bottom_actions_grid.columns == 6)
-	assert(hud.right_panel.size == Vector2(340.0, 480.0) and is_equal_approx(map.extra_left_margin, 0.0))
+	assert(hud.right_panel.size == Vector2(340.0, 480.0) and is_equal_approx(map.extra_left_margin, 0.0), "Desktop restore mismatch: rp=%s rp_min=%s extra_l=%.1f" % [str(hud.right_panel.size), str(hud.right_panel.get_combined_minimum_size()), map.extra_left_margin])
 	assert(map.position == Vector2(0.0, 64.0) and map.scale == Vector2.ONE)
 
-	# Verify Start Menu + Startup Guide Vex greeting & Dismiss button fit inside all 3 viewports!
+	# Verify Start Menu + Startup Full-Screen Guide Vex greeting & Dismiss button fit inside all 3 viewports!
 	hud.open_start_menu()
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -251,10 +279,11 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 		var sm_r: Rect2 = hud.start_menu_overlay.get_global_rect()
 		var play_r: Rect2 = hud.start_play_button.get_global_rect()
 		var gp_r: Rect2 = hud.guide_panel.get_global_rect()
+		var box_r: Rect2 = hud.guide_speech_box.get_global_rect()
 		assert(sm_r.position.x >= 0.0 and sm_r.position.y >= 0.0 and sm_r.end.x <= test_vp.x + 1.0 and sm_r.end.y <= test_vp.y + 1.0, "StartMenu overflow at %s: %s" % [str(test_vp), str(sm_r)])
 		assert(play_r.end.y <= test_vp.y + 1.0 and play_r.end.y <= sm_r.end.y + 1.0, "StartPlayButton pushed off-screen at %s: %s" % [str(test_vp), str(play_r)])
-		assert(gp_r.position.x >= 0.0 and gp_r.end.x <= test_vp.x + 1.0 and gp_r.end.y <= test_vp.y + 1.0, "GuidePanel startup overflow at %s: %s" % [str(test_vp), str(gp_r)])
-		assert(not gp_r.intersects(play_r), "GuidePanel must NOT overlap StartPlayButton at %s" % str(test_vp))
+		assert(is_equal_approx(gp_r.size.x, test_vp.x) and is_equal_approx(gp_r.size.y, test_vp.y), "Startup GuidePanel must cover full viewport at %s" % str(test_vp))
+		assert(box_r.position.x >= 0.0 and box_r.end.x <= test_vp.x + 1.0 and box_r.end.y <= test_vp.y + 1.0, "Startup GuideSpeechBox overflow at %s: %s" % [str(test_vp), str(box_r)])
 	hud.guide_dismiss_button.pressed.emit()
 	assert(not hud.guide_panel.visible and GameState.prompts_muted, "Dismiss Vex must hide and mute guide")
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))

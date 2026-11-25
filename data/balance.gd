@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v1.3-guide-mobile-ui-ux"
+const BALANCE_VERSION: String = "v1.4-data-tuned-vex-overlay"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
@@ -340,21 +340,21 @@ const TOWERS: Dictionary = {
 		"is_combo": true,
 		"recipe": ["annihilator", "annihilator"],
 		"merge_fee": 160,
-		"role": "Boss assassin: 115 Piercing (207 vs Jugg) +20% opener strike vs unseen targets",
+		"role": "Boss assassin: 88 Piercing (158 vs Jugg) +15% opener strike vs healthy targets",
 		"cost": 640,
 		"build_time": 8.5,
-		"damage": 115.0,
-		"fire_rate": 0.78,
+		"damage": 88.0,
+		"fire_rate": 0.68,
 		"range": 190.0,
 		"min_range": 0.0,
 		"splash_radius": 0.0,
 		"splash_edge_ratio": 1.0,
 		"damage_type": "Piercing",
 		"damage_type_label": "Piercing MAC (180% vs Juggernaut)",
-		"damage_rating": "Devastating Boss",
-		"speed_rating": "Medium",
+		"damage_rating": "Apex Boss",
+		"speed_rating": "Medium-Low (0.68/s)",
 		"targeting": "strongest",
-		"opener_bonus_pct": 0.20,
+		"opener_bonus_pct": 0.15,
 	},
 	# 7. blaster + mortar
 	"blaster+mortar": {
@@ -733,26 +733,26 @@ const TOWERS: Dictionary = {
 		"is_combo": true,
 		"recipe": ["railgun", "annihilator"],
 		"merge_fee": 205,
-		"role": "275px apex boss killer: 110 Piercing + 42 Time impact + 50% slow 4s + Decay",
+		"role": "275px apex boss killer: 85 Piercing + 34 Time impact + 50% slow 4s + Decay",
 		"cost": 820,
 		"build_time": 9.5,
-		"damage": 110.0,
-		"fire_rate": 0.38,
+		"damage": 85.0,
+		"fire_rate": 0.34,
 		"range": 275.0,
 		"min_range": 0.0,
 		"splash_radius": 0.0,
 		"splash_edge_ratio": 1.0,
 		"damage_type": "Piercing",
-		"secondary_damage": 42.0,
+		"secondary_damage": 34.0,
 		"secondary_damage_type": "Time",
 		"damage_type_label": "Piercing + Time Omega Rail",
 		"damage_rating": "Apex Boss Killer",
-		"speed_rating": "Slow (0.38/s)",
+		"speed_rating": "Slow (0.34/s)",
 		"targeting": "strongest",
 		"slow_pct": 0.50,
 		"slow_duration": 4.0,
 		"decay_ticks": 3,
-		"decay_flat_by_level": [22.0, 44.0, 72.0, 108.0, 150.0, 200.0],
+		"decay_flat_by_level": [18.0, 36.0, 58.0, 86.0, 120.0, 160.0],
 	},
 }
 
@@ -870,17 +870,17 @@ const DIFFICULTY_PRESETS: Dictionary = {
 	},
 	"hard": {
 		"name": "Hard",
-		"hp_mult": 1.25,
-		"speed_mult": 1.08,
-		"bounty_mult": 0.95,
-		"desc": "Aliens +25% HP, +8% speed, -5% kill bounty.",
+		"hp_mult": 1.45,
+		"speed_mult": 1.14,
+		"bounty_mult": 0.85,
+		"desc": "Aliens +45% HP, +14% speed, -15% kill bounty.",
 	},
 	"nightmare": {
 		"name": "Chrono Nightmare",
-		"hp_mult": 1.55,
-		"speed_mult": 1.15,
-		"bounty_mult": 0.90,
-		"desc": "Aliens +55% HP, +15% speed, -10% kill bounty.",
+		"hp_mult": 1.85,
+		"speed_mult": 1.24,
+		"bounty_mult": 0.78,
+		"desc": "Aliens +85% HP, +24% speed, -22% kill bounty.",
 	},
 }
 
