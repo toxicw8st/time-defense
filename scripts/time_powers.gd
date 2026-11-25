@@ -231,6 +231,8 @@ func start_manipulator_upgrade() -> bool:
 	if not GameState.spend_money(cost, false):
 		return false
 	GameState.mission.manipulator_upgrading_remaining = float(cfg["build_time"])
+	if AnalyticsManager != null:
+		AnalyticsManager.record_manipulator_upgrade(next_lvl, cost)
 	GameState.event_logged.emit("Manipulator queued for Lv%d ($%d, %.0fs in wave) - Powers OFFLINE, Base locked, Surge paused." % [
 		next_lvl,
 		cost,

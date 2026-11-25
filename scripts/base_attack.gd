@@ -92,6 +92,8 @@ func start_charge() -> bool:
 	charge_remaining = charge_total_time
 	is_charging = true
 	GameState.base_attack_charging_active = true
+	if AnalyticsManager != null:
+		AnalyticsManager.record_hive_charge_started(Balance.BASE_ATTACK_COST)
 	charge_started.emit()
 	GameState.event_logged.emit("Hive Destroyer charging (%.0fs, $%d)" % [charge_total_time, Balance.BASE_ATTACK_COST])
 	return true
@@ -124,6 +126,8 @@ func _fire_hive_destroyer() -> void:
 		SfxManager.play("hive_beam")
 
 	var msg: String = "Hive destroyer hit - %d damage (%d / %d HP)" % [dmg, m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP]
+	if AnalyticsManager != null:
+		AnalyticsManager.record_hive_shot(dmg, m.enemy_base_hp)
 	GameState.event_logged.emit(msg)
 	base_attack_fired.emit(dmg, m.enemy_base_hp)
 

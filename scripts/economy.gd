@@ -91,6 +91,8 @@ func start_build_refinery() -> bool:
 	if not GameState.spend_money(cost, true):
 		return false
 	refinery_job = ConstructionJob.new("refinery", Balance.REFINERY_BUILD_TIME)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_refinery_started(cost, int(GameState.mission.economy["refineries_owned"]) + 1)
 	if map_ref != null:
 		map_ref.queue_redraw()
 	return true
@@ -122,6 +124,8 @@ func buy_research(node_key: String, from_between_levels: bool = false) -> bool:
 	GameState.save_meta_progress()
 	GameState.economy_changed.emit()
 	research_purchased.emit(node_key)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_research_bought(node_key, new_rank, cost)
 	GameState.event_logged.emit("Meta-Research %s Rank %d unlocked (%d R)" % [
 		Balance.RESEARCH_NODES[node_key]["name"],
 		new_rank,

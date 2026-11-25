@@ -11,6 +11,8 @@ const Visuals = preload("res://scripts/tower_visuals.gd")
 ## (f) DPS needed per wave for Waves 1-10 matches prompt table [27, 37, 46, 60, 104, 138, 121, 137, 179, 544] within ~10%
 
 func _ready() -> void:
+	if AnalyticsManager != null:
+		AnalyticsManager.suppress_default_persistence = true
 	var ui_ok: bool = await _test_real_ui_clicks_and_hud_requirements()
 	assert(ui_ok, "UI clicks and mobile ergonomics test must complete cleanly")
 	_test_f_dps_needed_and_algorithm_table()
@@ -22,8 +24,9 @@ func _ready() -> void:
 	_test_slow_railgun_decay_and_wave10_package()
 	await _test_g_combos_bubble_and_sandbox()
 	await _test_h_rebalance_and_pass2_polish()
+	await _test_i_analytics_telemetry_and_ui()
 
-	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok rebalance=ok pass2=ok)")
+	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok rebalance=ok pass2=ok analytics=ok)")
 	get_tree().quit(0)
 
 
@@ -1150,3 +1153,115 @@ func _test_h_rebalance_and_pass2_polish() -> void:
 	remove_child(inst)
 	inst.queue_free()
 	print("CHECK_REBALANCE_AND_PASS2_PASS scaled_upg=ok colossus=ok save_load=ok bugs_fixed=ok ui=ok")
+
+
+func _test_i_analytics_telemetry_and_ui() -> void:
+	assert(AnalyticsManager != null, "AnalyticsManager autoload must be present")
+	var prev_runs_backup: Array = AnalyticsManager.runs.duplicate(true)
+	AnalyticsManager.suppress_default_persistence = true
+	GameState.set_sandbox_mode(false)
+	GameState.difficulty_key = "standard"
+	GameState.prompts_muted = true
+	GameState.reset_mission()
+	AnalyticsManager.runs.clear()
+
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var inst: Node = main_scene.instantiate()
+	add_child(inst)
+	await get_tree().process_frame
+
+	var map: GameMap = inst.get_node("Map")
+	var wm: WaveManager = inst.get_node("WaveManager")
+	var econ: EconomyManager = inst.get_node("EconomyManager")
+	var tp: TimePowersManager = inst.get_node("TimePowersManager")
+	var ba: BaseAttackManager = inst.get_node("BaseAttackManager")
+	var hud: CanvasLayer = inst.get_node("HUD")
+	GameState.mission.economy["money"] = 10000
+
+	# 1) Build, upgrade, combine, combat kill, leak, power, refinery, hive shot, and mission win
+	var b_t: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	assert(b_t != null)
+	b_t.current_job = null
+	b_t.is_built = true
+	assert(b_t.start_upgrade("damage"))
+	b_t.current_job = null
+	b_t.levels["damage"] = 1
+	var merged: TowerUnit = map.combine_tower_with_shop(b_t, "laser")
+	assert(merged != null and merged.tower_type == "blaster+laser")
+	merged.current_job = null
+	merged.is_built = true
+
+	wm.start_wave()
+	var c1: EnemyUnit = map.spawn_enemy("crawler", 1)
+	c1.advance_along_path(3.8)
+	for _s in range(30):
+		merged.advance_tower(0.1)
+		if c1.is_dead_or_leaked:
+			break
+	assert(c1.is_dead_or_leaked, "Pulse-Plasma Carbine should eliminate test crawler")
+
+	GameState.lose_lives(1, "crawler", Vector2.ZERO)
+	assert(tp.activate_power("pause"))
+	assert(econ.start_build_refinery())
+	assert(ba.start_charge())
+	ba.step_base_attack(ba.get_charge_duration() + 0.5)
+	GameState.end_mission("won", "Analytics test victory")
+
+	var summary: Dictionary = AnalyticsManager.compute_aggregate_summary(false)
+	assert(int(summary["total_runs"]) == 1 and int(summary["wins"]) == 1, "Analytics must record 1 completed winning run (got %s)" % str(summary["total_runs"]))
+	assert(int(summary["powers_used"]["pause"]) >= 1, "Analytics must record Pause cast")
+	assert(int(summary["enemy_leaks"].get("crawler", 0)) == 1, "Analytics must record crawler leak")
+	var found_combo: bool = false
+	for tb in summary["tower_board"]:
+		if str(tb["type"]) == "blaster+laser":
+			found_combo = true
+			assert(int(tb["built"]) >= 1 and float(tb["damage"]) > 0.0 and int(tb["kills"]) >= 1 and float(tb["dmg_per_dollar"]) > 0.0, "Combo tower ledger must track builds, damage, kills, and Dmg/$")
+	assert(found_combo, "Analytics tower_board must contain blaster+laser")
+
+	# 2) Verify Sandbox runs are excluded from balance stats by default
+	GameState.set_sandbox_mode(true)
+	GameState.reset_mission()
+	var sb_t: TowerUnit = map.build_tower_on_pad(1, "railgun")
+	assert(sb_t != null)
+	wm.start_sandbox_wave(10)
+	var sum_excl: Dictionary = AnalyticsManager.compute_aggregate_summary(false)
+	var sum_incl: Dictionary = AnalyticsManager.compute_aggregate_summary(true)
+	assert(int(sum_excl["total_runs"]) == 1 and int(sum_excl["sandbox_runs_excluded"]) == 1, "Sandbox run must be excluded by default")
+	assert(int(sum_incl["total_runs"]) == 2, "Sandbox run must be included when include_sandbox=true")
+
+	# 3) Save / Load JSON round-trip (isolated temp file) & AI Balance Report
+	var tmp_path: String = "user://test_verify_analytics_step8.json"
+	assert(AnalyticsManager.save_analytics(tmp_path), "save_analytics must succeed on custom test path")
+	var ai_md: String = AnalyticsManager.build_ai_balance_report(false)
+	assert(ai_md.contains("TimeDefense Real Playtest Analytics Report") and ai_md.contains("Automated Balance Flags") and ai_md.contains("Pulse-Plasma Carbine"), "AI report must include header, flags, and tower stats")
+	AnalyticsManager.runs.clear()
+	assert(AnalyticsManager.load_analytics(tmp_path), "load_analytics must reload saved runs")
+	assert(AnalyticsManager.runs.size() >= 1, "Reloaded analytics must restore run history")
+	if FileAccess.file_exists(tmp_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp_path))
+
+	# 4) In-Game AnalyticsOverlay & StartMenuOverlay responsive bounds across all 3 viewports
+	GameState.set_sandbox_mode(false)
+	hud.open_analytics_overlay()
+	assert(hud.analytics_overlay.visible, "AnalyticsOverlay must open cleanly")
+	assert(hud.analytics_kpi_label.text.contains("Runs: 1"), "Analytics KPI header must display live run count")
+	assert(hud.analytics_towers_label.text.contains("Pulse-Plasma Carbine"), "Analytics tower ledger must display combo performance")
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		var ar: Rect2 = hud.analytics_overlay.get_global_rect()
+		assert(ar.position.x >= 0.0 and ar.end.x <= test_vp.x + 1.0 and ar.end.y <= test_vp.y + 1.0, "AnalyticsOverlay overflow at %s: %s" % [str(test_vp), str(ar)])
+	hud.analytics_overlay.visible = false
+	hud.open_start_menu()
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		var ab: Rect2 = hud.start_analytics_button.get_global_rect()
+		assert(ab.end.x <= test_vp.x + 1.0 and ab.end.y <= test_vp.y + 1.0, "StartAnalyticsButton overflow at %s: %s" % [str(test_vp), str(ab)])
+
+	AnalyticsManager.runs = prev_runs_backup
+	AnalyticsManager.suppress_default_persistence = false
+	GameState.prompts_muted = false
+	remove_child(inst)
+	inst.queue_free()
+	print("CHECK_ANALYTICS_TELEMETRY_AND_UI_PASS runs=1 combo_tracked=ok sandbox_filter=ok json_io=ok ui_bounds=ok")

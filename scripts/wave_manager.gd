@@ -131,6 +131,8 @@ func call_next_wave_early() -> bool:
 	GameState.mission.cleared_waves[prev_w] = true
 	GameState.mission.stats["waves_completed"] += 1
 	GameState.add_money(bonus, true)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_early_wave_call(prev_w + 1, bonus)
 	GameState.event_logged.emit("EARLY WAVE CALL (+$%d bonus)! Launching Wave %d!" % [bonus, prev_w + 1])
 	GameState.wave_cleared.emit(prev_w)
 	GameState.mission.wave_number = prev_w + 1

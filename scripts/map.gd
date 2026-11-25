@@ -928,6 +928,8 @@ func build_tower_on_pad(pad_idx: int, tower_type: String) -> TowerUnit:
 	pad_occupancy[pad_idx] = tower
 	placed_towers.append(tower)
 	preview_tower_type = ""
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_build(tower_type, cost, get_zone_label_for_pad(pad_idx))
 	select_pad(pad_idx)
 	queue_redraw()
 	return tower
@@ -957,6 +959,9 @@ func build_tower_in_zone(drop_pos: Vector2, tower_type: String, zone_idx: int = 
 	placed_towers.append(tower)
 	preview_tower_type = ""
 	selected_zone_index = zone_idx
+	if AnalyticsManager != null:
+		var zlbl: String = str(active_placement_zones[zone_idx]["label"]) if (zone_idx >= 0 and zone_idx < active_placement_zones.size()) else str(eval.get("zone_label", ""))
+		AnalyticsManager.record_tower_build(tower_type, cost, zlbl)
 	select_tower_unit(tower)
 	queue_redraw()
 	return tower
@@ -1003,9 +1008,12 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	var cost: int = int(Balance.TOWERS[shop_type]["cost"]) + Balance.get_merge_surcharge(target_tower.tower_type, shop_type) + upg_xfer
 	if not GameState.spend_money(cost, true):
 		return null
-	var b_time: float = Balance.get_merge_build_time(target_tower.tower_type, shop_type)
+	var prev_type_a: String = target_tower.tower_type
+	var b_time: float = Balance.get_merge_build_time(prev_type_a, shop_type)
 	cancel_combine_partner_pick()
 	target_tower.transform_to_combo(combo_key, cost, target_tower.levels.duplicate(), b_time)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_combine(prev_type_a, shop_type, combo_key, cost, target_tower.total_spent)
 	select_tower_unit(target_tower)
 	if SfxManager != null:
 		SfxManager.play("combine")
@@ -1041,9 +1049,13 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 		pad_occupancy[b_pad] = null
 	placed_towers.erase(tower_b)
 	tower_b.queue_free()
-	var b_time: float = Balance.get_merge_build_time(tower_a.tower_type, tower_b.tower_type)
+	var prev_a: String = tower_a.tower_type
+	var prev_b: String = tower_b.tower_type
+	var b_time: float = Balance.get_merge_build_time(prev_a, prev_b)
 	cancel_combine_partner_pick()
 	tower_a.transform_to_combo(combo_key, added_spent, merged_levels, b_time)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_combine(prev_a, prev_b, combo_key, surcharge, tower_a.total_spent)
 	select_tower_unit(tower_a)
 	if SfxManager != null:
 		SfxManager.play("combine")
@@ -1055,13 +1067,18 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 func sell_tower(tower: TowerUnit) -> int:
 	if tower == null or not is_instance_valid(tower):
 		return 0
+	var sold_type: String = tower.tower_type
+	var sold_dmg: float = tower.total_damage_dealt
+	var sold_kills: int = tower.total_kills
 	var refund: int = tower.get_sell_refund()
 	var pad_idx: int = tower.pad_index
 	if pad_idx >= 0 and pad_idx < pad_occupancy.size() and pad_occupancy[pad_idx] == tower:
 		pad_occupancy[pad_idx] = null
 	placed_towers.erase(tower)
 	GameState.add_money(refund, false)
-	GameState.event_logged.emit("Sold %s (+%d money)" % [Balance.TOWERS[tower.tower_type]["name"], refund])
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_sell(sold_type, refund, sold_dmg, sold_kills)
+	GameState.event_logged.emit("Sold %s (+%d money)" % [Balance.TOWERS[sold_type]["name"], refund])
 	if selected_tower == tower:
 		selected_tower = null
 	tower.queue_free()

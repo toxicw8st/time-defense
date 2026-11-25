@@ -187,6 +187,8 @@ func continue_into_endless() -> void:
 	mission.end_reason = ""
 	is_clock_paused = false
 	is_endless_mode = true
+	if AnalyticsManager != null:
+		AnalyticsManager.record_endless_continue()
 	event_logged.emit("ENDLESS CHRONO MODE ACTIVATED — survive as far as you can!")
 	economy_changed.emit()
 

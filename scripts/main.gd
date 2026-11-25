@@ -19,6 +19,8 @@ func _ready() -> void:
 	time_powers_manager.setup(map, wave_manager)
 	base_attack_manager.setup(map)
 	map.set_economy_ref(economy_manager)
+	if AnalyticsManager != null:
+		AnalyticsManager.set_map_ref(map)
 	hud.set_references(map, wave_manager, economy_manager, surge_manager, time_powers_manager, base_attack_manager)
 	hud.start_wave_requested.connect(_on_start_wave_requested)
 	hud.restart_requested.connect(_on_restart_requested)

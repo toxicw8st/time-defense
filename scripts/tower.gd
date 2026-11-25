@@ -46,6 +46,8 @@ func record_damage(amount: float, killed: bool = false) -> void:
 		total_damage_dealt += amount
 	if killed:
 		total_kills += 1
+	if AnalyticsManager != null and (amount > 0.0 or killed):
+		AnalyticsManager.record_tower_combat(tower_type, amount, killed)
 
 
 func get_estimated_dps() -> float:
@@ -228,6 +230,8 @@ func start_upgrade(stat_key: String) -> bool:
 	if GameState.is_sandbox_mode and GameState.sandbox_instant_build:
 		total_spent += cost
 		levels[stat_key] = lvl + 1
+		if AnalyticsManager != null:
+			AnalyticsManager.record_tower_upgrade(tower_type, stat_key, lvl + 1, cost)
 		var inst_disp: String = "Decay" if (stat_key == "damage" and uses_decay_upgrades()) else stat_key.capitalize()
 		GameState.event_logged.emit("%s %s upgraded to Lvl %d" % [Balance.TOWERS[tower_type]["name"], inst_disp, levels[stat_key]])
 		construction_completed.emit(self)
@@ -236,6 +240,8 @@ func start_upgrade(stat_key: String) -> bool:
 	if not GameState.spend_money(cost, true):
 		return false
 	total_spent += cost
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_upgrade(tower_type, stat_key, lvl + 1, cost)
 	current_job = ConstructionJob.new("tower_upgrade", build_time, stat_key)
 	queue_redraw()
 	return true

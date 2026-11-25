@@ -131,21 +131,34 @@ var start_play_button: Button = null
 var start_sandbox_button: Button = null
 var start_lab_button: Button = null
 var start_download_button: Button = null
+var start_analytics_button: Button = null
 var start_diff_buttons: Dictionary = {}
 var lab_sandbox_button: Button = null
 var pause_main_menu_button: Button = null
 var pause_recipes_button: Button = null
+var pause_analytics_button: Button = null
 var pause_auto_wave_check: CheckBox = null
 var pause_sfx_mute_check: CheckBox = null
 var pause_dmg_popups_check: CheckBox = null
 var end_main_menu_button: Button = null
 var end_endless_button: Button = null
+var end_analytics_button: Button = null
 
 var combine_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
 var recipes_search_edit: LineEdit = null
 var recipes_list_box: VBoxContainer = null
+var analytics_overlay: PanelContainer = null
+var analytics_include_sandbox_check: CheckBox = null
+var analytics_kpi_label: Label = null
+var analytics_recs_label: Label = null
+var analytics_waves_label: Label = null
+var analytics_towers_label: Label = null
+var analytics_runs_label: Label = null
+var analytics_status_label: Label = null
+var analytics_reset_button: Button = null
+var _analytics_reset_armed: bool = false
 var enemy_inspector_panel: PanelContainer = null
 var enemy_inspector_label: Label = null
 var _inspected_enemy: EnemyUnit = null
@@ -283,6 +296,8 @@ func open_start_menu() -> void:
 	between_levels_overlay.visible = false
 	if recipes_overlay != null:
 		recipes_overlay.visible = false
+	if analytics_overlay != null:
+		analytics_overlay.visible = false
 	if enemy_inspector_panel != null:
 		enemy_inspector_panel.visible = false
 	get_tree().paused = false
@@ -529,12 +544,21 @@ func _build_start_menu() -> void:
 
 	start_download_button = Button.new()
 	start_download_button.name = "StartDownloadButton"
-	start_download_button.custom_minimum_size = Vector2(165, 48)
-	start_download_button.add_theme_font_size_override("font_size", 12)
+	start_download_button.custom_minimum_size = Vector2(128, 48)
+	start_download_button.add_theme_font_size_override("font_size", 11)
 	start_download_button.text = "INSTALL / APP"
 	start_download_button.pressed.connect(_on_download_button_pressed)
 	UIIcons.apply_right_button_theme(start_download_button, Color(0.68, 0.52, 0.95))
 	action_row.add_child(start_download_button)
+
+	start_analytics_button = Button.new()
+	start_analytics_button.name = "StartAnalyticsButton"
+	start_analytics_button.custom_minimum_size = Vector2(124, 48)
+	start_analytics_button.add_theme_font_size_override("font_size", 11)
+	start_analytics_button.text = "ANALYTICS"
+	start_analytics_button.pressed.connect(open_analytics_overlay)
+	UIIcons.apply_right_button_theme(start_analytics_button, Color(0.28, 0.86, 0.96))
+	action_row.add_child(start_analytics_button)
 
 	# Also add "Main Menu" buttons to PauseOverlay and EndOverlay
 	var pause_btns := get_node_or_null("PauseOverlay/Margin/VBox/PauseButtons") as HBoxContainer
@@ -560,6 +584,13 @@ func _build_start_menu() -> void:
 		)
 		UIIcons.apply_right_button_theme(end_endless_button, Color(0.78, 0.46, 1.0))
 		end_vbox.add_child(end_endless_button)
+
+		end_analytics_button = Button.new()
+		end_analytics_button.name = "EndAnalyticsButton"
+		end_analytics_button.text = "View Run Analytics & Export Data"
+		end_analytics_button.pressed.connect(open_analytics_overlay)
+		UIIcons.apply_right_button_theme(end_analytics_button, Color(0.28, 0.86, 0.96))
+		end_vbox.add_child(end_analytics_button)
 
 		end_main_menu_button = Button.new()
 		end_main_menu_button.name = "EndMainMenuButton"
@@ -618,6 +649,17 @@ func _build_start_menu() -> void:
 		)
 		UIIcons.apply_right_button_theme(pause_recipes_button, Color(0.95, 0.78, 0.30))
 		opts_row.add_child(pause_recipes_button)
+
+		pause_analytics_button = Button.new()
+		pause_analytics_button.name = "PauseAnalyticsButton"
+		pause_analytics_button.text = "Analytics"
+		pause_analytics_button.pressed.connect(func() -> void:
+			if pause_overlay.visible:
+				_toggle_pause_menu()
+			open_analytics_overlay()
+		)
+		UIIcons.apply_right_button_theme(pause_analytics_button, Color(0.28, 0.86, 0.96))
+		opts_row.add_child(pause_analytics_button)
 
 
 func _build_combine_and_sandbox_ui() -> void:
@@ -695,6 +737,153 @@ func _build_combine_and_sandbox_ui() -> void:
 	recipes_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recipes_list_box.add_theme_constant_override("separation", 5)
 	r_scroll.add_child(recipes_list_box)
+
+	# 1c2) Build In-Game Playtest Analytics & Balance Telemetry Modal
+	analytics_overlay = PanelContainer.new()
+	analytics_overlay.name = "AnalyticsOverlay"
+	analytics_overlay.visible = false
+	analytics_overlay.clip_contents = true
+	analytics_overlay.position = Vector2(140.0, 68.0)
+	analytics_overlay.size = Vector2(1000.0, 570.0)
+	analytics_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.98), Color(0.28, 0.88, 0.98), 10, 10.0, 8.0))
+	add_child(analytics_overlay)
+
+	var a_vbox := VBoxContainer.new()
+	a_vbox.add_theme_constant_override("separation", 6)
+	analytics_overlay.add_child(a_vbox)
+
+	var a_top := HBoxContainer.new()
+	a_top.add_theme_constant_override("separation", 8)
+	a_vbox.add_child(a_top)
+
+	var a_title := Label.new()
+	a_title.text = "PLAYTEST ANALYTICS & REAL-DATA BALANCE TELEMETRY"
+	a_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	a_title.add_theme_font_size_override("font_size", 13)
+	a_title.add_theme_color_override("font_color", Color(0.45, 0.94, 1.0))
+	a_top.add_child(a_title)
+
+	analytics_include_sandbox_check = CheckBox.new()
+	analytics_include_sandbox_check.name = "AnalyticsIncludeSandboxCheck"
+	analytics_include_sandbox_check.text = "Include Sandbox"
+	analytics_include_sandbox_check.button_pressed = false
+	analytics_include_sandbox_check.toggled.connect(func(_on: bool) -> void: _refresh_analytics_overlay())
+	a_top.add_child(analytics_include_sandbox_check)
+
+	var a_close := Button.new()
+	a_close.name = "AnalyticsCloseButton"
+	a_close.custom_minimum_size = Vector2(78, 28)
+	a_close.text = "Close"
+	a_close.pressed.connect(func() -> void: analytics_overlay.visible = false)
+	UIIcons.apply_right_button_theme(a_close, Color(0.95, 0.45, 0.45))
+	a_top.add_child(a_close)
+
+	analytics_kpi_label = Label.new()
+	analytics_kpi_label.name = "AnalyticsKpiLabel"
+	analytics_kpi_label.add_theme_font_size_override("font_size", 11)
+	analytics_kpi_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.42))
+	a_vbox.add_child(analytics_kpi_label)
+
+	var a_scroll := ScrollContainer.new()
+	a_scroll.name = "AnalyticsScroll"
+	a_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	a_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	a_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	a_vbox.add_child(a_scroll)
+
+	var a_body := VBoxContainer.new()
+	a_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	a_body.add_theme_constant_override("separation", 8)
+	a_scroll.add_child(a_body)
+
+	analytics_recs_label = _make_analytics_section(a_body, "AUTOMATED BALANCE DIAGNOSTICS", Color(1.0, 0.76, 0.36))
+	analytics_waves_label = _make_analytics_section(a_body, "WAVE LEAK HOTSPOTS & ECONOMY", Color(1.0, 0.56, 0.56))
+	analytics_towers_label = _make_analytics_section(a_body, "TOWER & COMBINATION PERFORMANCE (DMG / $)", Color(0.45, 0.94, 0.74))
+	analytics_runs_label = _make_analytics_section(a_body, "RECENT PLAYTEST RUNS", Color(0.68, 0.86, 1.0))
+
+	analytics_status_label = Label.new()
+	analytics_status_label.name = "AnalyticsStatusLabel"
+	analytics_status_label.add_theme_font_size_override("font_size", 11)
+	analytics_status_label.add_theme_color_override("font_color", Color(0.62, 0.96, 0.72))
+	analytics_status_label.text = "Play runs auto-save on every wave clear & mission end. Copy AI Report and paste into chat to rebalance from your data."
+	a_vbox.add_child(analytics_status_label)
+
+	var a_btns := HBoxContainer.new()
+	a_btns.add_theme_constant_override("separation", 8)
+	a_vbox.add_child(a_btns)
+
+	var btn_copy_ai := Button.new()
+	btn_copy_ai.name = "AnalyticsCopyReportButton"
+	btn_copy_ai.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_copy_ai.custom_minimum_size = Vector2(0, 34)
+	btn_copy_ai.text = "Copy AI Report"
+	btn_copy_ai.pressed.connect(func() -> void:
+		if AnalyticsManager != null:
+			AnalyticsManager.copy_report_to_clipboard(false)
+			analytics_status_label.text = "Copied AI Balance Report to clipboard! Paste it directly in chat to tune towers & waves."
+	)
+	UIIcons.apply_right_button_theme(btn_copy_ai, Color(0.28, 0.88, 0.62))
+	a_btns.add_child(btn_copy_ai)
+
+	var btn_copy_json := Button.new()
+	btn_copy_json.name = "AnalyticsCopyJsonButton"
+	btn_copy_json.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_copy_json.custom_minimum_size = Vector2(0, 34)
+	btn_copy_json.text = "Copy Raw JSON"
+	btn_copy_json.pressed.connect(func() -> void:
+		if AnalyticsManager != null:
+			AnalyticsManager.copy_report_to_clipboard(true)
+			analytics_status_label.text = "Copied full JSON telemetry payload to clipboard (importable into analytics.html)."
+	)
+	UIIcons.apply_right_button_theme(btn_copy_json, Color(0.38, 0.72, 0.98))
+	a_btns.add_child(btn_copy_json)
+
+	var btn_dl_json := Button.new()
+	btn_dl_json.name = "AnalyticsDownloadJsonButton"
+	btn_dl_json.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_dl_json.custom_minimum_size = Vector2(0, 34)
+	btn_dl_json.text = "Export .JSON"
+	btn_dl_json.pressed.connect(func() -> void:
+		if AnalyticsManager != null:
+			analytics_status_label.text = AnalyticsManager.download_json_export()
+	)
+	UIIcons.apply_right_button_theme(btn_dl_json, Color(0.68, 0.54, 0.96))
+	a_btns.add_child(btn_dl_json)
+
+	var btn_web_dash := Button.new()
+	btn_web_dash.name = "AnalyticsOpenDashboardButton"
+	btn_web_dash.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_web_dash.custom_minimum_size = Vector2(0, 34)
+	btn_web_dash.text = "Visual Dashboard"
+	btn_web_dash.pressed.connect(func() -> void:
+		if AnalyticsManager != null:
+			if AnalyticsManager.open_web_dashboard():
+				analytics_status_label.text = "Opened analytics.html visual dashboard in a new tab (auto-synced with localStorage)."
+			else:
+				analytics_status_label.text = "Open https://toxicw8st.github.io/time-defense/analytics.html and paste/drop your JSON export."
+	)
+	UIIcons.apply_right_button_theme(btn_web_dash, Color(0.95, 0.76, 0.28))
+	a_btns.add_child(btn_web_dash)
+
+	analytics_reset_button = Button.new()
+	analytics_reset_button.name = "AnalyticsResetButton"
+	analytics_reset_button.custom_minimum_size = Vector2(116, 34)
+	analytics_reset_button.text = "Reset Data"
+	analytics_reset_button.pressed.connect(func() -> void:
+		if not _analytics_reset_armed:
+			_analytics_reset_armed = true
+			analytics_reset_button.text = "Confirm Clear?"
+			analytics_status_label.text = "Click Confirm Clear? again to wipe saved playtest analytics history."
+			return
+		_analytics_reset_armed = false
+		analytics_reset_button.text = "Reset Data"
+		if AnalyticsManager != null:
+			AnalyticsManager.clear_analytics_history()
+		analytics_status_label.text = "Cleared playtest analytics history."
+		_refresh_analytics_overlay()
+	)
+	UIIcons.apply_right_button_theme(analytics_reset_button, Color(0.92, 0.42, 0.42))
+	a_btns.add_child(analytics_reset_button)
 
 	# 1d) Build Floating Enemy Inspector Card (shown when tapping any active enemy on path)
 	enemy_inspector_panel = PanelContainer.new()
@@ -950,10 +1139,115 @@ func _make_sandbox_enemy_btn(enemy_type: String) -> Button:
 func open_recipes_overlay() -> void:
 	if recipes_overlay == null:
 		return
+	if analytics_overlay != null:
+		analytics_overlay.visible = false
 	_populate_recipes_list()
 	recipes_overlay.visible = true
 	_reapply_overlay_bounds()
 	call_deferred("_reapply_overlay_bounds")
+
+
+func _make_analytics_section(parent_box: VBoxContainer, title_text: String, accent: Color) -> Label:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.12, 0.20, 0.96), accent, 6, 8.0, 6.0))
+	parent_box.add_child(card)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 3)
+	card.add_child(v)
+	var hdr := Label.new()
+	hdr.text = title_text
+	hdr.add_theme_font_size_override("font_size", 11)
+	hdr.add_theme_color_override("font_color", accent)
+	v.add_child(hdr)
+	var body := Label.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_font_size_override("font_size", 11)
+	body.add_theme_color_override("font_color", Color(0.90, 0.95, 1.0))
+	v.add_child(body)
+	return body
+
+
+func open_analytics_overlay() -> void:
+	if analytics_overlay == null:
+		return
+	if recipes_overlay != null:
+		recipes_overlay.visible = false
+	_analytics_reset_armed = false
+	if analytics_reset_button != null:
+		analytics_reset_button.text = "Reset Data"
+	_refresh_analytics_overlay()
+	analytics_overlay.visible = true
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
+
+
+func _refresh_analytics_overlay() -> void:
+	if analytics_overlay == null or AnalyticsManager == null:
+		return
+	var inc_sb: bool = analytics_include_sandbox_check != null and analytics_include_sandbox_check.button_pressed
+	var s: Dictionary = AnalyticsManager.compute_aggregate_summary(inc_sb)
+	if analytics_kpi_label != null:
+		var pu: Dictionary = s["powers_used"]
+		analytics_kpi_label.text = "Runs: %d (W:%d L:%d Aband:%d | SB excl:%d)  |  Win%%: %.1f%%  |  Avg Wave: %.1f (Best W%d)  |  Surges/Run: %.2f  |  Powers R:%d P:%d H:%d  |  Med Dmg/$: %.1f" % [
+			int(s["total_runs"]), int(s["wins"]), int(s["losses"]), int(s["abandoned"]), int(s["sandbox_runs_excluded"]),
+			float(s["win_rate_pct"]), float(s["avg_max_wave"]), int(s["best_wave"]), float(s["avg_surges_per_run"]),
+			int(pu["rewind"]), int(pu["pause"]), int(pu["haste"]), float(s["median_dmg_per_dollar"]),
+		]
+	if analytics_recs_label != null:
+		var rlines: PackedStringArray = []
+		for rec in s["recommendations"]:
+			rlines.append("• " + str(rec))
+		analytics_recs_label.text = "\n".join(rlines)
+	if analytics_waves_label != null:
+		var wlines: PackedStringArray = []
+		var wh: Array = s["wave_hotspots"]
+		var lim_w: int = mini(7, wh.size())
+		if lim_w == 0:
+			wlines.append("No wave telemetry recorded yet — clear or play a wave to populate leak & cash data.")
+		for i in range(lim_w):
+			var h: Dictionary = wh[i]
+			wlines.append("Wave %d  |  Plays: %d  |  Lives Lost: %d (%.0f%% leak rate)  |  Avg Cash End: $%.0f  |  Top Culprit: %s" % [
+				int(h["wave"]), int(h["plays"]), int(h["leaks_total"]), float(h["leak_rate_pct"]), float(h["avg_money_end"]),
+				str(h["top_leaker"]) if str(h["top_leaker"]) != "" else "None",
+			])
+		analytics_waves_label.text = "\n".join(wlines)
+	if analytics_towers_label != null:
+		var tlines: PackedStringArray = []
+		var tb: Array = s["tower_board"]
+		var lim_t: int = mini(12, tb.size())
+		if lim_t == 0:
+			tlines.append("No tower combat data yet — build & fight waves to see per-tower Dmg/$, pick rate, and win rate.")
+		for i in range(lim_t):
+			var t: Dictionary = tb[i]
+			var tag: String = "[COMBO] " if bool(t["is_combo"]) else ""
+			tlines.append("%s%s  |  Built: %d  |  Spent: $%d  |  Dmg: %.0f  |  Kills: %d  |  %.1f Dmg/$  |  Pick: %.0f%%  |  WR: %.0f%%" % [
+				tag, str(t["name"]), int(t["built"]), int(t["spent"]), float(t["damage"]), int(t["kills"]),
+				float(t["dmg_per_dollar"]), float(t["pick_rate_pct"]), float(t["win_rate_pct"]),
+			])
+		analytics_towers_label.text = "\n".join(tlines)
+	if analytics_runs_label != null:
+		var all_r: Array = AnalyticsManager.get_all_runs_including_active()
+		var run_lines: PackedStringArray = []
+		var shown: int = 0
+		for i in range(all_r.size() - 1, -1, -1):
+			var r: Dictionary = all_r[i]
+			if not inc_sb and bool(r.get("is_sandbox", false)):
+				continue
+			run_lines.append("[%s] Lv%d (%s%s) -> %s @ W%d  |  Lives: %d  |  HiveHP: %d  |  Shots: %d  |  Surges: %d  |  CashEnd: $%d" % [
+				str(r.get("started_at", "")).substr(0, 16), int(r.get("level", 1)), str(r.get("difficulty", "standard")).capitalize(),
+				" SANDBOX" if bool(r.get("is_sandbox", false)) else "", str(r.get("outcome", "")).to_upper(),
+				int(r.get("max_wave_reached", 1)), int(r.get("lives_remaining", 0)), int(r.get("enemy_base_hp_remaining", 0)),
+				int(r.get("charges_fired", 0)), int(r.get("surges_suffered", 0)), int(r.get("money_unspent_end", 0)),
+			])
+			shown += 1
+			if shown >= 8:
+				break
+		if run_lines.is_empty():
+			run_lines.append("No tracked runs yet.")
+		analytics_runs_label.text = "\n".join(run_lines)
 
 
 func _populate_recipes_list() -> void:
@@ -2167,6 +2461,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
 		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 68.0), Vector2(920.0, 560.0))
 		_place_overlay_exact(recipes_overlay, Vector2(150.0, 74.0), Vector2(980.0, 560.0))
+		_place_overlay_exact(analytics_overlay, Vector2(140.0, 68.0), Vector2(1000.0, 570.0))
 		debug_panel.position = Vector2(16.0, 74.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(12.0, 70.0)
@@ -2216,6 +2511,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_center_overlay(end_overlay, vp_size, Vector2(640.0, 400.0))
 		_center_overlay(start_menu_overlay, vp_size, Vector2(1060.0, 560.0))
 		_center_overlay(recipes_overlay, vp_size, Vector2(1020.0, 560.0))
+		_center_overlay(analytics_overlay, vp_size, Vector2(1040.0, 570.0))
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(safe_x + 12.0, top_h + 8.0)
@@ -2263,6 +2559,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	_center_overlay(end_overlay, vp_size, Vector2(820.0, 480.0))
 	_center_overlay(start_menu_overlay, vp_size, Vector2(1160.0, 780.0))
 	_center_overlay(recipes_overlay, vp_size, Vector2(1140.0, 760.0))
+	_center_overlay(analytics_overlay, vp_size, Vector2(1140.0, 820.0))
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 	if sandbox_panel != null:
 		sandbox_panel.position = Vector2(16.0, safe_top + p_top_h + 8.0)
@@ -2421,6 +2718,8 @@ func _on_mission_reset() -> void:
 	pause_overlay.visible = false
 	if recipes_overlay != null:
 		recipes_overlay.visible = false
+	if analytics_overlay != null:
+		analytics_overlay.visible = false
 	if enemy_inspector_panel != null:
 		enemy_inspector_panel.visible = false
 	get_tree().paused = false
