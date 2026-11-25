@@ -8,6 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
+const BALANCE_VERSION: String = "v1.2-cloud-telemetry"
 const VIEWPORT_WIDTH: int = 1280
 const VIEWPORT_HEIGHT: int = 720
 const TARGET_PATH_LENGTH_PX: float = 1891.0

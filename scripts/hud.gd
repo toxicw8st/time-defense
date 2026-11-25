@@ -1141,6 +1141,8 @@ func open_recipes_overlay() -> void:
 		return
 	if analytics_overlay != null:
 		analytics_overlay.visible = false
+	if AnalyticsManager != null:
+		AnalyticsManager.record_feature_used("recipes_opened")
 	_populate_recipes_list()
 	recipes_overlay.visible = true
 	_reapply_overlay_bounds()
@@ -1191,10 +1193,11 @@ func _refresh_analytics_overlay() -> void:
 	var s: Dictionary = AnalyticsManager.compute_aggregate_summary(inc_sb)
 	if analytics_kpi_label != null:
 		var pu: Dictionary = s["powers_used"]
-		analytics_kpi_label.text = "Runs: %d (W:%d L:%d Aband:%d | SB excl:%d)  |  Win%%: %.1f%%  |  Avg Wave: %.1f (Best W%d)  |  Surges/Run: %.2f  |  Powers R:%d P:%d H:%d  |  Med Dmg/$: %.1f" % [
-			int(s["total_runs"]), int(s["wins"]), int(s["losses"]), int(s["abandoned"]), int(s["sandbox_runs_excluded"]),
-			float(s["win_rate_pct"]), float(s["avg_max_wave"]), int(s["best_wave"]), float(s["avg_surges_per_run"]),
-			int(pu["rewind"]), int(pu["pause"]), int(pu["haste"]), float(s["median_dmg_per_dollar"]),
+		var uc: Dictionary = s["upgrade_counts"]
+		analytics_kpi_label.text = "Patch: %s  |  Runs: %d (W:%d L:%d)  |  Win%%: %.1f%%  |  Challenge: %.0f/100  |  KillPath: %.0f%% (Boss %.0f%%)  |  AvgSpd: %.2fx  |  Upg D:%d/R:%d/S:%d  |  Cloud: %s" % [
+			str(s["balance_version"]), int(s["total_runs"]), int(s["wins"]), int(s["losses"]),
+			float(s["win_rate_pct"]), float(s["avg_challenge_score"]), float(s["avg_kill_progress_pct"]), float(s["avg_boss_progress_pct"]),
+			float(s["avg_game_speed"]), int(uc["damage"]), int(uc["range"]), int(uc["fire_rate"]), AnalyticsManager.cloud_sync_status,
 		]
 	if analytics_recs_label != null:
 		var rlines: PackedStringArray = []
@@ -1206,11 +1209,11 @@ func _refresh_analytics_overlay() -> void:
 		var wh: Array = s["wave_hotspots"]
 		var lim_w: int = mini(7, wh.size())
 		if lim_w == 0:
-			wlines.append("No wave telemetry recorded yet — clear or play a wave to populate leak & cash data.")
+			wlines.append("No wave telemetry recorded yet — clear or play a wave to populate path penetration, leak & cash data.")
 		for i in range(lim_w):
 			var h: Dictionary = wh[i]
-			wlines.append("Wave %d  |  Plays: %d  |  Lives Lost: %d (%.0f%% leak rate)  |  Avg Cash End: $%.0f  |  Top Culprit: %s" % [
-				int(h["wave"]), int(h["plays"]), int(h["leaks_total"]), float(h["leak_rate_pct"]), float(h["avg_money_end"]),
+			wlines.append("Wave %d  |  Plays: %d  |  Leaks: %d (%.0f%%)  |  Max Path: %.0f%%  |  Avg Cash End: $%.0f  |  Culprit: %s" % [
+				int(h["wave"]), int(h["plays"]), int(h["leaks_total"]), float(h["leak_rate_pct"]), float(h["avg_max_pen_pct"]), float(h["avg_money_end"]),
 				str(h["top_leaker"]) if str(h["top_leaker"]) != "" else "None",
 			])
 		analytics_waves_label.text = "\n".join(wlines)
@@ -2273,6 +2276,8 @@ func _refresh_sandbox_ui() -> void:
 
 func _on_enemy_inspected(enemy: EnemyUnit) -> void:
 	_inspected_enemy = enemy
+	if enemy != null and AnalyticsManager != null:
+		AnalyticsManager.record_feature_used("enemies_inspected")
 	_refresh_enemy_inspector()
 
 
@@ -2336,6 +2341,8 @@ func _toggle_debug_panel() -> void:
 func _on_cycle_target_mode_pressed() -> void:
 	if _selected_tower != null and is_instance_valid(_selected_tower):
 		var new_mode: String = _selected_tower.cycle_target_mode()
+		if AnalyticsManager != null:
+			AnalyticsManager.record_feature_used("target_mode_changes")
 		var tlabel: String = str(Balance.TARGETING_LABELS.get(new_mode, "First"))
 		GameState.event_logged.emit("%s (P%d) target -> %s" % [
 			Balance.TOWERS[_selected_tower.tower_type]["name"],

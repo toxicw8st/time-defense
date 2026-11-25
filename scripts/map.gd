@@ -1013,7 +1013,7 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	cancel_combine_partner_pick()
 	target_tower.transform_to_combo(combo_key, cost, target_tower.levels.duplicate(), b_time)
 	if AnalyticsManager != null:
-		AnalyticsManager.record_tower_combine(prev_type_a, shop_type, combo_key, cost, target_tower.total_spent)
+		AnalyticsManager.record_tower_combine(prev_type_a, shop_type, combo_key, cost, target_tower.total_spent, "drag_shop")
 	select_tower_unit(target_tower)
 	if SfxManager != null:
 		SfxManager.play("combine")
@@ -1055,7 +1055,7 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 	cancel_combine_partner_pick()
 	tower_a.transform_to_combo(combo_key, added_spent, merged_levels, b_time)
 	if AnalyticsManager != null:
-		AnalyticsManager.record_tower_combine(prev_a, prev_b, combo_key, surcharge, tower_a.total_spent)
+		AnalyticsManager.record_tower_combine(prev_a, prev_b, combo_key, surcharge, tower_a.total_spent, "two_tower")
 	select_tower_unit(tower_a)
 	if SfxManager != null:
 		SfxManager.play("combine")
@@ -1251,6 +1251,8 @@ func _on_unit_leaked(enemy: EnemyUnit) -> void:
 
 
 func _on_unit_died(enemy: EnemyUnit) -> void:
+	if AnalyticsManager != null:
+		AnalyticsManager.record_enemy_progress(enemy.enemy_type, enemy.get_path_progress_pct(), false)
 	var is_replay: bool = GameState.mission.replay_count_this_wave > 0
 	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position, is_replay)
 

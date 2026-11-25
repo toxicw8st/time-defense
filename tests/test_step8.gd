@@ -1200,6 +1200,17 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 			break
 	assert(c1.is_dead_or_leaked, "Pulse-Plasma Carbine should eliminate test crawler")
 
+	# Track boss penetration & player behavior telemetry (targeting switch, recipes opened, speed sampling)
+	var j_pen: EnemyUnit = map.spawn_enemy("juggernaut", 10)
+	j_pen.advance_along_path(12.0)
+	AnalyticsManager.record_enemy_progress("juggernaut", j_pen.get_path_progress_pct(), false)
+	map.clear_all_enemies()
+	AnalyticsManager._process(0.5)
+	map.select_tower_unit(merged)
+	hud._on_cycle_target_mode_pressed()
+	hud.open_recipes_overlay()
+	hud.recipes_overlay.visible = false
+
 	GameState.lose_lives(1, "crawler", Vector2.ZERO)
 	assert(tp.activate_power("pause"))
 	assert(econ.start_build_refinery())
@@ -1208,9 +1219,22 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 	GameState.end_mission("won", "Analytics test victory")
 
 	var summary: Dictionary = AnalyticsManager.compute_aggregate_summary(false)
+	assert(str(summary["balance_version"]) == Balance.BALANCE_VERSION, "Analytics must stamp Balance.BALANCE_VERSION")
 	assert(int(summary["total_runs"]) == 1 and int(summary["wins"]) == 1, "Analytics must record 1 completed winning run (got %s)" % str(summary["total_runs"]))
+	assert(float(summary["avg_kill_progress_pct"]) > 0.0, "Analytics must record enemy kill path penetration %%")
+	assert(float(summary["avg_boss_progress_pct"]) > 0.0, "Analytics must record boss path penetration %%")
+	assert(float(summary["avg_challenge_score"]) > 0.0, "Analytics must compute positive Challenge Score")
+	assert(int(summary["upgrade_counts"]["damage"]) >= 1, "Analytics must track Damage upgrade habit")
+	assert(int(summary["combine_methods"]["drag_shop"]) >= 1, "Analytics must track combine method")
+	assert(not summary["zone_builds"].is_empty(), "Analytics must record placement zone heatmap")
 	assert(int(summary["powers_used"]["pause"]) >= 1, "Analytics must record Pause cast")
 	assert(int(summary["enemy_leaks"].get("crawler", 0)) == 1, "Analytics must record crawler leak")
+
+	# Verify Supabase upsert row schema & private scratch-key cleanup
+	var sb_row: Dictionary = AnalyticsManager.build_supabase_row(AnalyticsManager.runs[0])
+	assert(str(sb_row["balance_version"]) == Balance.BALANCE_VERSION and int(sb_row["challenge_score"]) > 0)
+	assert(float(sb_row["max_enemy_progress_pct"]) >= 99.0 and float(sb_row["max_boss_progress_pct"]) > 0.0)
+	assert(not sb_row["payload"].has("_speed_weighted_sum"), "Exported Supabase payload must strip internal scratch counters")
 	var found_combo: bool = false
 	for tb in summary["tower_board"]:
 		if str(tb["type"]) == "blaster+laser":

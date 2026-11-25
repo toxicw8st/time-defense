@@ -3,233 +3,81 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TimeDefense — Playtest Analytics &amp; Real-Data Balance Dashboard</title>
+  <title>TimeDefense — Cloud Playtest Analytics &amp; Balance Feedback Loop</title>
   <style>
     :root {
-      --bg: #0b0f17;
-      --panel: #111824;
-      --card: #141d2b;
-      --chip: #192436;
-      --border: #2b3e5c;
-      --border-bright: #4986c7;
-      --text: #e6effa;
-      --muted: #93a8c7;
-      --cyan: #5ae8ff;
-      --blue: #4fa3ff;
-      --green: #5ce69a;
-      --purple: #b873ff;
-      --gold: #ffcf56;
-      --orange: #ff9c54;
-      --red: #ff6363;
+      --bg: #0b0f17; --panel: #111824; --card: #141d2b; --chip: #192436;
+      --border: #2b3e5c; --border-bright: #4986c7; --text: #e6effa; --muted: #93a8c7;
+      --cyan: #5ae8ff; --blue: #4fa3ff; --green: #5ce69a; --purple: #b873ff;
+      --gold: #ffcf56; --orange: #ff9c54; --red: #ff6363;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: radial-gradient(circle at top right, #162236 0%, var(--bg) 55%);
-      color: var(--text);
-      line-height: 1.45;
-    }
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      background: rgba(13, 18, 28, 0.95);
-      border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(8px);
-      padding: 18px 22px 14px;
-    }
+    body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: radial-gradient(circle at top right, #162236 0%, var(--bg) 55%); color: var(--text); line-height: 1.45; }
+    header { position: sticky; top: 0; z-index: 30; background: rgba(13, 18, 28, 0.95); border-bottom: 1px solid var(--border); backdrop-filter: blur(8px); padding: 16px 22px 12px; }
     .container { max-width: 1380px; margin: 0 auto; }
-    .hdr-top {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    h1 { margin: 0; font-size: 22px; color: var(--cyan); letter-spacing: 0.4px; }
+    .hdr-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+    h1 { margin: 0; font-size: 21px; color: var(--cyan); letter-spacing: 0.4px; }
     .nav-links { display: flex; flex-wrap: wrap; gap: 8px; }
-    .btn {
-      background: var(--chip);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 12px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
-    }
+    .btn { background: var(--chip); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease; }
     .btn:hover { border-color: var(--cyan); background: #1c2c44; }
     .btn.primary { background: #19567d; border-color: var(--cyan); color: #fff; }
     .btn.green { background: #164e38; border-color: var(--green); color: #eafff3; }
     .btn.gold { background: #4a3a14; border-color: var(--gold); color: #fff4cf; }
     .btn.danger { background: #471c22; border-color: var(--red); color: #ffd9d9; }
-    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-    main { padding: 20px 22px 60px; }
-    section { margin-bottom: 22px; }
-    h2 { margin: 0 0 10px; font-size: 16px; color: #a9d6ff; display: flex; align-items: center; gap: 8px; }
-    .toolbar {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 14px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; }
+    main { padding: 18px 22px 60px; }
+    section { margin-bottom: 20px; }
+    h2 { margin: 0 0 10px; font-size: 15.5px; color: #a9d6ff; display: flex; align-items: center; gap: 8px; }
+    .toolbar { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
     .toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    select, input[type="file"] {
-      background: #0d131d;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 6px 10px;
-      font-size: 12px;
-    }
-    label.chk {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-      cursor: pointer;
-    }
-    .status-toast {
-      margin-top: 8px;
-      font-size: 12px;
-      color: var(--green);
-      min-height: 18px;
-    }
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
-      gap: 10px;
-    }
-    .kpi-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 14px;
-    }
-    .kpi-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-    .kpi-val { font-size: 22px; font-weight: 800; color: #fff; margin-top: 3px; }
-    .kpi-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
-    }
-    .two-col {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-      gap: 14px;
-    }
-    @media (max-width: 540px) {
-      .two-col { grid-template-columns: 1fr; }
-    }
+    select, input[type="file"] { background: #0d131d; color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 12px; }
+    label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .status-toast { margin-top: 8px; font-size: 12px; color: var(--green); min-height: 18px; }
+    .cloud-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: #101929; color: var(--cyan); }
+    .cloud-pill.ok { border-color: var(--green); color: var(--green); }
+    .cloud-pill.warn { border-color: var(--gold); color: var(--gold); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; }
+    .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+    .kpi-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+    .kpi-val { font-size: 21px; font-weight: 800; color: #fff; margin-top: 2px; }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; }
+    @media (max-width: 540px) { .two-col { grid-template-columns: 1fr; } }
     .diag-list { display: flex; flex-direction: column; gap: 7px; }
-    .diag-item {
-      border-radius: 8px;
-      padding: 9px 12px;
-      font-size: 12.5px;
-      border: 1px solid var(--border);
-      background: #101723;
-    }
+    .diag-item { border-radius: 8px; padding: 9px 12px; font-size: 12.5px; border: 1px solid var(--border); background: #101723; }
     .diag-item.warn { border-color: rgba(255, 156, 84, 0.55); background: rgba(255, 156, 84, 0.08); color: #ffd9ba; }
     .diag-item.danger { border-color: rgba(255, 99, 99, 0.55); background: rgba(255, 99, 99, 0.09); color: #ffd4d4; }
     .diag-item.good { border-color: rgba(92, 230, 154, 0.50); background: rgba(92, 230, 154, 0.08); color: #cfffe4; }
     .diag-item.info { border-color: rgba(90, 232, 255, 0.45); background: rgba(90, 232, 255, 0.07); color: #d6f7ff; }
     .chart-wrap { width: 100%; overflow-x: auto; }
-    svg.chart { width: 100%; min-width: 420px; height: 240px; display: block; }
-    table.data-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    table.data-table th, table.data-table td {
-      border-bottom: 1px solid #223047;
-      padding: 7px 8px;
-      text-align: left;
-    }
-    table.data-table th {
-      background: #162235;
-      color: #cfe6ff;
-      font-weight: 700;
-      cursor: pointer;
-      user-select: none;
-    }
+    svg.chart { width: 100%; min-width: 420px; height: 235px; display: block; }
+    table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.data-table th, table.data-table td { border-bottom: 1px solid #223047; padding: 7px 8px; text-align: left; }
+    table.data-table th { background: #162235; color: #cfe6ff; font-weight: 700; cursor: pointer; user-select: none; }
     table.data-table tr:hover td { background: rgba(79, 163, 255, 0.07); }
     .num { text-align: right !important; font-variant-numeric: tabular-nums; }
-    .badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 999px;
-      font-size: 10.5px;
-      font-weight: 700;
-      border: 1px solid transparent;
-    }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid transparent; }
     .b-win { background: rgba(92,230,154,0.16); color: var(--green); border-color: rgba(92,230,154,0.45); }
     .b-loss { background: rgba(255,99,99,0.16); color: var(--red); border-color: rgba(255,99,99,0.45); }
     .b-other { background: rgba(255,207,86,0.16); color: var(--gold); border-color: rgba(255,207,86,0.45); }
     .b-combo { background: rgba(184,115,255,0.16); color: #d8adff; border-color: rgba(184,115,255,0.45); }
     .b-op { background: rgba(255,207,86,0.18); color: var(--gold); border-color: rgba(255,207,86,0.5); }
     .b-weak { background: rgba(255,99,99,0.16); color: #ff9c9c; border-color: rgba(255,99,99,0.45); }
+    .bar-row { margin: 7px 0; }
+    .bar-meta { display: flex; justify-content: space-between; font-size: 12px; }
+    .bar-track { height: 10px; background: #0e1522; border-radius: 5px; overflow: hidden; margin-top: 3px; }
+    .bar-fill { height: 100%; border-radius: 5px; }
     .unused-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .unused-pill {
-      background: #0f1622;
-      border: 1px dashed #364c70;
-      color: var(--muted);
-      border-radius: 999px;
-      padding: 3px 9px;
-      font-size: 11px;
-    }
-    .run-detail-box {
-      margin-top: 12px;
-      background: #0d131d;
-      border: 1px solid var(--border-bright);
-      border-radius: 9px;
-      padding: 12px 14px;
-    }
-    .timeline-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    .ev-chip {
-      background: #141e2e;
-      border: 1px solid #2b3e5c;
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 11px;
-      color: #d6e4f7;
-    }
+    .unused-pill { background: #0f1622; border: 1px dashed #364c70; color: var(--muted); border-radius: 999px; padding: 3px 9px; font-size: 11px; }
+    .run-detail-box { margin-top: 12px; background: #0d131d; border: 1px solid var(--border-bright); border-radius: 9px; padding: 12px 14px; }
+    .timeline-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+    .ev-chip { background: #141e2e; border: 1px solid #2b3e5c; border-radius: 6px; padding: 4px 8px; font-size: 11px; color: #d6e4f7; }
     .ev-chip.ev-leak { border-color: var(--red); color: #ffc6c6; }
     .ev-chip.ev-combine { border-color: var(--gold); color: #ffefba; }
     .ev-chip.ev-power { border-color: var(--cyan); color: #c7f6ff; }
     .ev-chip.ev-hive { border-color: var(--purple); color: #e8ccff; }
-    textarea.paste-box {
-      width: 100%;
-      min-height: 90px;
-      background: #0b1019;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px;
-      font-family: ui-monospace, Consolas, monospace;
-      font-size: 11.5px;
-      margin-top: 8px;
-    }
+    textarea.paste-box { width: 100%; min-height: 90px; background: #0b1019; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; margin-top: 8px; }
     .import-drawer { display: none; margin-top: 10px; }
     .import-drawer.open { display: block; }
   </style>
@@ -239,100 +87,116 @@
     <div class="container">
       <div class="hdr-top">
         <div>
-          <h1>TIME DEFENSE — PLAYTEST ANALYTICS &amp; BALANCE DASHBOARD</h1>
-          <p class="subtitle">Auto-syncs with your live browser runs (<code>localStorage</code>) and accepts JSON exports from Android APK or Desktop so we can tune towers, waves, and economy from real play data.</p>
+          <h1>TIME DEFENSE — CLOUD PLAYTEST ANALYTICS &amp; FEEDBACK LOOP</h1>
+          <p class="subtitle">Live-synced with your Supabase <code>public.timedefense_runs</code> table + browser <code>localStorage</code>. Tracks path penetration %, tower efficiency, player habits, and patch-over-patch difficulty across Web, Android APK &amp; Desktop.</p>
         </div>
         <div class="nav-links">
+          <span class="cloud-pill" id="cloud-pill">Supabase: Connecting...</span>
           <a class="btn primary" href="./index.html">&larr; Play TimeDefense</a>
-          <a class="btn" href="./tower-combinations.html">21 Tower Combinations</a>
+          <a class="btn" href="./tower-combinations.html">21 Tower Combos</a>
         </div>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <!-- Controls & Import/Export Toolbar -->
+    <!-- Controls -->
     <section>
       <div class="toolbar">
         <div class="toolbar-group">
-          <label class="chk"><input type="checkbox" id="chk-exclude-sandbox" checked /> Exclude Sandbox Runs</label>
+          <label class="chk"><input type="checkbox" id="chk-exclude-sandbox" checked /> Exclude Sandbox</label>
+          <select id="sel-version"><option value="all">All Patch Versions</option></select>
           <select id="sel-level">
             <option value="all">All Levels (1-5)</option>
-            <option value="1">Level 1</option>
-            <option value="2">Level 2</option>
-            <option value="3">Level 3</option>
-            <option value="4">Level 4</option>
-            <option value="5">Level 5</option>
+            <option value="1">Level 1</option><option value="2">Level 2</option>
+            <option value="3">Level 3</option><option value="4">Level 4</option><option value="5">Level 5</option>
           </select>
           <select id="sel-diff">
             <option value="all">All Difficulties</option>
-            <option value="standard">Standard</option>
-            <option value="hard">Hard</option>
-            <option value="nightmare">Chrono Nightmare</option>
+            <option value="standard">Standard</option><option value="hard">Hard</option><option value="nightmare">Chrono Nightmare</option>
           </select>
-          <button class="btn" id="btn-refresh">Sync Local Runs</button>
-          <button class="btn" id="btn-toggle-import">Import / Paste JSON</button>
-          <button class="btn gold" id="btn-load-sample">Load Sample Data</button>
+          <button class="btn primary" id="btn-sync-cloud">Sync Supabase + Local</button>
+          <button class="btn" id="btn-toggle-import">Import JSON</button>
+          <button class="btn gold" id="btn-load-sample">Preview Sample</button>
         </div>
         <div class="toolbar-group">
-          <button class="btn green" id="btn-copy-ai">Copy AI Balance Prompt</button>
+          <button class="btn green" id="btn-copy-ai">Copy AI Balance Brief</button>
           <button class="btn" id="btn-download-json">Download .JSON</button>
-          <button class="btn danger" id="btn-clear-local">Clear Saved Runs</button>
+          <button class="btn danger" id="btn-clear-local">Clear Local Cache</button>
         </div>
       </div>
 
       <div class="panel import-drawer" id="import-drawer">
-        <strong>Import JSON from Android APK, Desktop, or Clipboard:</strong>
+        <strong>Import JSON Export (or upload unsynced runs directly into Supabase):</strong>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
           <input type="file" id="file-import" accept=".json,application/json" />
           <button class="btn primary" id="btn-apply-paste">Load Pasted JSON</button>
-          <button class="btn" id="btn-merge-paste">Merge into Local Runs</button>
+          <button class="btn green" id="btn-push-local-cloud">Push Local Runs to Supabase</button>
         </div>
         <textarea class="paste-box" id="paste-json" placeholder="Paste raw JSON copied from TimeDefense -> Analytics -> Copy Raw JSON..."></textarea>
       </div>
       <div class="status-toast" id="status-toast"></div>
     </section>
 
-    <!-- KPI Strip -->
+    <!-- KPIs -->
+    <section><div class="kpi-grid" id="kpi-grid"></div></section>
+
+    <!-- Diagnostics -->
     <section>
-      <div class="kpi-grid" id="kpi-grid"></div>
+      <h2>1. Automated Balance Diagnostics (Where to Make the Game Harder / Better)</h2>
+      <div class="panel"><div class="diag-list" id="diag-list"></div></div>
     </section>
 
-    <!-- Automated Balance Diagnostics -->
+    <!-- Patch Comparison -->
     <section>
-      <h2>1. Automated Balance Flags (What Needs Tuning)</h2>
-      <div class="panel">
-        <div class="diag-list" id="diag-list"></div>
+      <h2>2. Patch Version Comparison (Before vs After Each Balance Update)</h2>
+      <div class="panel" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Balance Version</th>
+              <th class="num">Runs</th>
+              <th class="num">Win %</th>
+              <th class="num">Avg Challenge (0-100)</th>
+              <th class="num">Avg Kill Path %</th>
+              <th class="num">Avg Boss Peak %</th>
+              <th class="num">Avg Max Wave</th>
+              <th class="num">Avg Speed</th>
+            </tr>
+          </thead>
+          <tbody id="patch-tbody"></tbody>
+        </table>
       </div>
     </section>
 
-    <!-- Visual Charts -->
+    <!-- Charts -->
     <section class="two-col">
       <div class="panel">
-        <h2>2. Wave Leak Hotspots &amp; Avg Cash Left</h2>
+        <h2>3. Wave Path Penetration %, Leaks &amp; Cash Left</h2>
         <div class="chart-wrap" id="wave-chart-wrap"></div>
       </div>
       <div class="panel">
-        <h2>3. Tower Efficiency (Dmg / $) vs Median</h2>
+        <h2>4. Tower Efficiency (Dmg / $) vs Median</h2>
         <div class="chart-wrap" id="tower-chart-wrap"></div>
       </div>
     </section>
 
-    <!-- Enemy Culprits & Time Power Usage -->
+    <!-- Player Behavior & Enemy Culprits -->
     <section class="two-col">
       <div class="panel">
-        <h2>4. Lives Lost by Enemy Type</h2>
-        <div id="enemy-leaks-wrap"></div>
+        <h2>5. Player Behavior: Zone Heatmap, Upgrades, Combines &amp; Speed</h2>
+        <div id="behavior-wrap"></div>
       </div>
       <div class="panel">
-        <h2>5. Level &amp; Difficulty Breakdown + Time Powers</h2>
-        <div id="level-power-wrap"></div>
+        <h2>6. Lives Lost by Enemy Type &amp; Level Breakdown</h2>
+        <div id="enemy-leaks-wrap"></div>
+        <div id="level-power-wrap" style="margin-top:12px;"></div>
       </div>
     </section>
 
-    <!-- Tower & 21-Combo Performance Table -->
+    <!-- Tower Ledger -->
     <section>
-      <h2>6. Tower &amp; 21-Combination Performance Ledger</h2>
+      <h2>7. Tower &amp; 21-Combination Performance Ledger</h2>
       <div class="panel" style="overflow-x:auto;">
         <table class="data-table" id="tower-table">
           <thead>
@@ -358,24 +222,24 @@
       </div>
     </section>
 
-    <!-- Run History & Build Order Timeline Inspector -->
+    <!-- Runs & Build-Order Inspector -->
     <section>
-      <h2>7. Run History &amp; Build-Order Inspector (Click Any Run)</h2>
+      <h2>8. Run History &amp; Build-Order Timeline Inspector (Click Any Run)</h2>
       <div class="panel" style="overflow-x:auto;">
         <table class="data-table" id="runs-table">
           <thead>
             <tr>
               <th>Date (UTC)</th>
+              <th>Patch</th>
               <th>Sector</th>
-              <th>Difficulty</th>
+              <th>Diff</th>
               <th>Outcome</th>
-              <th class="num">Max Wave</th>
+              <th class="num">Wave</th>
+              <th class="num">Score</th>
+              <th class="num">Kill Path%</th>
+              <th class="num">Boss Peak%</th>
               <th class="num">Lives</th>
-              <th class="num">Hive HP</th>
-              <th class="num">Shots</th>
-              <th class="num">Surges</th>
               <th class="num">Cash End</th>
-              <th>Leaks</th>
             </tr>
           </thead>
           <tbody id="runs-tbody"></tbody>
@@ -387,6 +251,8 @@
 
   <script>
     const STORAGE_KEY = "timedefense_analytics_v1";
+    const SUPABASE_URL = "https://ojtcgdsryjylpryevurl.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qdGNnZHNyeWp5bHByeWV2dXJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDEzOTUsImV4cCI6MjEwNDMxNzM5NX0.WCTmrNwn3P2j-NemAk4Vu6ZTzVYcMIglqde5UjR3gjI";
     const ALL_COMBOS = [
       ["blaster+blaster", "Twin-Linked Vulcan"], ["mortar+mortar", "MIRV Siege Howitzer"],
       ["laser+laser", "Prismatic Obelisk"], ["slow+slow", "Stasis Singularity"],
@@ -401,7 +267,7 @@
       ["railgun+annihilator", "Omega Gauss-Rail"]
     ];
 
-    let rawDataset = { schema_version: 1, runs: [] };
+    let rawDataset = { schema_version: 2, runs: [] };
     let isSampleMode = false;
     let towerSortKey = "damage";
     let towerSortDesc = true;
@@ -409,118 +275,199 @@
 
     function setToast(msg, isErr) {
       const el = document.getElementById("status-toast");
+      if (!el) return;
       el.textContent = msg;
       el.style.color = isErr ? "#ff8585" : "#5ce69a";
     }
-
+    function setCloudPill(msg, cls) {
+      const el = document.getElementById("cloud-pill");
+      if (!el) return;
+      el.textContent = msg;
+      el.className = "cloud-pill " + (cls || "");
+    }
     function esc(s) {
       return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     }
 
-    function loadFromLocalStorage() {
-      isSampleMode = false;
+    function readLocalRuns() {
       try {
         const txt = window.localStorage.getItem(STORAGE_KEY);
         if (txt) {
           const parsed = JSON.parse(txt);
-          if (parsed && Array.isArray(parsed.runs)) {
-            rawDataset = parsed;
-            setToast("Loaded " + rawDataset.runs.length + " run(s) from browser localStorage.");
-            renderAll();
-            return true;
+          if (parsed && Array.isArray(parsed.runs)) return parsed.runs;
+        }
+      } catch (e) {}
+      return [];
+    }
+
+    function normalizeSupabaseRow(row) {
+      const p = (row && row.payload && typeof row.payload === "object") ? { ...row.payload } : {};
+      return {
+        ...p,
+        run_id: row.run_id || p.run_id,
+        balance_version: row.balance_version || p.balance_version || "v1.2-cloud-telemetry",
+        player_id: row.player_id || p.player_id || "anon",
+        platform: row.platform || p.platform || "web",
+        started_at: row.started_at || p.started_at || "",
+        ended_at: row.ended_at || p.ended_at || "",
+        level: Number(row.level ?? p.level ?? 1),
+        level_name: row.level_name || p.level_name || ("Level " + (row.level || 1)),
+        difficulty: row.difficulty || p.difficulty || "standard",
+        is_sandbox: Boolean(row.is_sandbox ?? p.is_sandbox ?? false),
+        outcome: row.outcome || p.outcome || "in_progress",
+        end_reason: row.end_reason || p.end_reason || "",
+        max_wave_reached: Number(row.max_wave_reached ?? p.max_wave_reached ?? 1),
+        waves_completed: Number(row.waves_completed ?? p.waves_completed ?? 0),
+        duration_sim_sec: Number(row.duration_sim_sec ?? p.duration_sim_sec ?? 0),
+        build_phase_sec: Number(row.build_phase_sec ?? p.build_phase_sec ?? 0),
+        lives_remaining: Number(row.lives_remaining ?? p.lives_remaining ?? 0),
+        lives_lost_total: Number(row.lives_lost_total ?? p.lives_lost_total ?? 0),
+        enemy_base_hp_remaining: Number(row.enemy_base_hp_remaining ?? p.enemy_base_hp_remaining ?? 0),
+        charges_fired: Number(row.charges_fired ?? p.charges_fired ?? 0),
+        surges_suffered: Number(row.surges_suffered ?? p.surges_suffered ?? 0),
+        refineries_owned: Number(row.refineries_owned ?? p.refineries_owned ?? 0),
+        manipulator_level: Number(row.manipulator_level ?? p.manipulator_level ?? 1),
+        early_calls: Number(row.early_calls ?? p.early_calls ?? 0),
+        money_unspent_end: Number(row.money_unspent_end ?? p.money_unspent_end ?? 0),
+        avg_unspent_cash: Number(row.avg_unspent_cash ?? p.avg_unspent_cash ?? 0),
+        max_enemy_progress_pct: Number(row.max_enemy_progress_pct ?? p.max_enemy_progress_pct ?? 0),
+        avg_kill_progress_pct: Number(row.avg_kill_progress_pct ?? p.avg_kill_progress_pct ?? 0),
+        max_boss_progress_pct: Number(row.max_boss_progress_pct ?? p.max_boss_progress_pct ?? 0),
+        challenge_score: Number(row.challenge_score ?? p.challenge_score ?? 0),
+        avg_game_speed: Number(row.avg_game_speed ?? p.avg_game_speed ?? 1.0)
+      };
+    }
+
+    async function syncSupabaseAndLocal() {
+      isSampleMode = false;
+      const localRuns = readLocalRuns();
+      const merged = new Map(localRuns.map(r => [r.run_id, r]));
+      let cloudCount = 0;
+      try {
+        setCloudPill("Supabase: Syncing...", "");
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/timedefense_runs?select=*&order=started_at.desc&limit=200`, {
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          cloudCount = rows.length;
+          for (const row of rows) {
+            const norm = normalizeSupabaseRow(row);
+            merged.set(norm.run_id, norm);
           }
+          setCloudPill(`Supabase Live (${cloudCount} cloud runs)`, "ok");
+          setToast(`Synced ${cloudCount} cloud run(s) from Supabase + ${localRuns.length} local run(s) (${merged.size} unique).`);
+        } else if (res.status === 404) {
+          setCloudPill("Supabase: Run timedefense_analytics.sql", "warn");
+          setToast(`Showing ${localRuns.length} local run(s). Run supabase/timedefense_analytics.sql in Supabase SQL Editor to enable live cloud sync!`, true);
+        } else {
+          setCloudPill(`Supabase HTTP ${res.status}`, "warn");
+          setToast(`Supabase returned HTTP ${res.status}; showing ${localRuns.length} local run(s).`, true);
         }
       } catch (e) {
-        setToast("Could not parse localStorage analytics: " + e.message, true);
+        setCloudPill("Supabase: Offline (Local Only)", "warn");
+        setToast(`Offline mode — showing ${localRuns.length} local browser run(s).`);
       }
-      rawDataset = { schema_version: 1, runs: [] };
-      setToast("No saved browser runs yet — play a wave in TimeDefense or click 'Load Sample Data' to preview.");
+      rawDataset = { schema_version: 2, runs: Array.from(merged.values()) };
+      populateVersionFilter();
       renderAll();
-      return false;
     }
 
     function buildSampleDataset() {
       return {
-        schema_version: 1,
-        game: "TimeDefense",
-        exported_at: new Date().toISOString(),
+        schema_version: 2, game: "TimeDefense", exported_at: new Date().toISOString(),
         runs: [
           {
-            run_id: "sample_1", started_at: "2026-11-24T18:10:00Z", platform: "web",
+            run_id: "sample_v12_1", balance_version: "v1.2-cloud-telemetry", started_at: "2026-11-24T18:10:00Z", platform: "web",
             level: 1, level_name: "Level 1: Sector Rows", difficulty: "standard", is_sandbox: false,
-            outcome: "lost", end_reason: "Player base fell (0 lives remaining)", max_wave_reached: 10,
-            waves_started: 10, waves_completed: 9, duration_sim_sec: 1210, lives_remaining: 0, lives_lost_total: 20,
-            enemy_base_hp_remaining: 333, charges_fired: 1, surges_suffered: 1, refineries_owned: 1, manipulator_level: 1,
-            early_calls: 2, money_earned: 2420, money_unspent_end: 365, research_earned: 38,
-            powers_used: { rewind: 0, pause: 3, haste: 0 },
-            kills_by_enemy: { crawler: 185, rusher: 74, brute: 28, blitzer: 10, juggernaut: 0 },
-            leaks_by_enemy: { blitzer: 4, juggernaut: 16 },
+            outcome: "won", end_reason: "Enemy Base destroyed by Hive Destroyer!", max_wave_reached: 15,
+            waves_started: 15, waves_completed: 14, duration_sim_sec: 1890, build_phase_sec: 94,
+            lives_remaining: 20, lives_lost_total: 0, enemy_base_hp_remaining: 0, charges_fired: 3, surges_suffered: 0,
+            refineries_owned: 2, manipulator_level: 2, early_calls: 6, money_earned: 5600, money_unspent_end: 510, avg_unspent_cash: 380,
+            max_enemy_progress_pct: 48.2, avg_kill_progress_pct: 29.4, max_boss_progress_pct: 46.5, challenge_score: 21, avg_game_speed: 2.72,
+            zone_builds: { "ROW 1 (TOP)": 5, "ROW 2 (UPPER)": 4, "ROW 3 (LOWER)": 1 },
+            upgrade_counts: { damage: 11, range: 2, fire_rate: 7 },
+            combine_methods: { drag_shop: 3, two_tower: 1 },
+            speed_time_sec: { "1x": 110, "2x": 220, "3x": 640 },
+            feature_usage: { target_mode_changes: 4, recipes_opened: 1, enemies_inspected: 2 },
+            powers_used: { rewind: 0, pause: 4, haste: 2 },
+            kills_by_enemy: { crawler: 290, rusher: 145, brute: 62, blitzer: 28, juggernaut: 11 },
+            leaks_by_enemy: {},
             tower_stats: {
-              blaster: { name: "Blaster Turret", is_combo: false, built: 4, sold: 0, spent: 690, damage: 11200, kills: 110 },
-              laser: { name: "Laser Spire", is_combo: false, built: 2, sold: 0, spent: 350, damage: 4100, kills: 92 },
-              slow: { name: "Chrono Slow Tower", is_combo: false, built: 1, sold: 0, spent: 160, damage: 850, kills: 12 },
-              "blaster+laser": { name: "Pulse-Plasma Carbine", is_combo: true, built: 1, sold: 0, spent: 420, damage: 8900, kills: 83 }
+              blaster: { name: "Blaster Turret", is_combo: false, built: 4, sold: 1, spent: 560, damage: 10200, kills: 110 },
+              "blaster+blaster": { name: "Twin-Linked Vulcan Battery", is_combo: true, built: 2, sold: 0, spent: 890, damage: 31400, kills: 210 },
+              "annihilator+annihilator": { name: "Hyper-Velocity MAC Cannon", is_combo: true, built: 1, sold: 0, spent: 1120, damage: 41800, kills: 132 },
+              "slow+slow": { name: "Stasis Singularity Pylon", is_combo: true, built: 1, sold: 0, spent: 420, damage: 5900, kills: 84 }
             },
             wave_log: [
-              { wave: 1, money_end: 45, lives_lost: 0, duration_sec: 178, leaks_by_enemy: {} },
-              { wave: 5, money_end: 130, lives_lost: 0, duration_sec: 132, leaks_by_enemy: {} },
-              { wave: 8, money_end: 210, lives_lost: 4, duration_sec: 114, leaks_by_enemy: { blitzer: 4 } },
-              { wave: 9, money_end: 280, lives_lost: 0, duration_sec: 120, leaks_by_enemy: {} },
-              { wave: 10, money_end: 365, lives_lost: 16, duration_sec: 95, leaks_by_enemy: { juggernaut: 16 } }
+              { wave: 1, money_end: 35, lives_lost: 0, max_progress_pct: 31, avg_kill_progress_pct: 22, leaks_by_enemy: {} },
+              { wave: 5, money_end: 190, lives_lost: 0, max_progress_pct: 36, avg_kill_progress_pct: 26, leaks_by_enemy: {} },
+              { wave: 8, money_end: 295, lives_lost: 0, max_progress_pct: 42, avg_kill_progress_pct: 30, leaks_by_enemy: {} },
+              { wave: 10, money_end: 410, lives_lost: 0, max_progress_pct: 46.5, avg_kill_progress_pct: 32, leaks_by_enemy: {} },
+              { wave: 14, money_end: 510, lives_lost: 0, max_progress_pct: 48.2, avg_kill_progress_pct: 35, leaks_by_enemy: {} }
             ],
             events: [
-              { t: 0, w: 1, ev: "build", type: "blaster", cost: 90 },
-              { t: 2, w: 1, ev: "build", type: "laser", cost: 100 },
-              { t: 410, w: 4, ev: "combine", a: "blaster", b: "laser", result: "blaster+laser", cost: 165 },
-              { t: 740, w: 6, ev: "surge", count: 1 },
-              { t: 980, w: 8, ev: "power", name: "pause", lives: 16 },
-              { t: 1120, w: 10, ev: "leak", enemy: "juggernaut", lives_lost: 16, lives_left: 0 }
+              { t: 0, w: 1, ev: "build", type: "blaster", cost: 90, zone: "ROW 1 (TOP)" },
+              { t: 380, w: 4, ev: "combine", a: "blaster", b: "blaster", result: "blaster+blaster", cost: 155 },
+              { t: 1140, w: 10, ev: "hive_shot", dmg: 167, hp_left: 333 },
+              { t: 1850, w: 15, ev: "hive_shot", dmg: 167, hp_left: 0 }
             ]
           },
           {
-            run_id: "sample_2", started_at: "2026-11-24T19:05:00Z", platform: "web",
-            level: 1, level_name: "Level 1: Sector Rows", difficulty: "standard", is_sandbox: false,
-            outcome: "won", end_reason: "Enemy Base destroyed by Hive Destroyer!", max_wave_reached: 17,
-            waves_started: 17, waves_completed: 16, duration_sim_sec: 2190, lives_remaining: 14, lives_lost_total: 6,
-            enemy_base_hp_remaining: 0, charges_fired: 3, surges_suffered: 0, refineries_owned: 2, manipulator_level: 2,
-            early_calls: 4, money_earned: 6890, money_unspent_end: 240, research_earned: 60,
-            powers_used: { rewind: 1, pause: 5, haste: 2 },
-            kills_by_enemy: { crawler: 320, rusher: 165, brute: 72, blitzer: 34, juggernaut: 14, colossus: 1 },
-            leaks_by_enemy: { rusher: 2, blitzer: 4 },
+            run_id: "sample_v12_2", balance_version: "v1.2-cloud-telemetry", started_at: "2026-11-24T19:40:00Z", platform: "android",
+            level: 3, level_name: "Level 3: Archipelago Islands", difficulty: "hard", is_sandbox: false,
+            outcome: "lost", end_reason: "Player base fell (0 lives remaining)", max_wave_reached: 16,
+            waves_started: 16, waves_completed: 15, duration_sim_sec: 2040, build_phase_sec: 185,
+            lives_remaining: 0, lives_lost_total: 20, enemy_base_hp_remaining: 125, charges_fired: 3, surges_suffered: 1,
+            refineries_owned: 1, manipulator_level: 1, early_calls: 1, money_earned: 5120, money_unspent_end: 185, avg_unspent_cash: 175,
+            max_enemy_progress_pct: 100.0, avg_kill_progress_pct: 66.4, max_boss_progress_pct: 100.0, challenge_score: 91, avg_game_speed: 1.54,
+            zone_builds: { "ISLAND NW": 4, "ISLAND CENTER": 5, "ISLAND SE": 2 },
+            upgrade_counts: { damage: 9, range: 5, fire_rate: 6 },
+            combine_methods: { drag_shop: 2, two_tower: 2 },
+            speed_time_sec: { "1x": 520, "2x": 490, "3x": 120 },
+            feature_usage: { target_mode_changes: 7, recipes_opened: 2, enemies_inspected: 5 },
+            powers_used: { rewind: 1, pause: 4, haste: 1 },
+            kills_by_enemy: { crawler: 310, rusher: 158, brute: 68, blitzer: 31, juggernaut: 12, colossus: 0 },
+            leaks_by_enemy: { blitzer: 4, juggernaut: 6, colossus: 10 },
             tower_stats: {
-              blaster: { name: "Blaster Turret", is_combo: false, built: 3, sold: 1, spent: 480, damage: 9400, kills: 95 },
-              "blaster+blaster": { name: "Twin-Linked Vulcan Battery", is_combo: true, built: 2, sold: 0, spent: 920, damage: 29800, kills: 192 },
-              "laser+annihilator": { name: "Thermal Melter Rail-Spire", is_combo: true, built: 1, sold: 0, spent: 760, damage: 22400, kills: 98 },
-              "annihilator+annihilator": { name: "Hyper-Velocity MAC Cannon", is_combo: true, built: 1, sold: 0, spent: 1180, damage: 46500, kills: 142 },
-              "slow+slow": { name: "Stasis Singularity Pylon", is_combo: true, built: 1, sold: 0, spent: 410, damage: 6400, kills: 79 }
+              "blaster+laser": { name: "Pulse-Plasma Carbine", is_combo: true, built: 2, sold: 0, spent: 760, damage: 19400, kills: 195 },
+              "laser+annihilator": { name: "Thermal Melter Rail-Spire", is_combo: true, built: 1, sold: 0, spent: 820, damage: 24800, kills: 112 },
+              "mortar+slow": { name: "Cryo-Cluster Bombard", is_combo: true, built: 1, sold: 0, spent: 490, damage: 12100, kills: 145 },
+              "railgun+annihilator": { name: "Omega Singularity Gauss-Rail", is_combo: true, built: 1, sold: 0, spent: 1260, damage: 36500, kills: 127 }
             },
             wave_log: [
-              { wave: 1, money_end: 30, lives_lost: 0, duration_sec: 176, leaks_by_enemy: {} },
-              { wave: 8, money_end: 190, lives_lost: 2, duration_sec: 112, leaks_by_enemy: { blitzer: 2 } },
-              { wave: 10, money_end: 145, lives_lost: 0, duration_sec: 138, leaks_by_enemy: {} },
-              { wave: 14, money_end: 310, lives_lost: 2, duration_sec: 122, leaks_by_enemy: { rusher: 2 } },
-              { wave: 16, money_end: 240, lives_lost: 2, duration_sec: 148, leaks_by_enemy: { blitzer: 2 } }
+              { wave: 8, money_end: 140, lives_lost: 2, max_progress_pct: 100, avg_kill_progress_pct: 64, leaks_by_enemy: { blitzer: 2 } },
+              { wave: 10, money_end: 195, lives_lost: 6, max_progress_pct: 100, avg_kill_progress_pct: 71, leaks_by_enemy: { juggernaut: 6 } },
+              { wave: 14, money_end: 210, lives_lost: 2, max_progress_pct: 100, avg_kill_progress_pct: 69, leaks_by_enemy: { blitzer: 2 } },
+              { wave: 16, money_end: 185, lives_lost: 10, max_progress_pct: 100, avg_kill_progress_pct: 78, leaks_by_enemy: { colossus: 10 } }
             ],
             events: [
-              { t: 0, w: 1, ev: "build", type: "blaster", cost: 90 },
-              { t: 540, w: 5, ev: "combine", a: "blaster", b: "blaster", result: "blaster+blaster", cost: 155 },
-              { t: 1080, w: 9, ev: "combine", a: "laser", b: "annihilator", result: "laser+annihilator", cost: 340 },
-              { t: 1410, w: 11, ev: "hive_shot", dmg: 167, hp_left: 333 },
-              { t: 1690, w: 13, ev: "combine", a: "annihilator", b: "annihilator", result: "annihilator+annihilator", cost: 400 },
-              { t: 1850, w: 15, ev: "hive_shot", dmg: 167, hp_left: 166 },
-              { t: 2180, w: 17, ev: "hive_shot", dmg: 167, hp_left: 0 }
+              { t: 920, w: 8, ev: "leak", enemy: "blitzer", lives_lost: 2, lives_left: 18 },
+              { t: 1280, w: 10, ev: "leak", enemy: "juggernaut", lives_lost: 6, lives_left: 12 },
+              { t: 2010, w: 16, ev: "leak", enemy: "colossus", lives_lost: 10, lives_left: 0 }
             ]
           }
         ]
       };
     }
 
+    function populateVersionFilter() {
+      const sel = document.getElementById("sel-version");
+      if (!sel) return;
+      const cur = sel.value;
+      const versions = Array.from(new Set((rawDataset.runs || []).map(r => r.balance_version || "v1.0"))).sort();
+      sel.innerHTML = '<option value="all">All Patch Versions</option>' + versions.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+      if (versions.includes(cur)) sel.value = cur;
+    }
+
     function getFilteredRuns() {
       const exclSb = document.getElementById("chk-exclude-sandbox").checked;
+      const ver = document.getElementById("sel-version").value;
       const lvl = document.getElementById("sel-level").value;
       const diff = document.getElementById("sel-diff").value;
       return (rawDataset.runs || []).filter(r => {
         if (exclSb && r.is_sandbox) return false;
+        if (ver !== "all" && String(r.balance_version || "v1.0") !== ver) return false;
         if (lvl !== "all" && String(r.level) !== lvl) return false;
         if (diff !== "all" && String(r.difficulty || "standard") !== diff) return false;
         return true;
@@ -530,18 +477,44 @@
     function computeStats(runs) {
       let wins = 0, losses = 0, stalled = 0, aband = 0, active = 0;
       let sumWave = 0, bestWave = 0, surges = 0, earlyCalls = 0;
+      let sumChallenge = 0, sumKillPen = 0, killPenCnt = 0, sumBossPen = 0, bossPenCnt = 0, sumSpeed = 0;
       const powers = { rewind: 0, pause: 0, haste: 0 };
-      const byLevel = {}, byDiff = {}, waveMap = {}, enemyLeaks = {}, towerMap = {};
+      const upgrades = { damage: 0, range: 0, fire_rate: 0 };
+      const combines = { drag_shop: 0, two_tower: 0 };
+      const speedSec = { "1x": 0, "2x": 0, "3x": 0 };
+      const features = { target_mode_changes: 0, recipes_opened: 0, enemies_inspected: 0 };
+      const zoneBuilds = {}, byVersion = {}, byLevel = {}, byDiff = {}, waveMap = {}, enemyLeaks = {}, towerMap = {};
 
       for (const r of runs) {
         const oc = r.outcome || "in_progress";
         if (oc === "won") wins++; else if (oc === "lost") losses++; else if (oc === "stalled") stalled++; else if (oc === "abandoned") aband++; else active++;
         const mw = Number(r.max_wave_reached || 1);
-        sumWave += mw;
-        if (mw > bestWave) bestWave = mw;
+        sumWave += mw; if (mw > bestWave) bestWave = mw;
         surges += Number(r.surges_suffered || 0);
         earlyCalls += Number(r.early_calls || 0);
+        const cs = Number(r.challenge_score || 0);
+        sumChallenge += cs;
+        const akp = Number(r.avg_kill_progress_pct || 0);
+        if (akp > 0) { sumKillPen += akp; killPenCnt++; }
+        const mbp = Number(r.max_boss_progress_pct || 0);
+        if (mbp > 0) { sumBossPen += mbp; bossPenCnt++; }
+        const spd = Number(r.avg_game_speed || 1.0);
+        sumSpeed += spd;
+
         for (const pk of ["rewind", "pause", "haste"]) powers[pk] += Number((r.powers_used || {})[pk] || 0);
+        for (const uk of ["damage", "range", "fire_rate"]) upgrades[uk] += Number((r.upgrade_counts || {})[uk] || 0);
+        for (const ck of ["drag_shop", "two_tower"]) combines[ck] += Number((r.combine_methods || {})[ck] || 0);
+        for (const sk of ["1x", "2x", "3x"]) speedSec[sk] += Number((r.speed_time_sec || {})[sk] || 0);
+        for (const fk of ["target_mode_changes", "recipes_opened", "enemies_inspected"]) features[fk] += Number((r.feature_usage || {})[fk] || 0);
+        for (const [zk, zc] of Object.entries(r.zone_builds || {})) zoneBuilds[zk] = (zoneBuilds[zk] || 0) + Number(zc || 0);
+
+        const bv = r.balance_version || "v1.0";
+        if (!byVersion[bv]) byVersion[bv] = { version: bv, runs: 0, wins: 0, losses: 0, sumWave: 0, sumCs: 0, sumKp: 0, kpCnt: 0, sumBp: 0, bpCnt: 0, sumSpd: 0 };
+        const vRec = byVersion[bv];
+        vRec.runs++; if (oc === "won") vRec.wins++; if (oc === "lost") vRec.losses++;
+        vRec.sumWave += mw; vRec.sumCs += cs; vRec.sumSpd += spd;
+        if (akp > 0) { vRec.sumKp += akp; vRec.kpCnt++; }
+        if (mbp > 0) { vRec.sumBp += mbp; vRec.bpCnt++; }
 
         const lid = Number(r.level || 1);
         if (!byLevel[lid]) byLevel[lid] = { runs: 0, wins: 0, losses: 0, sumWave: 0 };
@@ -551,39 +524,27 @@
         if (!byDiff[dk]) byDiff[dk] = { runs: 0, wins: 0, losses: 0 };
         byDiff[dk].runs++; if (oc === "won") byDiff[dk].wins++; if (oc === "lost") byDiff[dk].losses++;
 
-        for (const [et, cnt] of Object.entries(r.leaks_by_enemy || {})) {
-          enemyLeaks[et] = (enemyLeaks[et] || 0) + Number(cnt || 0);
-        }
+        for (const [et, cnt] of Object.entries(r.leaks_by_enemy || {})) enemyLeaks[et] = (enemyLeaks[et] || 0) + Number(cnt || 0);
 
         for (const wl of (r.wave_log || [])) {
           const w = Number(wl.wave || 1);
-          if (!waveMap[w]) waveMap[w] = { wave: w, plays: 0, leaks: 0, runsWithLeak: 0, sumMoney: 0, byEnemy: {} };
+          if (!waveMap[w]) waveMap[w] = { wave: w, plays: 0, leaks: 0, runsWithLeak: 0, sumMoney: 0, sumMaxPen: 0, sumKillPen: 0, byEnemy: {} };
           const wm = waveMap[w];
           wm.plays++;
           const ll = Number(wl.lives_lost || 0);
-          wm.leaks += ll;
-          if (ll > 0) wm.runsWithLeak++;
+          wm.leaks += ll; if (ll > 0) wm.runsWithLeak++;
           wm.sumMoney += Number(wl.money_end || 0);
-          for (const [et, cnt] of Object.entries(wl.leaks_by_enemy || {})) {
-            wm.byEnemy[et] = (wm.byEnemy[et] || 0) + Number(cnt || 0);
-          }
+          wm.sumMaxPen += Number(wl.max_progress_pct || 0);
+          wm.sumKillPen += Number(wl.avg_kill_progress_pct || 0);
+          for (const [et, cnt] of Object.entries(wl.leaks_by_enemy || {})) wm.byEnemy[et] = (wm.byEnemy[et] || 0) + Number(cnt || 0);
         }
 
         for (const [tk, rec] of Object.entries(r.tower_stats || {})) {
-          if (!towerMap[tk]) {
-            towerMap[tk] = {
-              type: tk, name: rec.name || tk, is_combo: !!rec.is_combo || tk.includes("+"),
-              runs_used: 0, wins_used: 0, built: 0, sold: 0, spent: 0, damage: 0, kills: 0
-            };
-          }
+          if (!towerMap[tk]) towerMap[tk] = { type: tk, name: rec.name || tk, is_combo: !!rec.is_combo || tk.includes("+"), runs_used: 0, wins_used: 0, built: 0, sold: 0, spent: 0, damage: 0, kills: 0 };
           const t = towerMap[tk];
-          t.runs_used++;
-          if (oc === "won") t.wins_used++;
-          t.built += Number(rec.built || 0);
-          t.sold += Number(rec.sold || 0);
-          t.spent += Number(rec.spent || 0);
-          t.damage += Number(rec.damage || 0);
-          t.kills += Number(rec.kills || 0);
+          t.runs_used++; if (oc === "won") t.wins_used++;
+          t.built += Number(rec.built || 0); t.sold += Number(rec.sold || 0);
+          t.spent += Number(rec.spent || 0); t.damage += Number(rec.damage || 0); t.kills += Number(rec.kills || 0);
         }
       }
 
@@ -591,12 +552,7 @@
       const towers = Object.values(towerMap).map(t => {
         const dpd = t.spent > 0 ? t.damage / t.spent : 0;
         if (t.built > 0 && t.damage > 0) dpdVals.push(dpd);
-        return {
-          ...t,
-          dmg_per_dollar: dpd,
-          pick_rate_pct: runs.length ? (t.runs_used / runs.length) * 100 : 0,
-          win_rate_pct: t.runs_used ? (t.wins_used / t.runs_used) * 100 : 0
-        };
+        return { ...t, dmg_per_dollar: dpd, pick_rate_pct: runs.length ? (t.runs_used / runs.length) * 100 : 0, win_rate_pct: t.runs_used ? (t.wins_used / t.runs_used) * 100 : 0 };
       });
       dpdVals.sort((a, b) => a - b);
       const medianDpd = dpdVals.length ? dpdVals[Math.floor(dpdVals.length / 2)] : 0;
@@ -604,78 +560,81 @@
       const waves = Object.values(waveMap).map(w => {
         let topCulprit = "", topC = 0;
         for (const [et, cnt] of Object.entries(w.byEnemy)) { if (cnt > topC) { topC = cnt; topCulprit = et; } }
-        return {
-          wave: w.wave, plays: w.plays, leaks: w.leaks,
-          leakRate: w.plays ? (w.runsWithLeak / w.plays) * 100 : 0,
-          avgCash: w.plays ? w.sumMoney / w.plays : 0,
-          topCulprit
-        };
+        return { wave: w.wave, plays: w.plays, leaks: w.leaks, leakRate: w.plays ? (w.runsWithLeak / w.plays) * 100 : 0, avgCash: w.plays ? w.sumMoney / w.plays : 0, avgMaxPen: w.plays ? w.sumMaxPen / w.plays : 0, avgKillPen: w.plays ? w.sumKillPen / w.plays : 0, topCulprit };
       }).sort((a, b) => a.wave - b.wave);
 
       const finished = wins + losses + stalled;
       const winRate = finished ? (wins / finished) * 100 : 0;
       const avgWave = runs.length ? sumWave / runs.length : 0;
+      const avgChallenge = runs.length ? sumChallenge / runs.length : 0;
+      const avgKillPen = killPenCnt ? sumKillPen / killPenCnt : 0;
+      const avgBossPen = bossPenCnt ? sumBossPen / bossPenCnt : 0;
+      const avgSpeed = runs.length ? sumSpeed / runs.length : 1.0;
       const avgSurges = runs.length ? surges / runs.length : 0;
 
-      // Diagnostics
       const diags = [];
       if (!runs.length) {
-        diags.push({ cls: "info", text: "No runs match the current filters yet. Play a game in TimeDefense (same browser) or load sample/exported JSON." });
+        diags.push({ cls: "info", text: "No runs recorded yet. Play a game in TimeDefense — runs auto-sync to Supabase on every wave clear & mission end." });
       } else {
-        if (finished >= 3 && winRate >= 85) diags.push({ cls: "warn", text: `[TOO EASY?] Win rate is ${winRate.toFixed(0)}% across ${finished} finished runs — consider tightening mid/late waves or moving to Hard/Nightmare.` });
-        if (finished >= 3 && winRate <= 20) diags.push({ cls: "danger", text: `[TOO HARD?] Win rate is ${winRate.toFixed(0)}% across ${finished} finished runs — inspect top leak waves below.` });
+        if (avgKillPen > 0 && avgKillPen < 42 && avgChallenge < 40) {
+          diags.push({ cls: "warn", text: `[TOO EASY / SPAWN-CAMPED] Enemies die at only ${avgKillPen.toFixed(0)}% of the path on average (Challenge Score ${avgChallenge.toFixed(0)}/100, Avg Speed ${avgSpeed.toFixed(2)}x) — increase wave threat or reduce early tower DPS.` });
+        }
+        if (finished >= 3 && winRate >= 85) diags.push({ cls: "warn", text: `[HIGH WIN RATE] ${winRate.toFixed(0)}% win rate across ${finished} runs — tighten mid/late waves.` });
+        if (finished >= 3 && winRate <= 20) diags.push({ cls: "danger", text: `[LOW WIN RATE] ${winRate.toFixed(0)}% win rate across ${finished} runs — ease choke waves below.` });
         const worstWave = [...waves].sort((a, b) => b.leaks - a.leaks)[0];
         if (worstWave && worstWave.leaks > 0) {
-          diags.push({ cls: "danger", text: `[WAVE SPIKE] Wave ${worstWave.wave} caused ${worstWave.leaks} lives lost (${worstWave.leakRate.toFixed(0)}% of plays leaked; top culprit: ${worstWave.topCulprit || "mixed"}).` });
-          if (worstWave.avgCash >= 320) diags.push({ cls: "warn", text: `[ECONOMY SLACK] Avg unspent cash on Wave ${worstWave.wave} was $${worstWave.avgCash.toFixed(0)} while leaking — check build times or upgrade clarity.` });
+          diags.push({ cls: "danger", text: `[WAVE SPIKE] Wave ${worstWave.wave} caused ${worstWave.leaks} lives lost (${worstWave.leakRate.toFixed(0)}% leak rate, avg max path ${worstWave.avgMaxPen.toFixed(0)}%; culprit: ${worstWave.topCulprit || "mixed"}).` });
+          if (worstWave.avgCash >= 320) diags.push({ cls: "warn", text: `[ECONOMY SLACK] Avg unspent cash on Wave ${worstWave.wave} was $${worstWave.avgCash.toFixed(0)} while leaking.` });
+        }
+        const totalUpg = upgrades.damage + upgrades.range + upgrades.fire_rate;
+        if (totalUpg >= 8 && upgrades.range / totalUpg < 0.12) {
+          diags.push({ cls: "info", text: `[UPGRADE HABIT] Range upgrades are only ${((upgrades.range / totalUpg) * 100).toFixed(0)}% of all upgrades (${upgrades.range}/${totalUpg}) — Range cost may feel too high vs Damage/Speed.` });
         }
         for (const t of towers) {
           if (medianDpd > 1 && t.built >= 1) {
-            if (t.dmg_per_dollar >= medianDpd * 1.85) diags.push({ cls: "warn", text: `[OP CANDIDATE] ${t.name} deals ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${(t.dmg_per_dollar / medianDpd).toFixed(1)}x median ${medianDpd.toFixed(1)}) across ${t.built} build(s).` });
-            else if (t.damage > 0 && t.dmg_per_dollar <= medianDpd * 0.45 && t.type !== "slow" && t.type !== "slow+slow") diags.push({ cls: "info", text: `[WEAK CANDIDATE] ${t.name} averages ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${((t.dmg_per_dollar / medianDpd) * 100).toFixed(0)}% of median) — consider buffing.` });
+            if (t.dmg_per_dollar >= medianDpd * 1.85) diags.push({ cls: "warn", text: `[OP CANDIDATE] ${t.name} deals ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${(t.dmg_per_dollar / medianDpd).toFixed(1)}x median ${medianDpd.toFixed(1)}).` });
+            else if (t.damage > 0 && t.dmg_per_dollar <= medianDpd * 0.45 && t.type !== "slow" && t.type !== "slow+slow") diags.push({ cls: "info", text: `[WEAK CANDIDATE] ${t.name} averages ${t.dmg_per_dollar.toFixed(1)} Dmg/$ (${((t.dmg_per_dollar / medianDpd) * 100).toFixed(0)}% of median).` });
           }
         }
-        const totalP = powers.rewind + powers.pause + powers.haste;
-        if (totalP >= 4) {
-          for (const pk of ["rewind", "pause", "haste"]) {
-            if (powers[pk] / totalP >= 0.72) diags.push({ cls: "warn", text: `[POWER SKEW] ${pk.toUpperCase()} accounts for ${((powers[pk] / totalP) * 100).toFixed(0)}% of time power casts (${powers[pk]}/${totalP}).` });
-          }
-        }
-        if (avgSurges >= 1.2) diags.push({ cls: "danger", text: `[SURGE PRESSURE] Averaging ${avgSurges.toFixed(2)} Surges/run — players may be missing the 5-wave deadline.` });
-        if (!diags.length) diags.push({ cls: "good", text: `[HEALTHY] Win rate, economy, and tower Dmg/$ are balanced within target bands across ${runs.length} run(s).` });
+        if (!diags.length) diags.push({ cls: "good", text: `[SWEET SPOT] Challenge Score (${avgChallenge.toFixed(0)}/100), kill path (${avgKillPen.toFixed(0)}%), and tower Dmg/$ are balanced across ${runs.length} run(s).` });
       }
-
-      return { runs, wins, losses, stalled, aband, active, winRate, avgWave, bestWave, avgSurges, earlyCalls, powers, byLevel, byDiff, waves, enemyLeaks, towers, medianDpd, diags };
+      return { runs, wins, losses, stalled, aband, active, winRate, avgWave, bestWave, avgChallenge, avgKillPen, avgBossPen, avgSpeed, avgSurges, earlyCalls, powers, upgrades, combines, speedSec, features, zoneBuilds, byVersion, byLevel, byDiff, waves, enemyLeaks, towers, medianDpd, diags };
     }
 
     function renderWaveChart(waves) {
       const wrap = document.getElementById("wave-chart-wrap");
       if (!waves.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:12px;">No wave logs yet.</p>'; return; }
-      const W = Math.max(460, waves.length * 42 + 80), H = 230, padL = 42, padR = 46, padT = 20, padB = 34;
+      const W = Math.max(460, waves.length * 44 + 84), H = 235, padL = 42, padR = 46, padT = 22, padB = 34;
       const plotW = W - padL - padR, plotH = H - padT - padB;
-      const maxLeaks = Math.max(4, ...waves.map(w => w.leaks));
-      const maxCash = Math.max(200, ...waves.map(w => w.avgCash));
+      const maxCash = Math.max(250, ...waves.map(w => w.avgCash));
       const barW = Math.min(24, Math.max(10, plotW / waves.length - 8));
-      let bars = "", pts = "", xLabels = "";
+      let bars = "", cashPts = "", xLabels = "";
       waves.forEach((w, idx) => {
         const cx = padL + ((idx + 0.5) / waves.length) * plotW;
-        const bh = (w.leaks / maxLeaks) * plotH;
+        const penPct = Math.min(100, Math.max(0, w.avgMaxPen || (w.leaks > 0 ? 100 : 0)));
+        const bh = (penPct / 100) * plotH;
         const by = padT + plotH - bh;
-        bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${w.leaks > 0 ? '#ff6363' : '#263852'}"><title>Wave ${w.wave}: ${w.leaks} lives lost, avg cash $${w.avgCash.toFixed(0)}</title></rect>`;
+        const col = w.leaks > 0 ? "#ff6363" : (penPct >= 60 ? "#5ae8ff" : "#5ce69a");
+        bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(2, bh).toFixed(1)}" rx="3" fill="${col}"><title>Wave ${w.wave}: Max Path ${penPct.toFixed(0)}%, Leaks ${w.leaks}, Avg Cash $${w.avgCash.toFixed(0)}</title></rect>`;
         const cy = padT + plotH - (w.avgCash / maxCash) * plotH;
-        pts += `${cx.toFixed(1)},${cy.toFixed(1)} `;
+        cashPts += `${cx.toFixed(1)},${cy.toFixed(1)} `;
         xLabels += `<text x="${cx.toFixed(1)}" y="${H - 12}" text-anchor="middle" fill="#93a8c7" font-size="10">W${w.wave}</text>`;
       });
+      const y60 = padT + plotH - 0.60 * plotH;
       wrap.innerHTML = `
         <svg class="chart" viewBox="0 0 ${W} ${H}">
           <line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="#2b3e5c"/>
-          <text x="${padL - 6}" y="${padT + 8}" text-anchor="end" fill="#ff8f8f" font-size="10">${maxLeaks}L</text>
-          <text x="${W - padR + 6}" y="${padT + 8}" text-anchor="start" fill="#ffcf56" font-size="10">$${Math.round(maxCash)}</text>
+          <line x1="${padL}" y1="${y60.toFixed(1)}" x2="${W - padR}" y2="${y60.toFixed(1)}" stroke="#5ae8ff" stroke-dasharray="4 3" opacity="0.45"/>
+          <text x="${padL - 5}" y="${padT + 8}" text-anchor="end" fill="#93a8c7" font-size="10">100%</text>
+          <text x="${padL - 5}" y="${(y60 + 3).toFixed(1)}" text-anchor="end" fill="#5ae8ff" font-size="9.5">60%</text>
+          <text x="${W - padR + 5}" y="${padT + 8}" text-anchor="start" fill="#ffcf56" font-size="10">$${Math.round(maxCash)}</text>
           ${bars}
-          <polyline fill="none" stroke="#ffcf56" stroke-width="2.5" points="${pts.trim()}"/>
+          <polyline fill="none" stroke="#ffcf56" stroke-width="2.3" points="${cashPts.trim()}"/>
           ${xLabels}
-          <text x="${padL}" y="12" fill="#ff8f8f" font-size="10">■ Red Bars: Lives Lost</text>
-          <text x="${padL + 145}" y="12" fill="#ffcf56" font-size="10">— Gold Line: Avg Unspent Cash ($)</text>
+          <text x="${padL}" y="13" fill="#5ce69a" font-size="10">■ &lt;60% Easy</text>
+          <text x="${padL + 78}" y="13" fill="#5ae8ff" font-size="10">■ 60-99% Tense</text>
+          <text x="${padL + 174}" y="13" fill="#ff6363" font-size="10">■ Leaked</text>
+          <text x="${padL + 236}" y="13" fill="#ffcf56" font-size="10">— Avg Cash ($)</text>
         </svg>`;
     }
 
@@ -698,20 +657,15 @@
         rows += `<rect x="${padL}" y="${y + 3}" width="${Math.max(2, bw).toFixed(1)}" height="13" rx="3" fill="${col}"/>`;
         rows += `<text x="${(padL + bw + 6).toFixed(1)}" y="${y + 13}" fill="#ffffff" font-size="10">${t.dmg_per_dollar.toFixed(1)}</text>`;
       });
-      wrap.innerHTML = `
-        <svg class="chart" style="height:${H}px" viewBox="0 0 ${W} ${H}">
-          ${rows}
-          ${medianDpd > 0 ? `<line x1="${medX.toFixed(1)}" y1="${padT - 6}" x2="${medX.toFixed(1)}" y2="${H - 10}" stroke="#5ce69a" stroke-dasharray="4 3" stroke-width="1.5"/><text x="${medX.toFixed(1)}" y="13" text-anchor="middle" fill="#5ce69a" font-size="10">Median ${medianDpd.toFixed(1)} Dmg/$</text>` : ""}
-        </svg>`;
+      wrap.innerHTML = `<svg class="chart" style="height:${H}px" viewBox="0 0 ${W} ${H}">${rows}${medianDpd > 0 ? `<line x1="${medX.toFixed(1)}" y1="${padT - 6}" x2="${medX.toFixed(1)}" y2="${H - 10}" stroke="#5ce69a" stroke-dasharray="4 3" stroke-width="1.5"/><text x="${medX.toFixed(1)}" y="13" text-anchor="middle" fill="#5ce69a" font-size="10">Median ${medianDpd.toFixed(1)} Dmg/$</text>` : ""}</svg>`;
     }
 
     function renderRunDetail(run) {
       const box = document.getElementById("run-detail-container");
       if (!run) { box.innerHTML = ""; return; }
       const evHtml = (run.events || []).map(ev => {
-        let cls = "";
-        let txt = `W${ev.w} (${ev.t}s) ${ev.ev}`;
-        if (ev.ev === "build") txt = `W${ev.w} Build ${ev.type} ($${ev.cost})`;
+        let cls = "", txt = `W${ev.w} (${ev.t}s) ${ev.ev}`;
+        if (ev.ev === "build") txt = `W${ev.w} Build ${ev.type} ($${ev.cost}${ev.zone ? " @ " + ev.zone : ""})`;
         else if (ev.ev === "combine") { cls = "ev-combine"; txt = `W${ev.w} Merge ${ev.a}+${ev.b} -> ${ev.result} ($${ev.cost})`; }
         else if (ev.ev === "upgrade") txt = `W${ev.w} Upg ${ev.type} ${ev.stat} Lv${ev.lvl} ($${ev.cost})`;
         else if (ev.ev === "sell") txt = `W${ev.w} Sell ${ev.type} (+$${ev.refund}, ${ev.dmg} dmg)`;
@@ -724,8 +678,8 @@
       box.innerHTML = `
         <div class="run-detail-box">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <strong style="color:var(--cyan);">Run Inspector: ${esc(run.level_name || ("Level " + run.level))} (${esc(run.difficulty || "standard")}) — ${esc(String(run.outcome || "").toUpperCase())} @ Wave ${run.max_wave_reached}</strong>
-            <span style="font-size:12px;color:var(--muted);">Duration: ${Math.round(run.duration_sim_sec || 0)}s | Refineries: ${run.refineries_owned || 0} | Manip Lv${run.manipulator_level || 1} | Reason: ${esc(run.end_reason || "In progress")}</span>
+            <strong style="color:var(--cyan);">[${esc(run.balance_version || "v1.0")}] ${esc(run.level_name || ("Level " + run.level))} (${esc(run.difficulty || "standard")}) — ${esc(String(run.outcome || "").toUpperCase())} @ Wave ${run.max_wave_reached}</strong>
+            <span style="font-size:12px;color:var(--muted);">Challenge: ${run.challenge_score || 0}/100 | KillPath: ${(run.avg_kill_progress_pct || 0).toFixed(0)}% | BossPeak: ${(run.max_boss_progress_pct || 0).toFixed(0)}% | AvgSpd: ${(run.avg_game_speed || 1).toFixed(2)}x | Ref: ${run.refineries_owned || 0}</span>
           </div>
           <div style="margin-top:8px;font-size:11.5px;color:var(--muted);">Build Order &amp; Action Timeline (${(run.events || []).length} events):</div>
           <div class="timeline-grid">${evHtml || '<span style="color:var(--muted);font-size:12px;">No events logged.</span>'}</div>
@@ -734,18 +688,18 @@
 
     function buildAiMarkdown(st) {
       const lines = [
-        "# TimeDefense Real Playtest Analytics Report" + (isSampleMode ? " (SAMPLE DATA)" : ""),
-        `Runs: ${st.runs.length} (Wins:${st.wins} Losses:${st.losses} Stalled:${st.stalled} Abandoned:${st.aband} Active:${st.active})`,
-        `Win Rate: ${st.winRate.toFixed(1)}% | Avg Max Wave: ${st.avgWave.toFixed(1)} | Best Wave: ${st.bestWave} | Avg Surges/Run: ${st.avgSurges.toFixed(2)} | Early Calls: ${st.earlyCalls}`,
-        `Time Powers -> Rewind: ${st.powers.rewind} | Pause: ${st.powers.pause} | Haste: ${st.powers.haste} | Median Dmg/$: ${st.medianDpd.toFixed(1)}`,
-        "", "## Automated Balance Flags",
-        ...st.diags.map(d => "- " + d.text),
-        "", "## Top Leak Waves",
-        ...[...st.waves].sort((a, b) => b.leaks - a.leaks).slice(0, 8).map(w => `- W${w.wave} | plays=${w.plays} | leaks=${w.leaks} (${w.leakRate.toFixed(0)}%) | avg_cash=$${w.avgCash.toFixed(0)} | top=${w.topCulprit || "none"}`),
+        "# TimeDefense Cloud Playtest Feedback Brief" + (isSampleMode ? " (SAMPLE)" : ""),
+        `Runs: ${st.runs.length} (W:${st.wins} L:${st.losses} Stalled:${st.stalled} Aband:${st.aband}) | Win Rate: ${st.winRate.toFixed(1)}% | Challenge Score: ${st.avgChallenge.toFixed(0)}/100`,
+        `Path Penetration -> Avg Kill: ${st.avgKillPen.toFixed(1)}% | Avg Boss Peak: ${st.avgBossPen.toFixed(1)}% | Avg Speed: ${st.avgSpeed.toFixed(2)}x | Surges/Run: ${st.avgSurges.toFixed(2)}`,
+        `Upgrades -> Damage: ${st.upgrades.damage} | Range: ${st.upgrades.range} | Fire Rate: ${st.upgrades.fire_rate} | Combines -> Drag: ${st.combines.drag_shop} | Two-Tower: ${st.combines.two_tower}`,
+        `Powers -> Rewind: ${st.powers.rewind} | Pause: ${st.powers.pause} | Haste: ${st.powers.haste} | Median Dmg/$: ${st.medianDpd.toFixed(1)}`,
+        "", "## Automated Balance Flags", ...st.diags.map(d => "- " + d.text),
+        "", "## Patch Comparison",
+        ...Object.values(st.byVersion).map(v => `- ${v.version}: runs=${v.runs}, WR=${((v.wins / Math.max(1, v.wins + v.losses)) * 100).toFixed(0)}%, challenge=${(v.sumCs / v.runs).toFixed(0)}/100, kill_path=${v.kpCnt ? (v.sumKp / v.kpCnt).toFixed(0) : 0}%`),
+        "", "## Top Leak / High-Penetration Waves",
+        ...[...st.waves].sort((a, b) => (b.leaks - a.leaks) || (b.avgMaxPen - a.avgMaxPen)).slice(0, 8).map(w => `- W${w.wave} | plays=${w.plays} | leaks=${w.leaks} (${w.leakRate.toFixed(0)}%) | max_path=${w.avgMaxPen.toFixed(0)}% | avg_cash=$${w.avgCash.toFixed(0)} | top=${w.topCulprit || "none"}`),
         "", "## Tower Performance (Sorted by Dmg/$)",
-        ...[...st.towers].sort((a, b) => b.dmg_per_dollar - a.dmg_per_dollar).slice(0, 14).map(t => `- ${t.name} (${t.type}) | built=${t.built} | spent=$${t.spent} | dmg=${Math.round(t.damage)} | kills=${t.kills} | ${t.dmg_per_dollar.toFixed(1)} Dmg/$ | pick=${t.pick_rate_pct.toFixed(0)}% | WR=${t.win_rate_pct.toFixed(0)}%`),
-        "", "## Lives Lost by Enemy",
-        ...Object.entries(st.enemyLeaks).sort((a, b) => b[1] - a[1]).map(([e, c]) => `- ${e}: ${c} lives lost`)
+        ...[...st.towers].sort((a, b) => b.dmg_per_dollar - a.dmg_per_dollar).slice(0, 14).map(t => `- ${t.name} (${t.type}) | built=${t.built} | spent=$${t.spent} | dmg=${Math.round(t.damage)} | kills=${t.kills} | ${t.dmg_per_dollar.toFixed(1)} Dmg/$ | pick=${t.pick_rate_pct.toFixed(0)}% | WR=${t.win_rate_pct.toFixed(0)}%`)
       ];
       return lines.join("\n");
     }
@@ -755,57 +709,67 @@
       const st = computeStats(filtered);
       window._lastStats = st;
 
-      // KPIs
+      const csLbl = st.avgChallenge < 31 ? "Too Easy / Stomp" : (st.avgChallenge < 66 ? "Moderate" : (st.avgChallenge < 89 ? "Sweet Spot" : "Brutal"));
       document.getElementById("kpi-grid").innerHTML = [
         { lbl: "Tracked Runs", val: st.runs.length, sub: `W:${st.wins} / L:${st.losses} / Aband:${st.aband}` },
-        { lbl: "Win Rate", val: st.winRate.toFixed(1) + "%", sub: `Best Wave: W${st.bestWave} (Avg W${st.avgWave.toFixed(1)})` },
-        { lbl: "Median Tower Dmg/$", val: st.medianDpd.toFixed(1), sub: `${st.towers.length} unique tower types built` },
-        { lbl: "Time Powers (R/P/H)", val: `${st.powers.rewind}/${st.powers.pause}/${st.powers.haste}`, sub: `Avg Surges/Run: ${st.avgSurges.toFixed(2)}` },
-        { lbl: "Early Wave Calls", val: st.earlyCalls, sub: isSampleMode ? "Previewing Sample Data" : "Live Browser Telemetry" }
+        { lbl: "Win Rate", val: st.winRate.toFixed(1) + "%", sub: `Avg W${st.avgWave.toFixed(1)} (Best W${st.bestWave})` },
+        { lbl: "Challenge Score", val: `${st.avgChallenge.toFixed(0)}/100`, sub: csLbl },
+        { lbl: "Avg Kill Path %", val: `${st.avgKillPen.toFixed(0)}%`, sub: `Boss Peak: ${st.avgBossPen.toFixed(0)}%` },
+        { lbl: "Avg Play Speed", val: `${st.avgSpeed.toFixed(2)}x`, sub: `Early Calls: ${st.earlyCalls} | Surges/Run: ${st.avgSurges.toFixed(2)}` },
+        { lbl: "Median Dmg/$", val: st.medianDpd.toFixed(1), sub: `${st.towers.length} tower types used` }
       ].map(k => `<div class="kpi-card"><div class="kpi-lbl">${k.lbl}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join("");
 
-      // Diagnostics
       document.getElementById("diag-list").innerHTML = st.diags.map(d => `<div class="diag-item ${d.cls}">${esc(d.text)}</div>`).join("");
 
-      // Charts
+      // Patch comparison table
+      const pRows = Object.values(st.byVersion).sort((a, b) => a.version.localeCompare(b.version));
+      document.getElementById("patch-tbody").innerHTML = pRows.length
+        ? pRows.map(v => {
+            const fin = v.wins + v.losses;
+            const wr = fin ? ((v.wins / fin) * 100).toFixed(1) + "%" : "—";
+            return `<tr><td><strong>${esc(v.version)}</strong></td><td class="num">${v.runs}</td><td class="num">${wr}</td><td class="num">${(v.sumCs / v.runs).toFixed(0)}/100</td><td class="num">${v.kpCnt ? (v.sumKp / v.kpCnt).toFixed(1) + "%" : "—"}</td><td class="num">${v.bpCnt ? (v.sumBp / v.bpCnt).toFixed(1) + "%" : "—"}</td><td class="num">W${(v.sumWave / v.runs).toFixed(1)}</td><td class="num">${(v.sumSpd / v.runs).toFixed(2)}x</td></tr>`;
+          }).join("")
+        : '<tr><td colspan="8" style="color:var(--muted);">No patch runs yet.</td></tr>';
+
       renderWaveChart(st.waves);
       renderTowerChart(st.towers, st.medianDpd);
 
-      // Enemy leaks
+      // Player behavior panel
+      const zEntries = Object.entries(st.zoneBuilds).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const maxZ = zEntries.length ? zEntries[0][1] : 1;
+      const totUpg = Math.max(1, st.upgrades.damage + st.upgrades.range + st.upgrades.fire_rate);
+      const totSpd = Math.max(1, st.speedSec["1x"] + st.speedSec["2x"] + st.speedSec["3x"]);
+      document.getElementById("behavior-wrap").innerHTML = `
+        <div style="font-size:12px;color:#cfe0f5;margin-bottom:8px;">
+          <strong>Upgrade Mix:</strong> Dmg ${st.upgrades.damage} (${((st.upgrades.damage / totUpg) * 100).toFixed(0)}%) &bull; Rng ${st.upgrades.range} (${((st.upgrades.range / totUpg) * 100).toFixed(0)}%) &bull; Spd ${st.upgrades.fire_rate} (${((st.upgrades.fire_rate / totUpg) * 100).toFixed(0)}%)<br/>
+          <strong>Combines:</strong> Drag-Shop ${st.combines.drag_shop} &bull; Two-Tower ${st.combines.two_tower} &nbsp;|&nbsp;
+          <strong>Speed Time:</strong> 1x ${((st.speedSec["1x"] / totSpd) * 100).toFixed(0)}% / 2x ${((st.speedSec["2x"] / totSpd) * 100).toFixed(0)}% / 3x ${((st.speedSec["3x"] / totSpd) * 100).toFixed(0)}%<br/>
+          <strong>Tools Used:</strong> Target Switches ${st.features.target_mode_changes} &bull; Recipes Opened ${st.features.recipes_opened} &bull; Enemies Inspected ${st.features.enemies_inspected}
+        </div>
+        <strong style="font-size:11.5px;color:var(--muted);">Placement Zone Heatmap (Top Zones Built In):</strong>
+        ${zEntries.length ? zEntries.map(([z, c]) => `<div class="bar-row"><div class="bar-meta"><span>${esc(z)}</span><span>${c} builds</span></div><div class="bar-track"><div class="bar-fill" style="width:${((c / maxZ) * 100).toFixed(1)}%;background:#5ae8ff;"></div></div></div>`).join("") : '<p style="color:var(--muted);font-size:12px;">No zone builds yet.</p>'}`;
+
+      // Enemy leaks & level summary
       const elEntries = Object.entries(st.enemyLeaks).sort((a, b) => b[1] - a[1]);
       const maxEL = elEntries.length ? elEntries[0][1] : 1;
       document.getElementById("enemy-leaks-wrap").innerHTML = elEntries.length
-        ? elEntries.map(([e, c]) => `<div style="margin:7px 0;"><div style="display:flex;justify-content:space-between;font-size:12px;"><strong>${esc(e.toUpperCase())}</strong><span>${c} lives lost</span></div><div style="height:10px;background:#0e1522;border-radius:5px;overflow:hidden;margin-top:3px;"><div style="height:100%;width:${((c / maxEL) * 100).toFixed(1)}%;background:#ff6363;"></div></div></div>`).join("")
+        ? elEntries.map(([e, c]) => `<div class="bar-row"><div class="bar-meta"><strong>${esc(e.toUpperCase())}</strong><span>${c} lives lost</span></div><div class="bar-track"><div class="bar-fill" style="width:${((c / maxEL) * 100).toFixed(1)}%;background:#ff6363;"></div></div></div>`).join("")
         : '<p style="color:var(--muted);font-size:12px;">Zero leaks recorded in current filter.</p>';
-
-      // Level & Difficulty breakdown
       const lvlRows = Object.entries(st.byLevel).sort((a, b) => Number(a[0]) - Number(b[0]))
         .map(([l, d]) => `<li><strong>Level ${l}:</strong> ${d.runs} run(s) — ${d.wins}W / ${d.losses}L (Avg W${(d.sumWave / d.runs).toFixed(1)})</li>`).join("");
-      const diffRows = Object.entries(st.byDiff)
-        .map(([dk, d]) => `<li><strong>${esc(dk.toUpperCase())}:</strong> ${d.runs} run(s) — ${d.wins}W / ${d.losses}L</li>`).join("");
-      document.getElementById("level-power-wrap").innerHTML = `
-        <ul style="margin:4px 0 10px;padding-left:18px;font-size:12.5px;color:#cfe0f5;">${lvlRows || "<li>No level runs yet.</li>"}</ul>
-        <ul style="margin:4px 0 0;padding-left:18px;font-size:12.5px;color:#b8d0eb;">${diffRows || "<li>No difficulty data yet.</li>"}</ul>`;
+      document.getElementById("level-power-wrap").innerHTML = `<ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:#cfe0f5;">${lvlRows || "<li>No level runs yet.</li>"}</ul>`;
 
       // Tower table
       const sortedTowers = [...st.towers].sort((a, b) => {
         const va = a[towerSortKey], vb = b[towerSortKey];
-        if (typeof va === "string") return towerSortDesc ? vb.localeCompare(va) : va.localeCompare(vb);
-        return towerSortDesc ? vb - va : va - vb;
+        return typeof va === "string" ? (towerSortDesc ? vb.localeCompare(va) : va.localeCompare(vb)) : (towerSortDesc ? vb - va : va - vb);
       });
       document.getElementById("tower-tbody").innerHTML = sortedTowers.length
         ? sortedTowers.map(t => {
             let statusBadge = '<span class="badge b-win">Balanced</span>';
             if (st.medianDpd > 0 && t.dmg_per_dollar >= st.medianDpd * 1.85) statusBadge = '<span class="badge b-op">OP Outlier</span>';
             else if (st.medianDpd > 0 && t.damage > 0 && t.dmg_per_dollar <= st.medianDpd * 0.45 && t.type !== "slow" && t.type !== "slow+slow") statusBadge = '<span class="badge b-weak">Underperforming</span>';
-            return `<tr>
-              <td>${t.is_combo ? '<span class="badge b-combo">COMBO</span> ' : ""}${esc(t.name)}</td>
-              <td class="num">${t.built}</td><td class="num">${t.sold}</td><td class="num">$${t.spent}</td>
-              <td class="num">${Math.round(t.damage).toLocaleString()}</td><td class="num">${t.kills}</td>
-              <td class="num"><strong>${t.dmg_per_dollar.toFixed(1)}</strong></td>
-              <td class="num">${t.pick_rate_pct.toFixed(0)}%</td><td class="num">${t.win_rate_pct.toFixed(0)}%</td>
-              <td>${statusBadge}</td>
-            </tr>`;
+            return `<tr><td>${t.is_combo ? '<span class="badge b-combo">COMBO</span> ' : ""}${esc(t.name)}</td><td class="num">${t.built}</td><td class="num">${t.sold}</td><td class="num">$${t.spent}</td><td class="num">${Math.round(t.damage).toLocaleString()}</td><td class="num">${t.kills}</td><td class="num"><strong>${t.dmg_per_dollar.toFixed(1)}</strong></td><td class="num">${t.pick_rate_pct.toFixed(0)}%</td><td class="num">${t.win_rate_pct.toFixed(0)}%</td><td>${statusBadge}</td></tr>`;
           }).join("")
         : '<tr><td colspan="10" style="color:var(--muted);">No towers built in current filter.</td></tr>';
 
@@ -815,25 +779,23 @@
         ? unused.map(([, n]) => `<span class="unused-pill">${esc(n)}</span>`).join("")
         : '<span style="color:var(--green);font-size:12px;">All 21 combinations have been tested!</span>';
 
-      // Runs table
-      const revRuns = [...st.runs].reverse();
+      const revRuns = [...st.runs].sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
       document.getElementById("runs-tbody").innerHTML = revRuns.length
         ? revRuns.map(r => {
             const oc = r.outcome || "in_progress";
             const bcls = oc === "won" ? "b-win" : (oc === "lost" ? "b-loss" : "b-other");
-            const leaksStr = Object.entries(r.leaks_by_enemy || {}).map(([k, v]) => `${k}:${v}`).join(", ") || "None";
             return `<tr data-run-id="${esc(r.run_id)}" style="cursor:pointer;">
               <td>${esc((r.started_at || "").slice(0, 16).replace("T", " "))}</td>
+              <td><code>${esc(r.balance_version || "v1.0")}</code></td>
               <td>Lv ${r.level}${r.is_sandbox ? " [SB]" : ""}</td>
               <td>${esc(r.difficulty || "standard")}</td>
               <td><span class="badge ${bcls}">${esc(oc.toUpperCase())}</span></td>
               <td class="num">W${r.max_wave_reached || 1}</td>
+              <td class="num"><strong>${r.challenge_score || 0}</strong></td>
+              <td class="num">${(r.avg_kill_progress_pct || 0).toFixed(0)}%</td>
+              <td class="num">${(r.max_boss_progress_pct || 0).toFixed(0)}%</td>
               <td class="num">${r.lives_remaining ?? 0}</td>
-              <td class="num">${r.enemy_base_hp_remaining ?? 0}</td>
-              <td class="num">${r.charges_fired || 0}</td>
-              <td class="num">${r.surges_suffered || 0}</td>
               <td class="num">$${r.money_unspent_end || 0}</td>
-              <td>${esc(leaksStr)}</td>
             </tr>`;
           }).join("")
         : '<tr><td colspan="11" style="color:var(--muted);">No runs recorded yet.</td></tr>';
@@ -844,94 +806,104 @@
 
     // Event bindings
     document.getElementById("chk-exclude-sandbox").addEventListener("change", renderAll);
+    document.getElementById("sel-version").addEventListener("change", renderAll);
     document.getElementById("sel-level").addEventListener("change", renderAll);
     document.getElementById("sel-diff").addEventListener("change", renderAll);
-    document.getElementById("btn-refresh").addEventListener("click", loadFromLocalStorage);
-    document.getElementById("btn-toggle-import").addEventListener("click", () => {
-      document.getElementById("import-drawer").classList.toggle("open");
-    });
+    document.getElementById("btn-sync-cloud").addEventListener("click", syncSupabaseAndLocal);
+    document.getElementById("btn-toggle-import").addEventListener("click", () => document.getElementById("import-drawer").classList.toggle("open"));
     document.getElementById("btn-load-sample").addEventListener("click", () => {
       isSampleMode = true;
       rawDataset = buildSampleDataset();
-      selectedRunId = "sample_2";
-      setToast("Loaded 2 realistic sample runs so you can explore every chart & diagnostic.");
+      selectedRunId = "sample_v12_1";
+      populateVersionFilter();
+      setToast("Previewing 2 sample runs (1 stomp on Standard vs 1 intense Wave 16 Colossus loss on Hard).");
       renderAll();
     });
     document.getElementById("btn-copy-ai").addEventListener("click", () => {
       const md = buildAiMarkdown(window._lastStats || computeStats([]));
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(md).then(() => setToast("Copied AI Balance Report to clipboard! Paste it directly in chat to tune TimeDefense."));
-      } else {
-        setToast("Clipboard API unavailable; use Download .JSON instead.", true);
+        navigator.clipboard.writeText(md).then(() => setToast("Copied AI Balance Brief to clipboard!"));
       }
     });
     document.getElementById("btn-download-json").addEventListener("click", () => {
       const blob = new Blob([JSON.stringify(rawDataset, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "timedefense-analytics.json";
+      const a = document.createElement("a"); a.href = url; a.download = "timedefense-analytics.json";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 2000);
       setToast("Downloaded timedefense-analytics.json.");
     });
     document.getElementById("btn-clear-local").addEventListener("click", () => {
-      if (!confirm("Clear all locally saved TimeDefense playtest analytics in this browser?")) return;
+      if (!confirm("Clear locally cached browser runs? (Cloud Supabase runs remain safe.)")) return;
       window.localStorage.removeItem(STORAGE_KEY);
-      rawDataset = { schema_version: 1, runs: [] };
-      isSampleMode = false;
-      setToast("Cleared browser localStorage analytics.");
-      renderAll();
+      syncSupabaseAndLocal();
     });
-    function parseAndApplyJson(text, merge) {
+    document.getElementById("btn-push-local-cloud").addEventListener("click", async () => {
+      const locals = readLocalRuns();
+      if (!locals.length) { setToast("No local browser runs to push.", true); return; }
+      let ok = 0;
+      for (const r of locals) {
+        const row = {
+          run_id: r.run_id, balance_version: r.balance_version || "v1.2-cloud-telemetry",
+          player_id: r.player_id || "web_local", platform: r.platform || "web",
+          started_at: r.started_at || new Date().toISOString(), updated_at: new Date().toISOString(),
+          ended_at: r.ended_at || null, level: Number(r.level || 1), level_name: r.level_name || ("Level " + (r.level || 1)),
+          difficulty: r.difficulty || "standard", is_sandbox: !!r.is_sandbox, outcome: r.outcome || "in_progress",
+          end_reason: r.end_reason || "", max_wave_reached: Number(r.max_wave_reached || 1),
+          waves_started: Number(r.waves_started || 0), waves_completed: Number(r.waves_completed || 0),
+          endless_reached: !!r.endless_reached, duration_sim_sec: Number(r.duration_sim_sec || 0),
+          build_phase_sec: Number(r.build_phase_sec || 0), lives_remaining: Number(r.lives_remaining || 0),
+          lives_lost_total: Number(r.lives_lost_total || 0), enemy_base_hp_remaining: Number(r.enemy_base_hp_remaining || 0),
+          charges_fired: Number(r.charges_fired || 0), surges_suffered: Number(r.surges_suffered || 0),
+          refineries_owned: Number(r.refineries_owned || 0), manipulator_level: Number(r.manipulator_level || 1),
+          early_calls: Number(r.early_calls || 0), money_earned: Number(r.money_earned || 0),
+          money_unspent_end: Number(r.money_unspent_end || 0), avg_unspent_cash: Number(r.avg_unspent_cash || 0),
+          max_enemy_progress_pct: Number(r.max_enemy_progress_pct || 0), avg_kill_progress_pct: Number(r.avg_kill_progress_pct || 0),
+          max_boss_progress_pct: Number(r.max_boss_progress_pct || 0), challenge_score: Number(r.challenge_score || 0),
+          avg_game_speed: Number(r.avg_game_speed || 1.0), payload: r
+        };
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/timedefense_runs?on_conflict=run_id`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(row)
+        });
+        if (res.ok) ok++;
+      }
+      setToast(`Uploaded ${ok}/${locals.length} local run(s) to Supabase.`);
+      syncSupabaseAndLocal();
+    });
+    function parseAndApplyJson(text) {
       try {
         const parsed = JSON.parse(text);
         const importedRuns = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.runs) ? parsed.runs : null);
         if (!importedRuns) throw new Error("JSON must contain a 'runs' array.");
         isSampleMode = false;
-        if (merge) {
-          const map = new Map((rawDataset.runs || []).map(r => [r.run_id, r]));
-          for (const r of importedRuns) map.set(r.run_id || ("imp_" + Math.random()), r);
-          rawDataset = { schema_version: 1, runs: Array.from(map.values()) };
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rawDataset));
-          setToast("Merged " + importedRuns.length + " run(s) into localStorage (" + rawDataset.runs.length + " total).");
-        } else {
-          rawDataset = { schema_version: 1, runs: importedRuns };
-          setToast("Loaded " + importedRuns.length + " imported run(s).");
-        }
+        rawDataset = { schema_version: 2, runs: importedRuns };
+        populateVersionFilter();
+        setToast("Loaded " + importedRuns.length + " imported run(s).");
         renderAll();
-      } catch (e) {
-        setToast("Invalid JSON: " + e.message, true);
-      }
+      } catch (e) { setToast("Invalid JSON: " + e.message, true); }
     }
-    document.getElementById("btn-apply-paste").addEventListener("click", () => parseAndApplyJson(document.getElementById("paste-json").value, false));
-    document.getElementById("btn-merge-paste").addEventListener("click", () => parseAndApplyJson(document.getElementById("paste-json").value, true));
+    document.getElementById("btn-apply-paste").addEventListener("click", () => parseAndApplyJson(document.getElementById("paste-json").value));
     document.getElementById("file-import").addEventListener("change", e => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => parseAndApplyJson(reader.result, false);
-      reader.readAsText(f);
+      const f = e.target.files[0]; if (!f) return;
+      const reader = new FileReader(); reader.onload = () => parseAndApplyJson(reader.result); reader.readAsText(f);
     });
     document.querySelectorAll("#tower-table th[data-sort]").forEach(th => {
       th.addEventListener("click", () => {
         const k = th.getAttribute("data-sort");
-        if (towerSortKey === k) towerSortDesc = !towerSortDesc;
-        else { towerSortKey = k; towerSortDesc = true; }
+        if (towerSortKey === k) towerSortDesc = !towerSortDesc; else { towerSortKey = k; towerSortDesc = true; }
         renderAll();
       });
     });
     document.getElementById("runs-tbody").addEventListener("click", e => {
-      const tr = e.target.closest("tr[data-run-id]");
-      if (!tr) return;
+      const tr = e.target.closest("tr[data-run-id]"); if (!tr) return;
       selectedRunId = tr.getAttribute("data-run-id");
-      const run = getFilteredRuns().find(r => r.run_id === selectedRunId);
-      renderRunDetail(run);
+      renderRunDetail(getFilteredRuns().find(r => r.run_id === selectedRunId));
     });
-    window.addEventListener("storage", e => {
-      if (e.key === STORAGE_KEY && !isSampleMode) loadFromLocalStorage();
-    });
+    window.addEventListener("storage", e => { if (e.key === STORAGE_KEY && !isSampleMode) syncSupabaseAndLocal(); });
 
-    loadFromLocalStorage();
+    syncSupabaseAndLocal();
   </script>
 </body>
 </html>

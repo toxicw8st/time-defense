@@ -209,6 +209,12 @@ func is_alive() -> bool:
 	return not is_dead_or_leaked
 
 
+func get_path_progress_pct() -> float:
+	if path_length <= 0.01:
+		return 0.0
+	return clampf((distance_along_path / path_length) * 100.0, 0.0, 100.0)
+
+
 func advance_along_path(delta: float) -> void:
 	if is_dead_or_leaked or path_curve == null or GameState.mission.is_over or delta <= 0.0:
 		return

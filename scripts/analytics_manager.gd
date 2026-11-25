@@ -1,19 +1,37 @@
 extends Node
 
-## Playtest Analytics & Balance Telemetry Autoload
-## Captures real gameplay runs (wave-by-wave leaks/cash, per-tower Dmg/$, build order,
-## time powers, surges, Hive Destroyer shots, and outcomes) to user://timedefense_analytics.json
-## and mirrors to browser localStorage on Web for the live analytics.html dashboard.
+## Playtest Analytics & Cloud Balance Feedback Loop Autoload
+## Captures real gameplay runs including:
+##   - Patch version tagging (Balance.BALANCE_VERSION) for before/after comparisons
+##   - Enemy & Boss path penetration % (measures how close waves actually got) + Challenge Score (0-100)
+##   - Player behavior telemetry (zone heatmap, upgrade/merge habits, 1x/2x/3x speed usage, feature usage)
+##   - Wave-by-wave leaks/cash, per-tower Dmg/$, build-order timeline, and automated diagnostics
+## Persists locally to user://timedefense_analytics.json (+ localStorage on Web) and silently
+## auto-syncs runs to the isolated public.timedefense_runs Supabase table across Web, Android, & Desktop.
 
 signal analytics_updated
 
-const SCHEMA_VERSION: int = 1
+const SCHEMA_VERSION: int = 2
 const ANALYTICS_FILE_PATH: String = "user://timedefense_analytics.json"
+const PLAYER_ID_FILE_PATH: String = "user://timedefense_player_id.txt"
 const MAX_STORED_RUNS: int = 60
 const MAX_EVENTS_PER_RUN: int = 260
 
+# Dedicated TimeDefense telemetry section on user's Supabase project (RLS-isolated public.timedefense_runs)
+const SUPABASE_URL: String = "https://ojtcgdsryjylpryevurl.supabase.co"
+const SUPABASE_ANON_KEY: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qdGNnZHNyeWp5bHByeWV2dXJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDEzOTUsImV4cCI6MjEwNDMxNzM5NX0.WCTmrNwn3P2j-NemAk4Vu6ZTzVYcMIglqde5UjR3gjI"
+const SUPABASE_TABLE: String = "timedefense_runs"
+
 var runs: Array = []
 var current_run: Dictionary = {}
+var player_id: String = "anon_local"
+var cloud_sync_enabled: bool = true
+var cloud_sync_status: String = "Idle"
+var _synced_run_hashes: Dictionary = {}
+var _pending_native_queue: Array = []
+var _http_request: HTTPRequest = null
+var _http_busy: bool = false
+
 var _active_wave_rec: Dictionary = {}
 var _active_wave_open: bool = false
 var _session_counter: int = 0
@@ -22,10 +40,64 @@ var suppress_default_persistence: bool = false
 
 
 func _ready() -> void:
+	_init_player_id()
 	if DisplayServer.get_name() != "headless":
 		load_analytics()
+		if not OS.has_feature("web"):
+			_http_request = HTTPRequest.new()
+			_http_request.timeout = 12.0
+			add_child(_http_request)
+			_http_request.request_completed.connect(_on_native_http_completed)
 	_connect_signals()
 	_start_new_run()
+
+
+func _process(delta: float) -> void:
+	if current_run.is_empty() or GameState.mission == null or GameState.mission.is_over:
+		return
+	if delta <= 0.0 or delta > 1.0:
+		return
+	if GameState.is_speed_paused:
+		return
+	if GameState.is_wave_active:
+		var spd: float = GameState.game_speed
+		var bucket: String = "1x"
+		if spd >= 2.5:
+			bucket = "3x"
+		elif spd >= 1.5:
+			bucket = "2x"
+		var st: Dictionary = current_run["speed_time_sec"]
+		st[bucket] = float(st.get(bucket, 0.0)) + delta
+		current_run["_speed_weighted_sum"] = float(current_run.get("_speed_weighted_sum", 0.0)) + delta * spd
+		current_run["_speed_total_real_sec"] = float(current_run.get("_speed_total_real_sec", 0.0)) + delta
+	elif int(current_run.get("waves_started", 0)) > 0:
+		current_run["build_phase_sec"] = float(current_run.get("build_phase_sec", 0.0)) + delta
+
+
+func _init_player_id() -> void:
+	if DisplayServer.get_name() == "headless":
+		player_id = "headless_test"
+		return
+	if OS.has_feature("web"):
+		var web_pid = JavaScriptBridge.eval("window.ttdGetOrCreatePlayerId ? window.ttdGetOrCreatePlayerId() : ''")
+		if web_pid is String and web_pid != "":
+			player_id = web_pid
+			return
+	if FileAccess.file_exists(PLAYER_ID_FILE_PATH):
+		var f := FileAccess.open(PLAYER_ID_FILE_PATH, FileAccess.READ)
+		if f != null:
+			var existing: String = f.get_as_text().strip_edges()
+			f.close()
+			if existing != "":
+				player_id = existing
+				return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	player_id = "p_%d_%06x" % [int(Time.get_unix_time_from_system()), rng.randi_range(0, 0xFFFFFF)]
+	var wf := FileAccess.open(PLAYER_ID_FILE_PATH, FileAccess.WRITE)
+	if wf != null:
+		wf.store_string(player_id)
+		wf.close()
 
 
 func _connect_signals() -> void:
@@ -68,11 +140,13 @@ func _iso_now() -> String:
 func _start_new_run() -> void:
 	_session_counter += 1
 	var unix_ts: int = int(Time.get_unix_time_from_system())
-	var run_id: String = "run_%d_%d" % [unix_ts, _session_counter]
+	var run_id: String = "%s_%d_%d" % [player_id.substr(0, 12), unix_ts, _session_counter]
 	var m := GameState.mission
 	current_run = {
 		"run_id": run_id,
 		"schema_version": SCHEMA_VERSION,
+		"balance_version": Balance.BALANCE_VERSION,
+		"player_id": player_id,
 		"started_at": _iso_now(),
 		"ended_at": "",
 		"platform": _get_platform_tag(),
@@ -88,6 +162,7 @@ func _start_new_run() -> void:
 		"waves_completed": 0,
 		"endless_reached": false,
 		"duration_sim_sec": 0.0,
+		"build_phase_sec": 0.0,
 		"lives_remaining": m.lives if m != null else Balance.PLAYER_STARTING_LIVES,
 		"lives_lost_total": 0,
 		"enemy_base_hp_remaining": m.enemy_base_hp if m != null else Balance.ENEMY_BASE_MAX_HP,
@@ -100,9 +175,32 @@ func _start_new_run() -> void:
 		"early_call_bonus_total": 0,
 		"money_earned": 0,
 		"money_unspent_end": int(m.economy.get("money", 0)) if m != null else 0,
+		"avg_unspent_cash": 0.0,
 		"total_spent_towers": 0,
 		"sell_refunds_total": 0,
 		"research_earned": 0,
+		# Path penetration & challenge metrics
+		"max_enemy_progress_pct": 0.0,
+		"avg_kill_progress_pct": 0.0,
+		"max_boss_progress_pct": 0.0,
+		"boss_kill_progress_sum": 0.0,
+		"boss_kill_count": 0,
+		"kill_progress_sum": 0.0,
+		"kill_progress_count": 0,
+		"challenge_score": 0,
+		# Player behavior metrics
+		"zone_builds": {},
+		"upgrade_counts": {"damage": 0, "range": 0, "fire_rate": 0},
+		"combine_methods": {"drag_shop": 0, "two_tower": 0},
+		"speed_time_sec": {"1x": 0.0, "2x": 0.0, "3x": 0.0},
+		"avg_game_speed": 1.0,
+		"_speed_weighted_sum": 0.0,
+		"_speed_total_real_sec": 0.0,
+		"feature_usage": {
+			"target_mode_changes": 0,
+			"recipes_opened": 0,
+			"enemies_inspected": 0,
+		},
 		"meta_ranks_start": GameState.meta_research_ranks.duplicate(true),
 		"mutations_end": {"armoured": 0, "thaw": 0, "swift": 0},
 		"powers_used": {"rewind": 0, "pause": 0, "haste": 0},
@@ -125,6 +223,37 @@ func _is_run_meaningful(r: Dictionary) -> bool:
 		return true
 	var evs: Array = r.get("events", [])
 	return evs.size() >= 2
+
+
+func compute_run_challenge_score(r: Dictionary) -> int:
+	# 0-30: Too Easy / Stomp | 31-65: Moderate | 66-88: Sweet Spot / Tense | 89-100: Brutal
+	var lives_lost: float = float(r.get("lives_lost_total", 0))
+	var lives_score: float = clampf((lives_lost / float(Balance.PLAYER_STARTING_LIVES)) * 42.0, 0.0, 42.0)
+	var max_pen: float = float(r.get("max_enemy_progress_pct", 0.0))
+	var avg_pen: float = float(r.get("avg_kill_progress_pct", 0.0))
+	var boss_pen: float = float(r.get("max_boss_progress_pct", 0.0))
+	var pen_score: float = clampf((max_pen * 0.20) + (avg_pen * 0.16) + (boss_pen * 0.12), 0.0, 44.0)
+	var surges: float = float(r.get("surges_suffered", 0))
+	var surge_score: float = clampf(surges * 5.0, 0.0, 10.0)
+	var outcome_bonus: float = 10.0 if str(r.get("outcome", "")) == "lost" else 0.0
+	var avg_spd: float = float(r.get("avg_game_speed", 1.0))
+	var speed_ease_penalty: float = clampf((avg_spd - 2.0) * 6.0, 0.0, 6.0) if lives_lost == 0.0 else 0.0
+	return clampi(int(round(lives_score + pen_score + surge_score + outcome_bonus - speed_ease_penalty)), 0, 100)
+
+
+func _clean_run_for_export(r: Dictionary) -> Dictionary:
+	var snap: Dictionary = r.duplicate(true)
+	snap.erase("_speed_weighted_sum")
+	snap.erase("_speed_total_real_sec")
+	snap.erase("kill_progress_sum")
+	snap.erase("kill_progress_count")
+	snap.erase("boss_kill_progress_sum")
+	snap.erase("boss_kill_count")
+	var st: Dictionary = snap.get("speed_time_sec", {})
+	for k in st.keys():
+		st[k] = snappedf(float(st[k]), 0.1)
+	snap["build_phase_sec"] = snappedf(float(snap.get("build_phase_sec", 0.0)), 0.1)
+	return snap
 
 
 func _sync_run_snapshot() -> void:
@@ -151,6 +280,28 @@ func _sync_run_snapshot() -> void:
 	current_run["money_earned"] = int(m.stats.get("money_earned", 0))
 	current_run["money_unspent_end"] = int(m.economy.get("money", 0))
 	current_run["research_earned"] = int(m.stats.get("research_earned", 0))
+
+	var wl: Array = current_run.get("wave_log", [])
+	if not wl.is_empty():
+		var sum_cash: float = 0.0
+		for rec in wl:
+			sum_cash += float(rec.get("money_end", 0))
+		current_run["avg_unspent_cash"] = snappedf(sum_cash / float(wl.size()), 1.0)
+	else:
+		current_run["avg_unspent_cash"] = float(m.economy.get("money", 0))
+
+	var kc: int = int(current_run.get("kill_progress_count", 0))
+	if kc > 0:
+		current_run["avg_kill_progress_pct"] = snappedf(float(current_run.get("kill_progress_sum", 0.0)) / float(kc), 0.1)
+	current_run["max_enemy_progress_pct"] = snappedf(float(current_run.get("max_enemy_progress_pct", 0.0)), 0.1)
+	current_run["max_boss_progress_pct"] = snappedf(float(current_run.get("max_boss_progress_pct", 0.0)), 0.1)
+
+	var spd_tot: float = float(current_run.get("_speed_total_real_sec", 0.0))
+	if spd_tot > 0.01:
+		current_run["avg_game_speed"] = snappedf(float(current_run.get("_speed_weighted_sum", spd_tot)) / spd_tot, 0.01)
+	else:
+		current_run["avg_game_speed"] = snappedf(GameState.game_speed, 0.01)
+
 	current_run["mutations_end"] = {
 		"armoured": int(m.mutations.get("armoured_stacks", 0)),
 		"thaw": int(m.mutations.get("thaw_stacks", 0)),
@@ -162,14 +313,15 @@ func _sync_run_snapshot() -> void:
 		"pause": int(pu.get("pause", 0)),
 		"haste": int(pu.get("haste", 0)),
 	}
+	current_run["challenge_score"] = compute_run_challenge_score(current_run)
 
 
-func _upsert_current_run() -> void:
+func _upsert_current_run() -> Dictionary:
 	if not _is_run_meaningful(current_run):
-		return
+		return {}
 	_sync_run_snapshot()
 	var rid: String = str(current_run.get("run_id", ""))
-	var snap: Dictionary = current_run.duplicate(true)
+	var snap: Dictionary = _clean_run_for_export(current_run)
 	var replaced: bool = false
 	for i in range(runs.size()):
 		if str(runs[i].get("run_id", "")) == rid:
@@ -181,6 +333,7 @@ func _upsert_current_run() -> void:
 	while runs.size() > MAX_STORED_RUNS:
 		runs.remove_at(0)
 	analytics_updated.emit()
+	return snap
 
 
 func _ensure_tower_bucket(tower_type: String) -> Dictionary:
@@ -243,7 +396,14 @@ func _close_active_wave(completed: bool) -> void:
 	_active_wave_rec["lives_lost"] = maxi(0, int(_active_wave_rec.get("lives_start", 0)) - int(_active_wave_rec["lives_end"]))
 	_active_wave_rec["tower_count"] = int(tc["total"])
 	_active_wave_rec["combo_count"] = int(tc["combos"])
-	current_run["wave_log"].append(_active_wave_rec.duplicate(true))
+	var wkc: int = int(_active_wave_rec.get("_kill_prog_cnt", 0))
+	_active_wave_rec["avg_kill_progress_pct"] = snappedf(float(_active_wave_rec.get("_kill_prog_sum", 0.0)) / float(wkc), 0.1) if wkc > 0 else 0.0
+	_active_wave_rec["max_progress_pct"] = snappedf(float(_active_wave_rec.get("max_progress_pct", 0.0)), 0.1)
+	_active_wave_rec["max_boss_progress_pct"] = snappedf(float(_active_wave_rec.get("max_boss_progress_pct", 0.0)), 0.1)
+	var clean_w: Dictionary = _active_wave_rec.duplicate(true)
+	clean_w.erase("_kill_prog_sum")
+	clean_w.erase("_kill_prog_cnt")
+	current_run["wave_log"].append(clean_w)
 	_active_wave_rec = {}
 	_active_wave_open = false
 
@@ -256,8 +416,10 @@ func _on_mission_reset() -> void:
 		current_run["outcome"] = "abandoned"
 		current_run["end_reason"] = "Restarted or switched level"
 		current_run["ended_at"] = _iso_now()
-		_upsert_current_run()
+		var snap: Dictionary = _upsert_current_run()
 		save_analytics()
+		if not snap.is_empty():
+			sync_run_to_supabase(snap)
 	_start_new_run()
 
 
@@ -282,6 +444,11 @@ func _on_wave_started(wave_num: int) -> void:
 		"lives_start": int(m.lives) if m != null else Balance.PLAYER_STARTING_LIVES,
 		"lives_end": int(m.lives) if m != null else Balance.PLAYER_STARTING_LIVES,
 		"lives_lost": 0,
+		"max_progress_pct": 0.0,
+		"avg_kill_progress_pct": 0.0,
+		"max_boss_progress_pct": 0.0,
+		"_kill_prog_sum": 0.0,
+		"_kill_prog_cnt": 0,
 		"leaks_by_enemy": {},
 		"kills_by_enemy": {},
 		"powers_used": {"rewind": 0, "pause": 0, "haste": 0},
@@ -297,8 +464,10 @@ func _on_wave_cleared(_wave_num: int) -> void:
 	if current_run.is_empty():
 		return
 	_close_active_wave(true)
-	_upsert_current_run()
+	var snap: Dictionary = _upsert_current_run()
 	save_analytics()
+	if not snap.is_empty():
+		sync_run_to_supabase(snap)
 
 
 func _on_enemy_killed(enemy_type: String, _money_gained: int, _research_gained: int, _world_pos: Vector2) -> void:
@@ -320,6 +489,7 @@ func _on_enemy_leaked(enemy_type: String, lives_lost: int, _world_pos: Vector2) 
 	if _active_wave_open:
 		var wl: Dictionary = _active_wave_rec["leaks_by_enemy"]
 		wl[enemy_type] = int(wl.get(enemy_type, 0)) + lives_lost
+	record_enemy_progress(enemy_type, 100.0, true)
 	_log_event("leak", {
 		"enemy": enemy_type,
 		"lives_lost": lives_lost,
@@ -354,11 +524,36 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 	current_run["outcome"] = outcome
 	current_run["end_reason"] = reason
 	current_run["ended_at"] = _iso_now()
-	_upsert_current_run()
+	var snap: Dictionary = _upsert_current_run()
 	save_analytics()
+	if not snap.is_empty():
+		sync_run_to_supabase(snap)
 
 
-# --- Direct Gameplay Instrumentation Hooks ---
+# --- Direct Gameplay & Behavior Instrumentation Hooks ---
+
+func record_enemy_progress(enemy_type: String, progress_pct: float, leaked: bool = false) -> void:
+	if current_run.is_empty():
+		return
+	var p: float = clampf(progress_pct, 0.0, 100.0)
+	current_run["max_enemy_progress_pct"] = maxf(float(current_run.get("max_enemy_progress_pct", 0.0)), p)
+	var is_boss: bool = (enemy_type == "juggernaut" or enemy_type == "colossus")
+	if is_boss:
+		current_run["max_boss_progress_pct"] = maxf(float(current_run.get("max_boss_progress_pct", 0.0)), p)
+		if not leaked:
+			current_run["boss_kill_progress_sum"] = float(current_run.get("boss_kill_progress_sum", 0.0)) + p
+			current_run["boss_kill_count"] = int(current_run.get("boss_kill_count", 0)) + 1
+	if not leaked:
+		current_run["kill_progress_sum"] = float(current_run.get("kill_progress_sum", 0.0)) + p
+		current_run["kill_progress_count"] = int(current_run.get("kill_progress_count", 0)) + 1
+	if _active_wave_open:
+		_active_wave_rec["max_progress_pct"] = maxf(float(_active_wave_rec.get("max_progress_pct", 0.0)), p)
+		if is_boss:
+			_active_wave_rec["max_boss_progress_pct"] = maxf(float(_active_wave_rec.get("max_boss_progress_pct", 0.0)), p)
+		if not leaked:
+			_active_wave_rec["_kill_prog_sum"] = float(_active_wave_rec.get("_kill_prog_sum", 0.0)) + p
+			_active_wave_rec["_kill_prog_cnt"] = int(_active_wave_rec.get("_kill_prog_cnt", 0)) + 1
+
 
 func record_tower_build(tower_type: String, cost: int, zone_label: String = "") -> void:
 	if current_run.is_empty():
@@ -367,17 +562,22 @@ func record_tower_build(tower_type: String, cost: int, zone_label: String = "") 
 	b["built"] = int(b["built"]) + 1
 	b["spent"] = int(b["spent"]) + cost
 	current_run["total_spent_towers"] = int(current_run.get("total_spent_towers", 0)) + cost
-	_log_event("build", {"type": tower_type, "cost": cost, "zone": zone_label})
+	var zkey: String = zone_label if zone_label != "" else "UNLABELED"
+	var zb: Dictionary = current_run["zone_builds"]
+	zb[zkey] = int(zb.get(zkey, 0)) + 1
+	_log_event("build", {"type": tower_type, "cost": cost, "zone": zkey})
 
 
-func record_tower_combine(type_a: String, type_b: String, combo_type: String, added_cost: int, combo_total_spent: int) -> void:
+func record_tower_combine(type_a: String, type_b: String, combo_type: String, added_cost: int, combo_total_spent: int, method: String = "drag_shop") -> void:
 	if current_run.is_empty():
 		return
 	var b: Dictionary = _ensure_tower_bucket(combo_type)
 	b["built"] = int(b["built"]) + 1
 	b["spent"] = int(b["spent"]) + maxi(added_cost, combo_total_spent)
 	current_run["total_spent_towers"] = int(current_run.get("total_spent_towers", 0)) + maxi(0, added_cost)
-	_log_event("combine", {"a": type_a, "b": type_b, "result": combo_type, "cost": added_cost})
+	var cm: Dictionary = current_run["combine_methods"]
+	cm[method] = int(cm.get(method, 0)) + 1
+	_log_event("combine", {"a": type_a, "b": type_b, "result": combo_type, "cost": added_cost, "method": method})
 
 
 func record_tower_upgrade(tower_type: String, stat_key: String, new_level: int, cost: int) -> void:
@@ -387,6 +587,8 @@ func record_tower_upgrade(tower_type: String, stat_key: String, new_level: int, 
 	b["spent"] = int(b["spent"]) + cost
 	b["upgrades"][stat_key] = int(b["upgrades"].get(stat_key, 0)) + 1
 	b["max_lvl"][stat_key] = maxi(int(b["max_lvl"].get(stat_key, 0)), new_level)
+	var uc: Dictionary = current_run["upgrade_counts"]
+	uc[stat_key] = int(uc.get(stat_key, 0)) + 1
 	current_run["total_spent_towers"] = int(current_run.get("total_spent_towers", 0)) + cost
 	_log_event("upgrade", {"type": tower_type, "stat": stat_key, "lvl": new_level, "cost": cost})
 
@@ -407,6 +609,13 @@ func record_tower_combat(tower_type: String, dealt_dmg: float, killed: bool) -> 
 	b["damage"] = float(b["damage"]) + maxf(0.0, dealt_dmg)
 	if killed:
 		b["kills"] = int(b["kills"]) + 1
+
+
+func record_feature_used(feature_key: String) -> void:
+	if current_run.is_empty():
+		return
+	var fu: Dictionary = current_run["feature_usage"]
+	fu[feature_key] = int(fu.get(feature_key, 0)) + 1
 
 
 func record_refinery_started(cost: int, next_count: int) -> void:
@@ -456,8 +665,130 @@ func record_endless_continue() -> void:
 	current_run["endless_reached"] = true
 	current_run["outcome"] = "in_progress"
 	_log_event("endless_start", {})
-	_upsert_current_run()
+	var snap: Dictionary = _upsert_current_run()
 	save_analytics()
+	if not snap.is_empty():
+		sync_run_to_supabase(snap)
+
+
+# --- Supabase Row Builder & Silent Cloud Sync ---
+
+func build_supabase_row(r: Dictionary) -> Dictionary:
+	var clean: Dictionary = _clean_run_for_export(r)
+	var ended_str: String = str(clean.get("ended_at", ""))
+	return {
+		"run_id": str(clean.get("run_id", "")),
+		"balance_version": str(clean.get("balance_version", Balance.BALANCE_VERSION)),
+		"player_id": str(clean.get("player_id", player_id)),
+		"platform": str(clean.get("platform", _get_platform_tag())),
+		"started_at": str(clean.get("started_at", _iso_now())),
+		"updated_at": _iso_now(),
+		"ended_at": ended_str if ended_str != "" else null,
+		"level": clampi(int(clean.get("level", 1)), 1, 5),
+		"level_name": str(clean.get("level_name", "Level 1")),
+		"difficulty": str(clean.get("difficulty", "standard")),
+		"is_sandbox": bool(clean.get("is_sandbox", false)),
+		"outcome": str(clean.get("outcome", "in_progress")),
+		"end_reason": str(clean.get("end_reason", "")),
+		"max_wave_reached": int(clean.get("max_wave_reached", 1)),
+		"waves_started": int(clean.get("waves_started", 0)),
+		"waves_completed": int(clean.get("waves_completed", 0)),
+		"endless_reached": bool(clean.get("endless_reached", false)),
+		"duration_sim_sec": snappedf(float(clean.get("duration_sim_sec", 0.0)), 0.1),
+		"build_phase_sec": snappedf(float(clean.get("build_phase_sec", 0.0)), 0.1),
+		"lives_remaining": int(clean.get("lives_remaining", 0)),
+		"lives_lost_total": int(clean.get("lives_lost_total", 0)),
+		"enemy_base_hp_remaining": int(clean.get("enemy_base_hp_remaining", 0)),
+		"charges_fired": int(clean.get("charges_fired", 0)),
+		"surges_suffered": int(clean.get("surges_suffered", 0)),
+		"refineries_owned": int(clean.get("refineries_owned", 0)),
+		"manipulator_level": int(clean.get("manipulator_level", 1)),
+		"early_calls": int(clean.get("early_calls", 0)),
+		"money_earned": int(clean.get("money_earned", 0)),
+		"money_unspent_end": int(clean.get("money_unspent_end", 0)),
+		"avg_unspent_cash": snappedf(float(clean.get("avg_unspent_cash", 0.0)), 0.1),
+		"max_enemy_progress_pct": snappedf(float(clean.get("max_enemy_progress_pct", 0.0)), 0.1),
+		"avg_kill_progress_pct": snappedf(float(clean.get("avg_kill_progress_pct", 0.0)), 0.1),
+		"max_boss_progress_pct": snappedf(float(clean.get("max_boss_progress_pct", 0.0)), 0.1),
+		"challenge_score": clampi(int(clean.get("challenge_score", 0)), 0, 100),
+		"avg_game_speed": snappedf(float(clean.get("avg_game_speed", 1.0)), 0.01),
+		"payload": clean,
+	}
+
+
+func sync_run_to_supabase(run_snap: Dictionary) -> bool:
+	if not cloud_sync_enabled or SUPABASE_URL == "" or SUPABASE_ANON_KEY == "":
+		return false
+	if DisplayServer.get_name() == "headless" or suppress_default_persistence:
+		return false
+	if run_snap.is_empty() or str(run_snap.get("run_id", "")) == "":
+		return false
+
+	var row: Dictionary = build_supabase_row(run_snap)
+	var body_json: String = JSON.stringify(row)
+	var rid: String = str(row["run_id"])
+	var sig: String = "%s|%s|%d|%d" % [str(row["outcome"]), str(row["waves_completed"]), int(row["lives_lost_total"]), int(row["charges_fired"])]
+	if _synced_run_hashes.get(rid, "") == sig:
+		return true
+
+	if OS.has_feature("web"):
+		var b64: String = Marshalls.utf8_to_base64(body_json)
+		JavaScriptBridge.eval("if (window.ttdSyncRunToSupabaseB64) window.ttdSyncRunToSupabaseB64('%s');" % b64)
+		_synced_run_hashes[rid] = sig
+		cloud_sync_status = "Cloud Sync Sent (Web)"
+		return true
+
+	if _http_request == null:
+		return false
+	_pending_native_queue.append({"rid": rid, "sig": sig, "body": body_json})
+	_pump_native_http_queue()
+	return true
+
+
+func sync_all_runs_now() -> int:
+	var all_r: Array = get_all_runs_including_active()
+	var count: int = 0
+	_synced_run_hashes.clear()
+	for r in all_r:
+		if sync_run_to_supabase(r):
+			count += 1
+	return count
+
+
+func _pump_native_http_queue() -> void:
+	if _http_busy or _http_request == null or _pending_native_queue.is_empty():
+		return
+	var item: Dictionary = _pending_native_queue.pop_front()
+	var endpoint: String = "%s/rest/v1/%s?on_conflict=run_id" % [SUPABASE_URL, SUPABASE_TABLE]
+	var headers := PackedStringArray([
+		"apikey: %s" % SUPABASE_ANON_KEY,
+		"Authorization: Bearer %s" % SUPABASE_ANON_KEY,
+		"Content-Type: application/json",
+		"Prefer: resolution=merge-duplicates,return=minimal",
+	])
+	_http_busy = true
+	_http_request.set_meta("sync_rid", str(item["rid"]))
+	_http_request.set_meta("sync_sig", str(item["sig"]))
+	var err: Error = _http_request.request(endpoint, headers, HTTPClient.METHOD_POST, str(item["body"]))
+	if err != OK:
+		_http_busy = false
+		cloud_sync_status = "Cloud Sync Offline (err %d)" % int(err)
+
+
+func _on_native_http_completed(_result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	_http_busy = false
+	var rid: String = str(_http_request.get_meta("sync_rid", ""))
+	var sig: String = str(_http_request.get_meta("sync_sig", ""))
+	if response_code >= 200 and response_code < 300:
+		if rid != "":
+			_synced_run_hashes[rid] = sig
+		cloud_sync_status = "Synced to Supabase"
+	elif response_code == 404:
+		cloud_sync_status = "Run SQL Setup (timedefense_runs table missing)"
+	else:
+		cloud_sync_status = "Cloud Sync Pending (HTTP %d)" % response_code
+	analytics_updated.emit()
+	_pump_native_http_queue()
 
 
 # --- Aggregation & Automated Balance Diagnostics ---
@@ -472,7 +803,7 @@ func get_all_runs_including_active() -> Array:
 	if _is_run_meaningful(current_run):
 		_sync_run_snapshot()
 		var crid: String = str(current_run.get("run_id", ""))
-		var snap: Dictionary = current_run.duplicate(true)
+		var snap: Dictionary = _clean_run_for_export(current_run)
 		if seen.has(crid):
 			out[int(seen[crid])] = snap
 		else:
@@ -480,7 +811,7 @@ func get_all_runs_including_active() -> Array:
 	return out
 
 
-func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
+func compute_aggregate_summary(include_sandbox: bool = false, version_filter: String = "") -> Dictionary:
 	var all_runs: Array = get_all_runs_including_active()
 	var filtered: Array = []
 	var sandbox_count: int = 0
@@ -489,6 +820,8 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 			sandbox_count += 1
 			if not include_sandbox:
 				continue
+		if version_filter != "" and str(r.get("balance_version", "")) != version_filter:
+			continue
 		filtered.append(r)
 
 	var total_runs: int = filtered.size()
@@ -501,9 +834,19 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 	var best_wave: int = 0
 	var total_surges: int = 0
 	var total_early_calls: int = 0
+	var sum_challenge: float = 0.0
+	var sum_kill_pen: float = 0.0
+	var kill_pen_runs: int = 0
+	var sum_boss_pen: float = 0.0
+	var boss_pen_runs: int = 0
+	var sum_game_speed: float = 0.0
 	var total_powers := {"rewind": 0, "pause": 0, "haste": 0}
+	var total_upgrades := {"damage": 0, "range": 0, "fire_rate": 0}
+	var total_combines := {"drag_shop": 0, "two_tower": 0}
+	var zone_builds: Dictionary = {}
 	var by_level: Dictionary = {}
 	var by_difficulty: Dictionary = {}
+	var by_version: Dictionary = {}
 	var wave_agg: Dictionary = {}
 	var enemy_leaks: Dictionary = {}
 	var enemy_kills: Dictionary = {}
@@ -527,10 +870,41 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 		best_wave = maxi(best_wave, mw)
 		total_surges += int(r.get("surges_suffered", 0))
 		total_early_calls += int(r.get("early_calls", 0))
+		var cs: int = int(r.get("challenge_score", compute_run_challenge_score(r)))
+		sum_challenge += float(cs)
+		var akp: float = float(r.get("avg_kill_progress_pct", 0.0))
+		if akp > 0.0:
+			sum_kill_pen += akp
+			kill_pen_runs += 1
+		var mbp: float = float(r.get("max_boss_progress_pct", 0.0))
+		if mbp > 0.0:
+			sum_boss_pen += mbp
+			boss_pen_runs += 1
+		sum_game_speed += float(r.get("avg_game_speed", 1.0))
 
 		var pu: Dictionary = r.get("powers_used", {})
 		for pk in ["rewind", "pause", "haste"]:
 			total_powers[pk] = int(total_powers[pk]) + int(pu.get(pk, 0))
+		var uc: Dictionary = r.get("upgrade_counts", {})
+		for uk in ["damage", "range", "fire_rate"]:
+			total_upgrades[uk] = int(total_upgrades[uk]) + int(uc.get(uk, 0))
+		var cm: Dictionary = r.get("combine_methods", {})
+		for ck in ["drag_shop", "two_tower"]:
+			total_combines[ck] = int(total_combines[ck]) + int(cm.get(ck, 0))
+		var zb: Dictionary = r.get("zone_builds", {})
+		for zk in zb.keys():
+			zone_builds[zk] = int(zone_builds.get(zk, 0)) + int(zb[zk])
+
+		var bv: String = str(r.get("balance_version", "v1.0"))
+		if not by_version.has(bv):
+			by_version[bv] = {"runs": 0, "wins": 0, "losses": 0, "sum_wave": 0, "sum_challenge": 0}
+		by_version[bv]["runs"] = int(by_version[bv]["runs"]) + 1
+		if oc == "won":
+			by_version[bv]["wins"] = int(by_version[bv]["wins"]) + 1
+		elif oc == "lost":
+			by_version[bv]["losses"] = int(by_version[bv]["losses"]) + 1
+		by_version[bv]["sum_wave"] = int(by_version[bv]["sum_wave"]) + mw
+		by_version[bv]["sum_challenge"] = int(by_version[bv]["sum_challenge"]) + cs
 
 		var lid: int = int(r.get("level", 1))
 		if not by_level.has(lid):
@@ -568,6 +942,7 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 					"runs_with_leak": 0,
 					"sum_money_end": 0.0,
 					"sum_duration": 0.0,
+					"sum_max_pen": 0.0,
 					"early_calls": 0,
 					"leaks_by_enemy": {},
 				}
@@ -579,6 +954,7 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 				wa["runs_with_leak"] = int(wa["runs_with_leak"]) + 1
 			wa["sum_money_end"] = float(wa["sum_money_end"]) + float(wl.get("money_end", 0))
 			wa["sum_duration"] = float(wa["sum_duration"]) + float(wl.get("duration_sec", 0.0))
+			wa["sum_max_pen"] = float(wa["sum_max_pen"]) + float(wl.get("max_progress_pct", 0.0))
 			if bool(wl.get("early_called", false)):
 				wa["early_calls"] = int(wa["early_calls"]) + 1
 			var wle: Dictionary = wl.get("leaks_by_enemy", {})
@@ -611,7 +987,6 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 			ta["damage"] = float(ta["damage"]) + float(rec.get("damage", 0.0))
 			ta["kills"] = int(ta["kills"]) + int(rec.get("kills", 0))
 
-	# Build sorted tower leaderboard & median Dmg/$
 	var tower_board: Array = []
 	var dpd_values: Array[float] = []
 	for tkey in tower_agg.keys():
@@ -631,11 +1006,8 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 		return float(a["damage"]) > float(b["damage"])
 	)
 	dpd_values.sort()
-	var median_dpd: float = 0.0
-	if not dpd_values.is_empty():
-		median_dpd = dpd_values[dpd_values.size() / 2]
+	var median_dpd: float = dpd_values[dpd_values.size() / 2] if not dpd_values.is_empty() else 0.0
 
-	# Wave hotspots sorted by total leaks desc
 	var wave_hotspots: Array = []
 	for w in wave_agg.keys():
 		var wa: Dictionary = wave_agg[w]
@@ -652,6 +1024,7 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 			"leaks_total": int(wa["leaks_total"]),
 			"leak_rate_pct": snappedf((float(wa["runs_with_leak"]) / float(plays)) * 100.0, 0.1),
 			"avg_money_end": snappedf(float(wa["sum_money_end"]) / float(plays), 1.0),
+			"avg_max_pen_pct": snappedf(float(wa["sum_max_pen"]) / float(plays), 0.1),
 			"avg_duration": snappedf(float(wa["sum_duration"]) / float(plays), 1.0),
 			"early_calls": int(wa["early_calls"]),
 			"top_leaker": top_e,
@@ -659,14 +1032,19 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 	wave_hotspots.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if int(a["leaks_total"]) != int(b["leaks_total"]):
 			return int(a["leaks_total"]) > int(b["leaks_total"])
-		return int(a["wave"]) < int(b["wave"])
+		return float(a["avg_max_pen_pct"]) > float(b["avg_max_pen_pct"])
 	)
 
 	var finished_runs: int = wins + losses + stalled
 	var win_rate_pct: float = (float(wins) / float(maxi(1, finished_runs))) * 100.0 if finished_runs > 0 else 0.0
 	var avg_max_wave: float = sum_max_wave / float(maxi(1, total_runs)) if total_runs > 0 else 0.0
+	var avg_challenge: float = sum_challenge / float(maxi(1, total_runs)) if total_runs > 0 else 0.0
+	var avg_kill_pen: float = sum_kill_pen / float(maxi(1, kill_pen_runs)) if kill_pen_runs > 0 else 0.0
+	var avg_boss_pen: float = sum_boss_pen / float(maxi(1, boss_pen_runs)) if boss_pen_runs > 0 else 0.0
+	var avg_speed: float = sum_game_speed / float(maxi(1, total_runs)) if total_runs > 0 else 1.0
 
 	var summary := {
+		"balance_version": Balance.BALANCE_VERSION,
 		"total_runs": total_runs,
 		"sandbox_runs_excluded": 0 if include_sandbox else sandbox_count,
 		"wins": wins,
@@ -677,9 +1055,17 @@ func compute_aggregate_summary(include_sandbox: bool = false) -> Dictionary:
 		"win_rate_pct": snappedf(win_rate_pct, 0.1),
 		"avg_max_wave": snappedf(avg_max_wave, 0.1),
 		"best_wave": best_wave,
+		"avg_challenge_score": snappedf(avg_challenge, 0.1),
+		"avg_kill_progress_pct": snappedf(avg_kill_pen, 0.1),
+		"avg_boss_progress_pct": snappedf(avg_boss_pen, 0.1),
+		"avg_game_speed": snappedf(avg_speed, 0.01),
 		"avg_surges_per_run": snappedf(float(total_surges) / float(maxi(1, total_runs)), 0.01),
 		"total_early_calls": total_early_calls,
 		"powers_used": total_powers,
+		"upgrade_counts": total_upgrades,
+		"combine_methods": total_combines,
+		"zone_builds": zone_builds,
+		"by_version": by_version,
 		"by_level": by_level,
 		"by_difficulty": by_difficulty,
 		"enemy_leaks": enemy_leaks,
@@ -697,26 +1083,33 @@ func _compute_balance_recommendations(s: Dictionary) -> Array[String]:
 	var recs: Array[String] = []
 	var total_runs: int = int(s["total_runs"])
 	if total_runs == 0:
-		recs.append("[READY] Play at least 1 non-sandbox run (or clear Wave 1) to start generating data-driven balance flags.")
+		recs.append("[READY] Play at least 1 non-sandbox run to stream telemetry to Supabase & generate balance diagnostics.")
 		return recs
+
+	var avg_cs: float = float(s["avg_challenge_score"])
+	var avg_kp: float = float(s["avg_kill_progress_pct"])
+	if avg_kp > 0.0 and avg_kp < 42.0 and float(s["avg_challenge_score"]) < 40.0:
+		recs.append("[TOO EASY / SPAWN-CAMPED] Avg enemy dies at %.0f%% path & Challenge Score is %.0f/100 — early/mid waves need more pressure." % [avg_kp, avg_cs])
+	elif avg_cs >= 85.0 and float(s["win_rate_pct"]) < 30.0:
+		recs.append("[OVERWHELMING] Avg Challenge Score is %.0f/100 with %.0f%% win rate — ease top choke wave or buff underperforming counters." % [avg_cs, float(s["win_rate_pct"])])
 
 	var finished: int = int(s["wins"]) + int(s["losses"]) + int(s["stalled"])
 	if finished >= 3:
 		var wr: float = float(s["win_rate_pct"])
 		if wr >= 85.0:
-			recs.append("[TOO EASY?] Win rate is %.0f%% across %d completed runs — consider tightening mid/late waves or trying Hard/Nightmare." % [wr, finished])
+			recs.append("[HIGH WIN RATE] %.0f%% win rate across %d runs — tighten waves or increase boss threat." % [wr, finished])
 		elif wr <= 20.0:
-			recs.append("[TOO HARD?] Win rate is %.0f%% across %d completed runs — check leak hotspots below to ease choke waves." % [wr, finished])
+			recs.append("[LOW WIN RATE] %.0f%% win rate across %d runs — inspect leak hotspots below." % [wr, finished])
 
 	var hotspots: Array = s["wave_hotspots"]
 	if not hotspots.is_empty() and int(hotspots[0]["leaks_total"]) > 0:
 		var h0: Dictionary = hotspots[0]
-		recs.append("[WAVE SPIKE] Wave %d is top leak wave (%d lives lost across %d plays, %.0f%% leak rate; top culprit: %s)." % [
-			int(h0["wave"]), int(h0["leaks_total"]), int(h0["plays"]), float(h0["leak_rate_pct"]),
+		recs.append("[WAVE SPIKE] Wave %d is top leak wave (%d lives lost, %.0f%% leak rate, avg max path %.0f%%; culprit: %s)." % [
+			int(h0["wave"]), int(h0["leaks_total"]), float(h0["leak_rate_pct"]), float(h0["avg_max_pen_pct"]),
 			str(h0["top_leaker"]) if str(h0["top_leaker"]) != "" else "mixed"
 		])
 		if float(h0["avg_money_end"]) >= 320.0:
-			recs.append("[ECONOMY SLACK] Avg unspent cash on Wave %d was $%.0f while leaking — upgrades/merges may feel too slow to build or unclear." % [
+			recs.append("[ECONOMY SLACK] Avg unspent cash on Wave %d was $%.0f while leaking — upgrades/merges may feel slow." % [
 				int(h0["wave"]), float(h0["avg_money_end"])
 			])
 
@@ -728,16 +1121,16 @@ func _compute_balance_recommendations(s: Dictionary) -> Array[String]:
 		if med_dpd > 1.0 and int(tb["built"]) >= 2:
 			var dpd: float = float(tb["dmg_per_dollar"])
 			if dpd >= med_dpd * 1.85:
-				recs.append("[OP CANDIDATE] %s deals %.1f Dmg/$ (%.1fx median %.1f) across %d builds — watch for overperformance." % [
+				recs.append("[OP CANDIDATE] %s deals %.1f Dmg/$ (%.1fx median %.1f) across %d builds." % [
 					str(tb["name"]), dpd, dpd / med_dpd, med_dpd, int(tb["built"])
 				])
 			elif dpd > 0.0 and dpd <= med_dpd * 0.45 and str(tb["type"]) != "slow" and str(tb["type"]) != "slow+slow":
-				recs.append("[WEAK CANDIDATE] %s averages only %.1f Dmg/$ (%.0f%% of median %.1f) — consider buffing damage or lowering cost." % [
-					str(tb["name"]), dpd, (dpd / med_dpd) * 100.0, med_dpd
+				recs.append("[WEAK CANDIDATE] %s averages %.1f Dmg/$ (%.0f%% of median) — buff candidate." % [
+					str(tb["name"]), dpd, (dpd / med_dpd) * 100.0
 				])
 
 	if total_runs >= 2 and used_combos < 5:
-		recs.append("[COMBO ADOPTION] Only %d / 21 tower combinations built so far — players may need stronger incentives or lower merge friction." % used_combos)
+		recs.append("[COMBO ADOPTION] Only %d / 21 combinations built so far." % used_combos)
 
 	var pu: Dictionary = s["powers_used"]
 	var total_p: int = int(pu["rewind"]) + int(pu["pause"]) + int(pu["haste"])
@@ -745,14 +1138,14 @@ func _compute_balance_recommendations(s: Dictionary) -> Array[String]:
 		for pk in ["rewind", "pause", "haste"]:
 			var share: float = float(pu[pk]) / float(total_p)
 			if share >= 0.72:
-				recs.append("[POWER SKEW] %s accounts for %.0f%% of all time power casts (%d/%d) — other powers may feel under-tuned." % [
+				recs.append("[POWER SKEW] %s accounts for %.0f%% of time power casts (%d/%d)." % [
 					pk.capitalize(), share * 100.0, int(pu[pk]), total_p
 				])
 	if float(s["avg_surges_per_run"]) >= 1.2:
-		recs.append("[SURGE PRESSURE] Averaging %.2f Surges/run — Surge deadline or visual warning may be catching players off guard." % float(s["avg_surges_per_run"]))
+		recs.append("[SURGE PRESSURE] Averaging %.2f Surges/run." % float(s["avg_surges_per_run"]))
 
 	if recs.is_empty():
-		recs.append("[HEALTHY] Win rate, economy, and tower efficiency are within target bands across %d tracked run(s)." % total_runs)
+		recs.append("[HEALTHY] Challenge Score (%.0f/100), path penetration (%.0f%%), and tower Dmg/$ are in target bands." % [avg_cs, avg_kp])
 	return recs
 
 
@@ -761,7 +1154,9 @@ func _compute_balance_recommendations(s: Dictionary) -> Array[String]:
 func export_payload_dict(include_sandbox: bool = true) -> Dictionary:
 	return {
 		"schema_version": SCHEMA_VERSION,
+		"balance_version": Balance.BALANCE_VERSION,
 		"game": "TimeDefense",
+		"player_id": player_id,
 		"exported_at": _iso_now(),
 		"summary": compute_aggregate_summary(false),
 		"runs": get_all_runs_including_active() if include_sandbox else get_all_runs_including_active().filter(func(r: Dictionary) -> bool: return not bool(r.get("is_sandbox", false))),
@@ -775,15 +1170,17 @@ func export_json_string(include_sandbox: bool = true) -> String:
 func build_ai_balance_report(include_sandbox: bool = false) -> String:
 	var s: Dictionary = compute_aggregate_summary(include_sandbox)
 	var lines: PackedStringArray = [
-		"# TimeDefense Real Playtest Analytics Report",
+		"# TimeDefense Real Playtest Analytics Report (%s)" % str(s["balance_version"]),
 		"Exported: %s | Runs: %d (W:%d L:%d Stalled:%d Aband:%d Active:%d | Sandbox excluded: %d)" % [
 			_iso_now(), int(s["total_runs"]), int(s["wins"]), int(s["losses"]), int(s["stalled"]), int(s["abandoned"]), int(s["active"]), int(s["sandbox_runs_excluded"])
 		],
-		"Win Rate: %.1f%% | Avg Max Wave: %.1f | Best Wave: %d | Avg Surges/Run: %.2f | Early Calls: %d" % [
-			float(s["win_rate_pct"]), float(s["avg_max_wave"]), int(s["best_wave"]), float(s["avg_surges_per_run"]), int(s["total_early_calls"])
+		"Win Rate: %.1f%% | Challenge Score: %.0f/100 | Avg Kill Path: %.0f%% | Avg Boss Peak: %.0f%% | Avg Speed: %.2fx" % [
+			float(s["win_rate_pct"]), float(s["avg_challenge_score"]), float(s["avg_kill_progress_pct"]), float(s["avg_boss_progress_pct"]), float(s["avg_game_speed"])
 		],
-		"Powers Used -> Rewind: %d | Pause: %d | Haste: %d | Median Tower Efficiency: %.1f Dmg/$" % [
-			int(s["powers_used"]["rewind"]), int(s["powers_used"]["pause"]), int(s["powers_used"]["haste"]), float(s["median_dmg_per_dollar"])
+		"Avg Max Wave: %.1f (Best W%d) | Surges/Run: %.2f | Early Calls: %d | Powers R:%d P:%d H:%d | Upgrades D:%d R:%d S:%d" % [
+			float(s["avg_max_wave"]), int(s["best_wave"]), float(s["avg_surges_per_run"]), int(s["total_early_calls"]),
+			int(s["powers_used"]["rewind"]), int(s["powers_used"]["pause"]), int(s["powers_used"]["haste"]),
+			int(s["upgrade_counts"]["damage"]), int(s["upgrade_counts"]["range"]), int(s["upgrade_counts"]["fire_rate"]),
 		],
 		"",
 		"## Automated Balance Flags",
@@ -792,15 +1189,15 @@ func build_ai_balance_report(include_sandbox: bool = false) -> String:
 		lines.append("- " + str(rec))
 
 	lines.append("")
-	lines.append("## Top Leak Waves (Wave | Plays | Total Leaks | Leak% | Avg Cash Left | Top Culprit)")
+	lines.append("## Top Leak / Tension Waves")
 	var wh: Array = s["wave_hotspots"]
 	var max_wh: int = mini(8, wh.size())
 	if max_wh == 0:
 		lines.append("- (no waves logged yet)")
 	for i in range(max_wh):
 		var h: Dictionary = wh[i]
-		lines.append("- W%d | plays=%d | leaks=%d (%.0f%%) | avg_cash=$%.0f | top=%s" % [
-			int(h["wave"]), int(h["plays"]), int(h["leaks_total"]), float(h["leak_rate_pct"]), float(h["avg_money_end"]),
+		lines.append("- W%d | plays=%d | leaks=%d (%.0f%%) | max_path=%.0f%% | avg_cash=$%.0f | top=%s" % [
+			int(h["wave"]), int(h["plays"]), int(h["leaks_total"]), float(h["leak_rate_pct"]), float(h["avg_max_pen_pct"]), float(h["avg_money_end"]),
 			str(h["top_leaker"]) if str(h["top_leaker"]) != "" else "none"
 		])
 
@@ -823,19 +1220,20 @@ func build_ai_balance_report(include_sandbox: bool = false) -> String:
 	var start_idx: int = maxi(0, all_r.size() - 5)
 	for i in range(all_r.size() - 1, start_idx - 1, -1):
 		var r: Dictionary = all_r[i]
-		lines.append("- [%s] Lv%d (%s%s) -> %s at W%d | Lives:%d | BaseHP:%d | Shots:%d | Surges:%d | CashEnd:$%d | Leaked:%s" % [
-			str(r.get("started_at", "")) .substr(0, 16),
+		lines.append("- [%s %s] Lv%d (%s%s) -> %s @ W%d | Score:%d/100 | KillPath:%.0f%% | BossPeak:%.0f%% | Lives:%d | Shots:%d | CashEnd:$%d" % [
+			str(r.get("balance_version", "v1.0")),
+			str(r.get("started_at", "")).substr(0, 16),
 			int(r.get("level", 1)),
 			str(r.get("difficulty", "standard")),
 			" SANDBOX" if bool(r.get("is_sandbox", false)) else "",
 			str(r.get("outcome", "")).to_upper(),
 			int(r.get("max_wave_reached", 1)),
+			int(r.get("challenge_score", 0)),
+			float(r.get("avg_kill_progress_pct", 0.0)),
+			float(r.get("max_boss_progress_pct", 0.0)),
 			int(r.get("lives_remaining", 0)),
-			int(r.get("enemy_base_hp_remaining", 0)),
 			int(r.get("charges_fired", 0)),
-			int(r.get("surges_suffered", 0)),
 			int(r.get("money_unspent_end", 0)),
-			JSON.stringify(r.get("leaks_by_enemy", {})),
 		])
 	return "\n".join(lines)
 
@@ -883,8 +1281,9 @@ func load_analytics(path: String = ANALYTICS_FILE_PATH) -> bool:
 
 func clear_analytics_history(path: String = ANALYTICS_FILE_PATH) -> void:
 	runs.clear()
+	_synced_run_hashes.clear()
 	_start_new_run()
-	if not (DisplayServer.get_name() == "headless" and path == ANALYTICS_FILE_PATH):
+	if not ((DisplayServer.get_name() == "headless" or suppress_default_persistence) and path == ANALYTICS_FILE_PATH):
 		save_analytics(path)
 	analytics_updated.emit()
 
@@ -907,7 +1306,7 @@ func download_json_export() -> String:
 		JavaScriptBridge.eval("if (window.ttdDownloadTextB64) window.ttdDownloadTextB64('%s', '%s', 'application/json');" % [b64, fname])
 		return "Downloaded %s" % fname
 	var out_path: String = "user://%s" % fname
-	if DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless" and not suppress_default_persistence:
 		var f := FileAccess.open(out_path, FileAccess.WRITE)
 		if f != null:
 			f.store_string(json_text)
