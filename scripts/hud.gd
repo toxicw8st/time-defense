@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+const GuidePortraitScript = preload("res://scripts/guide_portrait.gd")
+
 signal restart_requested
 signal start_wave_requested
 
@@ -173,6 +175,29 @@ var _sandbox_selected_wave: int = 1
 var _sandbox_spawn_qty: int = 1
 var _sandbox_collapsed: bool = false
 
+# Witty Guide (Chrono-Commander Vex) + Responsive Mobile Touch Grids
+var guide_panel: PanelContainer = null
+var guide_portrait: Control = null
+var guide_title_label: Label = null
+var guide_body_label: Label = null
+var guide_ack_button: Button = null
+var guide_dismiss_button: Button = null
+var _current_guide_beat: String = ""
+
+var build_buttons_grid: GridContainer = null
+var tower_buttons_grid: GridContainer = null
+var bottom_actions_grid: GridContainer = null
+var top_controls_row: HBoxContainer = null
+var start_level_grid: GridContainer = null
+var start_action_grid: GridContainer = null
+var pause_extra_grid: GridContainer = null
+var analytics_btns_grid: GridContainer = null
+var _right_scroll: ScrollContainer = null
+var _last_scroll_log_sec: float = -10.0
+var _current_layout_mode: String = "desktop"
+var _drag_started_in_right_panel: bool = false
+var _drag_is_touch: bool = false
+
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
 	"reinforced_shots",
@@ -189,6 +214,9 @@ func _ready() -> void:
 	surge_banner.visible = false
 	prompt_banner.visible = false
 	pause_overlay.visible = false
+	if guide_panel != null and _current_guide_beat != "startup":
+		guide_panel.visible = false
+		_current_guide_beat = ""
 	between_levels_overlay.visible = false
 	build_menu_box.visible = true
 	tower_panel_box.visible = false
@@ -201,9 +229,12 @@ func _ready() -> void:
 	manip_upgrade_button.pressed.connect(_on_manip_upgrade_pressed)
 
 	speed_pause_button.pressed.connect(func() -> void: GameState.toggle_speed_pause())
-	speed_1x_button.pressed.connect(func() -> void: GameState.set_game_speed(1.0))
-	speed_2x_button.pressed.connect(func() -> void: GameState.set_game_speed(2.0))
-	speed_3x_button.pressed.connect(func() -> void: GameState.set_game_speed(3.0))
+	speed_1x_button.text = "0.5x"
+	speed_2x_button.text = "1x"
+	speed_3x_button.text = "1.5x"
+	speed_1x_button.pressed.connect(func() -> void: GameState.set_game_speed(Balance.SPEED_OPTION_SLOW))
+	speed_2x_button.pressed.connect(func() -> void: GameState.set_game_speed(Balance.SPEED_OPTION_NORMAL))
+	speed_3x_button.pressed.connect(func() -> void: GameState.set_game_speed(Balance.SPEED_OPTION_FAST))
 	level_picker_button.pressed.connect(_toggle_between_levels_screen)
 	menu_button.pressed.connect(_toggle_pause_menu)
 	debug_button.pressed.connect(_toggle_debug_panel)
@@ -222,6 +253,7 @@ func _ready() -> void:
 	prompt_mute_button.pressed.connect(_on_prompt_mute_pressed)
 	pause_resume_button.pressed.connect(_toggle_pause_menu)
 	pause_restart_button.pressed.connect(_on_pause_restart_pressed)
+	pause_mute_check.text = "Dismiss Guide (Vex)"
 	pause_mute_check.toggled.connect(_on_pause_mute_toggled)
 	pause_mute_check.button_pressed = GameState.prompts_muted
 	_populate_how_time_works()
@@ -265,7 +297,10 @@ func _ready() -> void:
 	_build_research_buttons()
 	_build_start_menu()
 	_build_combine_and_sandbox_ui()
+	_setup_responsive_grids()
+	_build_guide_ui()
 	_setup_right_panel_buttons()
+	_hook_button_analytics(self)
 
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
@@ -303,6 +338,8 @@ func open_start_menu() -> void:
 	get_tree().paused = false
 	if start_menu_overlay != null:
 		start_menu_overlay.visible = true
+	if not GameState.prompts_muted and not GameState.guide_completed:
+		show_guide_startup()
 	_refresh_all()
 	_reapply_overlay_bounds()
 	call_deferred("_reapply_overlay_bounds")
@@ -311,7 +348,12 @@ func open_start_menu() -> void:
 func close_start_menu() -> void:
 	if start_menu_overlay != null:
 		start_menu_overlay.visible = false
+	if guide_panel != null and _current_guide_beat == "startup":
+		guide_panel.visible = false
+		_current_guide_beat = ""
+	_check_teaching_prompt()
 	_refresh_all()
+	_reapply_overlay_bounds()
 
 
 func open_between_levels_screen() -> void:
@@ -397,9 +439,13 @@ func _build_start_menu() -> void:
 	var sep1 := HSeparator.new()
 	vbox.add_child(sep1)
 
-	var lvl_row := HBoxContainer.new()
-	lvl_row.add_theme_constant_override("separation", 8)
-	vbox.add_child(lvl_row)
+	start_level_grid = GridContainer.new()
+	start_level_grid.name = "StartLevelGrid"
+	start_level_grid.columns = 5
+	start_level_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_level_grid.add_theme_constant_override("h_separation", 8)
+	start_level_grid.add_theme_constant_override("v_separation", 8)
+	vbox.add_child(start_level_grid)
 
 	var short_zone_tags: Dictionary = {
 		1: "4 Rows | 3 Blasts",
@@ -415,12 +461,13 @@ func _build_start_menu() -> void:
 		lbtn.name = "StartLevel%dButton" % lvl_id
 		lbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lbtn.custom_minimum_size = Vector2(0, 48)
+		lbtn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbtn.add_theme_font_size_override("font_size", 11)
 		lbtn.text = "%s\n(%s)" % [lcfg["short_name"], str(short_zone_tags.get(lvl_id, lcfg["zone_type"]))]
 		var captured_id: int = lvl_id
 		lbtn.pressed.connect(func() -> void: _select_level(captured_id))
 		UIIcons.apply_right_button_theme(lbtn, Color(0.32, 0.68, 0.96))
-		lvl_row.add_child(lbtn)
+		start_level_grid.add_child(lbtn)
 		start_level_buttons.append(lbtn)
 
 	# Wrap briefing/description in a ScrollContainer so autowrap Labels can NEVER push the Play button below the screen!
@@ -502,14 +549,19 @@ func _build_start_menu() -> void:
 		diff_row.add_child(dbtn)
 		start_diff_buttons[dk] = dbtn
 
-	var action_row := HBoxContainer.new()
-	action_row.add_theme_constant_override("separation", 12)
-	vbox.add_child(action_row)
+	start_action_grid = GridContainer.new()
+	start_action_grid.name = "StartActionGrid"
+	start_action_grid.columns = 5
+	start_action_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_action_grid.add_theme_constant_override("h_separation", 10)
+	start_action_grid.add_theme_constant_override("v_separation", 10)
+	vbox.add_child(start_action_grid)
 
 	start_play_button = Button.new()
 	start_play_button.name = "StartPlayButton"
 	start_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_play_button.custom_minimum_size = Vector2(0, 48)
+	start_play_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_play_button.add_theme_font_size_override("font_size", 13)
 	start_play_button.text = "LAUNCH LEVEL 1"
 	start_play_button.pressed.connect(func() -> void:
@@ -517,12 +569,13 @@ func _build_start_menu() -> void:
 		_launch_selected_level(false)
 	)
 	UIIcons.apply_right_button_theme(start_play_button, Color(0.28, 0.88, 0.62))
-	action_row.add_child(start_play_button)
+	start_action_grid.add_child(start_play_button)
 
 	start_sandbox_button = Button.new()
 	start_sandbox_button.name = "StartSandboxButton"
 	start_sandbox_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_sandbox_button.custom_minimum_size = Vector2(0, 48)
+	start_sandbox_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_sandbox_button.add_theme_font_size_override("font_size", 12)
 	start_sandbox_button.text = "SANDBOX (LV 1)"
 	start_sandbox_button.pressed.connect(func() -> void:
@@ -530,35 +583,40 @@ func _build_start_menu() -> void:
 		_launch_selected_level(true)
 	)
 	UIIcons.apply_right_button_theme(start_sandbox_button, Color(0.95, 0.72, 0.25))
-	action_row.add_child(start_sandbox_button)
+	start_action_grid.add_child(start_sandbox_button)
 
 	start_lab_button = Button.new()
 	start_lab_button.name = "StartLabButton"
 	start_lab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_lab_button.custom_minimum_size = Vector2(0, 48)
+	start_lab_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_lab_button.add_theme_font_size_override("font_size", 12)
 	start_lab_button.text = "RESEARCH LAB (META-UPGRADES)"
 	start_lab_button.pressed.connect(open_between_levels_screen)
 	UIIcons.apply_right_button_theme(start_lab_button, Color(0.42, 0.72, 0.96))
-	action_row.add_child(start_lab_button)
+	start_action_grid.add_child(start_lab_button)
 
 	start_download_button = Button.new()
 	start_download_button.name = "StartDownloadButton"
+	start_download_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_download_button.custom_minimum_size = Vector2(128, 48)
+	start_download_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_download_button.add_theme_font_size_override("font_size", 11)
 	start_download_button.text = "INSTALL / APP"
 	start_download_button.pressed.connect(_on_download_button_pressed)
 	UIIcons.apply_right_button_theme(start_download_button, Color(0.68, 0.52, 0.95))
-	action_row.add_child(start_download_button)
+	start_action_grid.add_child(start_download_button)
 
 	start_analytics_button = Button.new()
 	start_analytics_button.name = "StartAnalyticsButton"
+	start_analytics_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_analytics_button.custom_minimum_size = Vector2(124, 48)
+	start_analytics_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	start_analytics_button.add_theme_font_size_override("font_size", 11)
 	start_analytics_button.text = "ANALYTICS"
 	start_analytics_button.pressed.connect(open_analytics_overlay)
 	UIIcons.apply_right_button_theme(start_analytics_button, Color(0.28, 0.86, 0.96))
-	action_row.add_child(start_analytics_button)
+	start_action_grid.add_child(start_analytics_button)
 
 	# Also add "Main Menu" buttons to PauseOverlay and EndOverlay
 	var pause_btns := get_node_or_null("PauseOverlay/Margin/VBox/PauseButtons") as HBoxContainer
@@ -602,11 +660,14 @@ func _build_start_menu() -> void:
 	# Pause Overlay settings (Auto-Wave, Mute SFX, Crit Popups, 21 Recipes)
 	var pause_vbox := get_node_or_null("PauseOverlay/Margin/VBox") as VBoxContainer
 	if pause_vbox != null:
-		var opts_row := HBoxContainer.new()
-		opts_row.name = "PauseExtraOptions"
-		opts_row.add_theme_constant_override("separation", 12)
-		pause_vbox.add_child(opts_row)
-		pause_vbox.move_child(opts_row, pause_mute_check.get_index() + 1)
+		pause_extra_grid = GridContainer.new()
+		pause_extra_grid.name = "PauseExtraOptions"
+		pause_extra_grid.columns = 5
+		pause_extra_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pause_extra_grid.add_theme_constant_override("h_separation", 12)
+		pause_extra_grid.add_theme_constant_override("v_separation", 8)
+		pause_vbox.add_child(pause_extra_grid)
+		pause_vbox.move_child(pause_extra_grid, pause_mute_check.get_index() + 1)
 
 		pause_auto_wave_check = CheckBox.new()
 		pause_auto_wave_check.name = "PauseAutoWaveCheck"
@@ -616,7 +677,7 @@ func _build_start_menu() -> void:
 			GameState.auto_wave_enabled = on
 			GameState.save_meta_progress()
 		)
-		opts_row.add_child(pause_auto_wave_check)
+		pause_extra_grid.add_child(pause_auto_wave_check)
 
 		pause_sfx_mute_check = CheckBox.new()
 		pause_sfx_mute_check.name = "PauseSfxMuteCheck"
@@ -627,7 +688,7 @@ func _build_start_menu() -> void:
 				SfxManager.set_muted(on)
 			GameState.save_meta_progress()
 		)
-		opts_row.add_child(pause_sfx_mute_check)
+		pause_extra_grid.add_child(pause_sfx_mute_check)
 
 		pause_dmg_popups_check = CheckBox.new()
 		pause_dmg_popups_check.name = "PauseDmgPopupsCheck"
@@ -637,7 +698,7 @@ func _build_start_menu() -> void:
 			GameState.show_damage_numbers = on
 			GameState.save_meta_progress()
 		)
-		opts_row.add_child(pause_dmg_popups_check)
+		pause_extra_grid.add_child(pause_dmg_popups_check)
 
 		pause_recipes_button = Button.new()
 		pause_recipes_button.name = "PauseRecipesButton"
@@ -648,7 +709,7 @@ func _build_start_menu() -> void:
 			open_recipes_overlay()
 		)
 		UIIcons.apply_right_button_theme(pause_recipes_button, Color(0.95, 0.78, 0.30))
-		opts_row.add_child(pause_recipes_button)
+		pause_extra_grid.add_child(pause_recipes_button)
 
 		pause_analytics_button = Button.new()
 		pause_analytics_button.name = "PauseAnalyticsButton"
@@ -659,7 +720,7 @@ func _build_start_menu() -> void:
 			open_analytics_overlay()
 		)
 		UIIcons.apply_right_button_theme(pause_analytics_button, Color(0.28, 0.86, 0.96))
-		opts_row.add_child(pause_analytics_button)
+		pause_extra_grid.add_child(pause_analytics_button)
 
 
 func _build_combine_and_sandbox_ui() -> void:
@@ -708,6 +769,7 @@ func _build_combine_and_sandbox_ui() -> void:
 	var r_title := Label.new()
 	r_title.text = "21 TOWER COMBINATIONS — DRAG A BASE TOWER ONTO ANOTHER OR TAP COMBINE"
 	r_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	r_title.add_theme_font_size_override("font_size", 13)
 	r_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.38))
 	r_top.add_child(r_title)
@@ -759,6 +821,7 @@ func _build_combine_and_sandbox_ui() -> void:
 	var a_title := Label.new()
 	a_title.text = "PLAYTEST ANALYTICS & REAL-DATA BALANCE TELEMETRY"
 	a_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	a_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	a_title.add_theme_font_size_override("font_size", 13)
 	a_title.add_theme_color_override("font_color", Color(0.45, 0.94, 1.0))
 	a_top.add_child(a_title)
@@ -780,6 +843,8 @@ func _build_combine_and_sandbox_ui() -> void:
 
 	analytics_kpi_label = Label.new()
 	analytics_kpi_label.name = "AnalyticsKpiLabel"
+	analytics_kpi_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	analytics_kpi_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	analytics_kpi_label.add_theme_font_size_override("font_size", 11)
 	analytics_kpi_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.42))
 	a_vbox.add_child(analytics_kpi_label)
@@ -803,19 +868,26 @@ func _build_combine_and_sandbox_ui() -> void:
 
 	analytics_status_label = Label.new()
 	analytics_status_label.name = "AnalyticsStatusLabel"
+	analytics_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	analytics_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	analytics_status_label.add_theme_font_size_override("font_size", 11)
 	analytics_status_label.add_theme_color_override("font_color", Color(0.62, 0.96, 0.72))
 	analytics_status_label.text = "Play runs auto-save on every wave clear & mission end. Copy AI Report and paste into chat to rebalance from your data."
 	a_vbox.add_child(analytics_status_label)
 
-	var a_btns := HBoxContainer.new()
-	a_btns.add_theme_constant_override("separation", 8)
-	a_vbox.add_child(a_btns)
+	analytics_btns_grid = GridContainer.new()
+	analytics_btns_grid.name = "AnalyticsButtonsGrid"
+	analytics_btns_grid.columns = 5
+	analytics_btns_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	analytics_btns_grid.add_theme_constant_override("h_separation", 8)
+	analytics_btns_grid.add_theme_constant_override("v_separation", 8)
+	a_vbox.add_child(analytics_btns_grid)
 
 	var btn_copy_ai := Button.new()
 	btn_copy_ai.name = "AnalyticsCopyReportButton"
 	btn_copy_ai.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_copy_ai.custom_minimum_size = Vector2(0, 34)
+	btn_copy_ai.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	btn_copy_ai.text = "Copy AI Report"
 	btn_copy_ai.pressed.connect(func() -> void:
 		if AnalyticsManager != null:
@@ -823,12 +895,13 @@ func _build_combine_and_sandbox_ui() -> void:
 			analytics_status_label.text = "Copied AI Balance Report to clipboard! Paste it directly in chat to tune towers & waves."
 	)
 	UIIcons.apply_right_button_theme(btn_copy_ai, Color(0.28, 0.88, 0.62))
-	a_btns.add_child(btn_copy_ai)
+	analytics_btns_grid.add_child(btn_copy_ai)
 
 	var btn_copy_json := Button.new()
 	btn_copy_json.name = "AnalyticsCopyJsonButton"
 	btn_copy_json.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_copy_json.custom_minimum_size = Vector2(0, 34)
+	btn_copy_json.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	btn_copy_json.text = "Copy Raw JSON"
 	btn_copy_json.pressed.connect(func() -> void:
 		if AnalyticsManager != null:
@@ -836,24 +909,26 @@ func _build_combine_and_sandbox_ui() -> void:
 			analytics_status_label.text = "Copied full JSON telemetry payload to clipboard (importable into analytics.html)."
 	)
 	UIIcons.apply_right_button_theme(btn_copy_json, Color(0.38, 0.72, 0.98))
-	a_btns.add_child(btn_copy_json)
+	analytics_btns_grid.add_child(btn_copy_json)
 
 	var btn_dl_json := Button.new()
 	btn_dl_json.name = "AnalyticsDownloadJsonButton"
 	btn_dl_json.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_dl_json.custom_minimum_size = Vector2(0, 34)
+	btn_dl_json.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	btn_dl_json.text = "Export .JSON"
 	btn_dl_json.pressed.connect(func() -> void:
 		if AnalyticsManager != null:
 			analytics_status_label.text = AnalyticsManager.download_json_export()
 	)
 	UIIcons.apply_right_button_theme(btn_dl_json, Color(0.68, 0.54, 0.96))
-	a_btns.add_child(btn_dl_json)
+	analytics_btns_grid.add_child(btn_dl_json)
 
 	var btn_web_dash := Button.new()
 	btn_web_dash.name = "AnalyticsOpenDashboardButton"
 	btn_web_dash.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_web_dash.custom_minimum_size = Vector2(0, 34)
+	btn_web_dash.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	btn_web_dash.text = "Visual Dashboard"
 	btn_web_dash.pressed.connect(func() -> void:
 		if AnalyticsManager != null:
@@ -863,11 +938,13 @@ func _build_combine_and_sandbox_ui() -> void:
 				analytics_status_label.text = "Open https://toxicw8st.github.io/time-defense/analytics.html and paste/drop your JSON export."
 	)
 	UIIcons.apply_right_button_theme(btn_web_dash, Color(0.95, 0.76, 0.28))
-	a_btns.add_child(btn_web_dash)
+	analytics_btns_grid.add_child(btn_web_dash)
 
 	analytics_reset_button = Button.new()
 	analytics_reset_button.name = "AnalyticsResetButton"
+	analytics_reset_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	analytics_reset_button.custom_minimum_size = Vector2(116, 34)
+	analytics_reset_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	analytics_reset_button.text = "Reset Data"
 	analytics_reset_button.pressed.connect(func() -> void:
 		if not _analytics_reset_armed:
@@ -883,7 +960,7 @@ func _build_combine_and_sandbox_ui() -> void:
 		_refresh_analytics_overlay()
 	)
 	UIIcons.apply_right_button_theme(analytics_reset_button, Color(0.92, 0.42, 0.42))
-	a_btns.add_child(analytics_reset_button)
+	analytics_btns_grid.add_child(analytics_reset_button)
 
 	# 1d) Build Floating Enemy Inspector Card (shown when tapping any active enemy on path)
 	enemy_inspector_panel = PanelContainer.new()
@@ -1279,9 +1356,12 @@ func _populate_recipes_list() -> void:
 			var is_same: bool = (i == j)
 			row.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.12, 0.20, 0.96), Color(0.95, 0.78, 0.30) if is_same else Color(0.35, 0.66, 0.92), 6, 8.0, 5.0))
 			var rv := VBoxContainer.new()
+			rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			rv.add_theme_constant_override("separation", 2)
 			row.add_child(rv)
 			var top_l := Label.new()
+			top_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			top_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			top_l.add_theme_font_size_override("font_size", 12)
 			top_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42) if is_same else Color(0.52, 0.94, 1.0))
 			top_l.text = "%s + %s  =>  %s  ($%d total | +$%d merge | Rng %.0f | %.2f/s)" % [
@@ -1289,11 +1369,190 @@ func _populate_recipes_list() -> void:
 			]
 			rv.add_child(top_l)
 			var desc_l := Label.new()
+			desc_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			desc_l.add_theme_font_size_override("font_size", 10)
 			desc_l.add_theme_color_override("font_color", Color(0.86, 0.92, 0.98))
 			desc_l.text = "%s — %s" % [str(cfg["damage_type_label"]), role]
 			rv.add_child(desc_l)
 			recipes_list_box.add_child(row)
+	if _current_layout_mode == "portrait":
+		_scale_overlay_typography(recipes_list_box, true)
+
+
+func _build_guide_ui() -> void:
+	guide_panel = PanelContainer.new()
+	guide_panel.name = "GuidePanel"
+	guide_panel.visible = false
+	guide_panel.clip_contents = true
+	guide_panel.position = Vector2(180.0, 244.0)
+	guide_panel.size = Vector2(580.0, 128.0)
+	guide_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.10, 0.18, 0.97), Color(0.32, 0.92, 1.0), 10, 10.0, 8.0))
+	add_child(guide_panel)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 10)
+	guide_panel.add_child(hbox)
+
+	guide_portrait = GuidePortraitScript.new()
+	guide_portrait.name = "GuidePortrait"
+	guide_portrait.custom_minimum_size = Vector2(72, 72)
+	guide_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hbox.add_child(guide_portrait)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	hbox.add_child(vbox)
+
+	guide_title_label = Label.new()
+	guide_title_label.name = "GuideTitleLabel"
+	guide_title_label.add_theme_font_size_override("font_size", 12)
+	guide_title_label.add_theme_color_override("font_color", Color(0.42, 0.96, 1.0))
+	guide_title_label.text = "CHRONO-COMMANDER VEX"
+	vbox.add_child(guide_title_label)
+
+	var gscroll := ScrollContainer.new()
+	gscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gscroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(gscroll)
+
+	guide_body_label = Label.new()
+	guide_body_label.name = "GuideBodyLabel"
+	guide_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	guide_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guide_body_label.add_theme_font_size_override("font_size", 11)
+	guide_body_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0))
+	gscroll.add_child(guide_body_label)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(btn_row)
+
+	guide_ack_button = Button.new()
+	guide_ack_button.name = "GuideAckButton"
+	guide_ack_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	guide_ack_button.custom_minimum_size = Vector2(0, 28)
+	guide_ack_button.add_theme_font_size_override("font_size", 11)
+	guide_ack_button.text = "Got It!"
+	guide_ack_button.pressed.connect(_on_guide_ack_pressed)
+	UIIcons.apply_right_button_theme(guide_ack_button, Color(0.28, 0.88, 0.65))
+	btn_row.add_child(guide_ack_button)
+
+	guide_dismiss_button = Button.new()
+	guide_dismiss_button.name = "GuideDismissButton"
+	guide_dismiss_button.custom_minimum_size = Vector2(124, 28)
+	guide_dismiss_button.add_theme_font_size_override("font_size", 11)
+	guide_dismiss_button.text = "Dismiss Vex"
+	guide_dismiss_button.pressed.connect(_on_guide_dismiss_all_pressed)
+	UIIcons.apply_right_button_theme(guide_dismiss_button, Color(0.92, 0.45, 0.45))
+	btn_row.add_child(guide_dismiss_button)
+
+
+func _setup_responsive_grids() -> void:
+	_right_scroll = get_node_or_null("RightPanel/Margin/VBox/Scroll") as ScrollContainer
+	if _right_scroll != null:
+		var vbar: VScrollBar = _right_scroll.get_v_scroll_bar()
+		if vbar != null:
+			vbar.value_changed.connect(func(_val: float) -> void:
+				var now_sec: float = float(Time.get_ticks_msec()) * 0.001
+				if now_sec - _last_scroll_log_sec >= 0.65:
+					_last_scroll_log_sec = now_sec
+					if AnalyticsManager != null:
+						AnalyticsManager.record_ui_scroll()
+			)
+
+	# 1) Build shop 1-col (desktop/landscape) <-> 2-col touch grid (portrait)
+	if build_menu_box != null and build_buttons_grid == null:
+		build_buttons_grid = GridContainer.new()
+		build_buttons_grid.name = "BuildButtonsGrid"
+		build_buttons_grid.columns = 1
+		build_buttons_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		build_buttons_grid.add_theme_constant_override("h_separation", 6)
+		build_buttons_grid.add_theme_constant_override("v_separation", 4)
+		build_menu_box.add_child(build_buttons_grid)
+		var shop_btns: Array[Button] = [
+			build_blaster_button, build_mortar_button, build_laser_button,
+			build_slow_button, build_railgun_button, build_annihilator_button,
+		]
+		if build_recipes_button != null:
+			shop_btns.append(build_recipes_button)
+		for b in shop_btns:
+			if b != null and b.get_parent() != null:
+				b.reparent(build_buttons_grid)
+				b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# 2) Selected tower actions 1-col (desktop/landscape) <-> 2-col touch grid (portrait)
+	if tower_panel_box != null and tower_buttons_grid == null:
+		tower_buttons_grid = GridContainer.new()
+		tower_buttons_grid.name = "TowerButtonsGrid"
+		tower_buttons_grid.columns = 1
+		tower_buttons_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tower_buttons_grid.add_theme_constant_override("h_separation", 6)
+		tower_buttons_grid.add_theme_constant_override("v_separation", 4)
+		tower_panel_box.add_child(tower_buttons_grid)
+		var t_btns: Array[Button] = [
+			target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button,
+		]
+		if combine_button != null:
+			t_btns.append(combine_button)
+		t_btns.append(sell_button)
+		for b in t_btns:
+			if b != null and b.get_parent() != null:
+				b.reparent(tower_buttons_grid)
+				b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# 3) Bottom bar actions 6-col (1 row desktop/landscape) <-> 3-col (2 chunky rows portrait)
+	var bot_vbox := get_node_or_null("BottomBar/VBox") as VBoxContainer
+	var old_row2 := get_node_or_null("BottomBar/VBox/Row2") as HBoxContainer
+	if bot_vbox != null and old_row2 != null and bottom_actions_grid == null:
+		bottom_actions_grid = GridContainer.new()
+		bottom_actions_grid.name = "BottomActionsGrid"
+		bottom_actions_grid.columns = 6
+		bottom_actions_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bottom_actions_grid.add_theme_constant_override("h_separation", 8)
+		bottom_actions_grid.add_theme_constant_override("v_separation", 8)
+		bot_vbox.add_child(bottom_actions_grid)
+		bot_vbox.move_child(bottom_actions_grid, old_row2.get_index())
+		for b in [rewind_button, pause_button, haste_button, refinery_button, charge_button, start_wave_button]:
+			if b != null and b.get_parent() != null:
+				b.reparent(bottom_actions_grid)
+				b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		old_row2.visible = false
+
+	# 4) Dedicated Portrait Row 3 inside TopBar so speed + utility buttons get chunky thumb targets without overflowing 1280px
+	var top_vbox := get_node_or_null("TopBar/VBox") as VBoxContainer
+	if top_vbox != null and top_controls_row == null:
+		top_controls_row = HBoxContainer.new()
+		top_controls_row.name = "PortraitControlsRow"
+		top_controls_row.visible = false
+		top_controls_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top_controls_row.add_theme_constant_override("separation", 8)
+		top_vbox.add_child(top_controls_row)
+
+
+func _hook_button_analytics(root: Node) -> void:
+	if root is BaseButton:
+		var btn: BaseButton = root as BaseButton
+		if not btn.has_meta("_td_analytics_hooked"):
+			btn.set_meta("_td_analytics_hooked", true)
+			var bname: String = btn.name
+			btn.pressed.connect(func() -> void:
+				if AnalyticsManager != null:
+					AnalyticsManager.record_button_press(bname, false)
+			)
+			btn.gui_input.connect(func(ev: InputEvent) -> void:
+				if not btn.disabled:
+					return
+				var pressed_ev: bool = (ev is InputEventScreenTouch and ev.pressed) or (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and ev.device != InputEvent.DEVICE_ID_EMULATION)
+				if pressed_ev and AnalyticsManager != null:
+					AnalyticsManager.record_button_press(bname, true)
+			)
+	for ch in root.get_children():
+		_hook_button_analytics(ch)
 
 
 func _build_research_buttons() -> void:
@@ -1440,15 +1699,20 @@ func _connect_tower_drag(btn: Button, tower_type: String) -> void:
 		if GameState.mission.is_over:
 			return
 		var cost: int = int(Balance.TOWERS[tower_type]["cost"])
-		if GameState.mission.economy["money"] < cost:
+		if not GameState.is_sandbox_mode and GameState.mission.economy["money"] < cost:
 			return
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
 			_drag_candidate_type = tower_type
 			_drag_start_screen_pos = ev.global_position
+			_drag_started_in_right_panel = right_panel.get_global_rect().has_point(ev.global_position)
+			_drag_is_touch = false
 			_is_dragging_tower = false
 		elif ev is InputEventScreenTouch and ev.pressed:
+			var gpos: Vector2 = btn.get_global_transform_with_canvas() * ev.position
 			_drag_candidate_type = tower_type
-			_drag_start_screen_pos = btn.get_global_transform_with_canvas() * ev.position
+			_drag_start_screen_pos = gpos
+			_drag_started_in_right_panel = right_panel.get_global_rect().has_point(gpos)
+			_drag_is_touch = true
 			_is_dragging_tower = false
 	)
 
@@ -1480,7 +1744,14 @@ func _input(event: InputEvent) -> void:
 	if _drag_candidate_type != "":
 		if event is InputEventMouseMotion or event is InputEventScreenDrag:
 			var gpos: Vector2 = event.position
-			if not _is_dragging_tower and gpos.distance_to(_drag_start_screen_pos) >= 8.0:
+			var delta_v: Vector2 = gpos - _drag_start_screen_pos
+			var threshold: float = 22.0 if (_drag_is_touch or _current_layout_mode == "portrait") else 10.0
+			if not _is_dragging_tower and delta_v.length() >= threshold:
+				# On touch devices in scrollable single-column landscape, let mostly-vertical swipes scroll smoothly!
+				if _drag_is_touch and _drag_started_in_right_panel and _current_layout_mode != "portrait" and absf(delta_v.y) > absf(delta_v.x) * 1.25:
+					_drag_candidate_type = ""
+					_is_dragging_tower = false
+					return
 				_is_dragging_tower = true
 				if map_ref != null:
 					map_ref.set_pending_build_type(_drag_candidate_type)
@@ -1516,14 +1787,23 @@ func _refresh_all() -> void:
 	var shot_dmg: int = base_attack_ref.get_shot_damage() if base_attack_ref != null else Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE
 	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(shot_dmg)))
 	var charge_pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0)) if base_attack_ref != null else 0
-	enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d" % [
-		m.enemy_base_hp,
-		Balance.ENEMY_BASE_MAX_HP,
-		charge_pct,
-		Balance.BASE_ATTACK_COST,
-		shot_dmg,
-		shots_left,
-	]
+	if _current_layout_mode == "portrait":
+		enemy_base_label.text = "Base: %d/%d HP | Chg %d%% | $%d | %d shots" % [
+			m.enemy_base_hp,
+			Balance.ENEMY_BASE_MAX_HP,
+			charge_pct,
+			Balance.BASE_ATTACK_COST,
+			shots_left,
+		]
+	else:
+		enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d" % [
+			m.enemy_base_hp,
+			Balance.ENEMY_BASE_MAX_HP,
+			charge_pct,
+			Balance.BASE_ATTACK_COST,
+			shot_dmg,
+			shots_left,
+		]
 
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
 	var mode_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else (" [ENDLESS]" if GameState.is_endless_mode else "")
@@ -1543,7 +1823,7 @@ func _refresh_all() -> void:
 
 	var mins: int = int(GameState.mission_elapsed_seconds) / 60
 	var secs: int = int(GameState.mission_elapsed_seconds) % 60
-	clock_label.text = "Time: %02d:%02d (%.0fx)" % [mins, secs, 0.0 if GameState.is_speed_paused else GameState.game_speed]
+	clock_label.text = "Time: %02d:%02d (%s)" % [mins, secs, GameState.get_relative_speed_label()]
 
 	_refresh_preview_panel()
 	_refresh_selection_panel()
@@ -1565,9 +1845,9 @@ func _refresh_speed_buttons() -> void:
 	var paused: bool = GameState.is_speed_paused
 	var spd: float = GameState.game_speed
 	speed_pause_button.modulate = Color(1.0, 0.65, 0.35) if paused else Color.WHITE
-	speed_1x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 1.0)) else Color.WHITE
-	speed_2x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 2.0)) else Color.WHITE
-	speed_3x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and is_equal_approx(spd, 3.0)) else Color.WHITE
+	speed_1x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and absf(spd - Balance.SPEED_OPTION_SLOW) < 0.15) else Color.WHITE
+	speed_2x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and absf(spd - Balance.SPEED_OPTION_NORMAL) < 0.15) else Color.WHITE
+	speed_3x_button.modulate = Color(0.45, 0.95, 1.0) if (not paused and absf(spd - Balance.SPEED_OPTION_FAST) < 0.15) else Color.WHITE
 
 
 func _refresh_surge_bar() -> void:
@@ -1578,11 +1858,18 @@ func _refresh_surge_bar() -> void:
 
 	var paused: bool = surge_ref.is_surge_paused() if surge_ref != null else false
 	var pause_tag: String = " [PAUSED]" if paused else ""
-	surge_label.text = "SURGE DEADLINE: Start of Wave %d (%.0fs)%s - use any time power to reset (+5 waves)" % [
-		m.surge_deadline_wave,
-		maxf(0.0, m.surge_timer_seconds),
-		pause_tag,
-	]
+	if _current_layout_mode == "portrait":
+		surge_label.text = "SURGE: W%d (%.0fs)%s - use Time Power (+5w)" % [
+			m.surge_deadline_wave,
+			maxf(0.0, m.surge_timer_seconds),
+			pause_tag,
+		]
+	else:
+		surge_label.text = "SURGE DEADLINE: Start of Wave %d (%.0fs)%s - use any time power to reset (+5 waves)" % [
+			m.surge_deadline_wave,
+			maxf(0.0, m.surge_timer_seconds),
+			pause_tag,
+		]
 
 	if m.surge_count > 0:
 		var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
@@ -2165,6 +2452,8 @@ func _on_event_logged(message: String) -> void:
 	if _event_feed.size() > 5:
 		_event_feed.resize(5)
 	event_feed_label.text = "Events: " + "  |  ".join(_event_feed)
+	if message.contains("Combined into") or message.contains("COMBINED:") or message.contains("MERGED:"):
+		trigger_guide_beat("first_combine")
 
 
 func _on_refinery_button_pressed() -> void:
@@ -2398,7 +2687,7 @@ func _apply_bar_safe_margins(bar: PanelContainer, pad_x: float) -> void:
 	bar.add_theme_stylebox_override("panel", sb)
 
 
-func _set_bottom_button_widths(scale_mult: float) -> void:
+func _set_bottom_button_widths(scale_mult: float, btn_height: float = 56.0, font_sz: int = 10, portrait_grid: bool = false) -> void:
 	var base_widths := {
 		rewind_button: 185.0,
 		pause_button: 185.0,
@@ -2409,7 +2698,210 @@ func _set_bottom_button_widths(scale_mult: float) -> void:
 	}
 	for btn in base_widths.keys():
 		if btn != null:
-			btn.custom_minimum_size.x = roundf(float(base_widths[btn]) * scale_mult)
+			btn.custom_minimum_size = Vector2(0.0 if portrait_grid else roundf(float(base_widths[btn]) * scale_mult), btn_height)
+			btn.add_theme_font_size_override("font_size", font_sz)
+
+
+func _scale_overlay_typography(ctrl: Node, is_portrait: bool) -> void:
+	if ctrl == null:
+		return
+	if ctrl is BaseButton:
+		var b: BaseButton = ctrl as BaseButton
+		if not b.has_meta("_base_min_h"):
+			b.set_meta("_base_min_h", b.custom_minimum_size.y)
+			b.set_meta("_base_fs", b.get_theme_font_size("font_size") if b.has_theme_font_size_override("font_size") else 12)
+		var bh: float = float(b.get_meta("_base_min_h"))
+		var bfs: int = int(b.get_meta("_base_fs"))
+		b.custom_minimum_size.y = maxf(68.0, bh * 1.65) if is_portrait else bh
+		b.add_theme_font_size_override("font_size", maxi(20, int(round(float(bfs) * 1.75))) if is_portrait else bfs)
+	elif ctrl is Label:
+		var l: Label = ctrl as Label
+		if not l.has_meta("_base_fs"):
+			l.set_meta("_base_fs", l.get_theme_font_size("font_size") if l.has_theme_font_size_override("font_size") else 12)
+		var lfs: int = int(l.get_meta("_base_fs"))
+		l.add_theme_font_size_override("font_size", maxi(20, int(round(float(lfs) * 1.75))) if is_portrait else lfs)
+	elif ctrl is LineEdit:
+		var le: LineEdit = ctrl as LineEdit
+		if not le.has_meta("_base_min_h"):
+			le.set_meta("_base_min_h", le.custom_minimum_size.y)
+		le.custom_minimum_size.y = 62.0 if is_portrait else float(le.get_meta("_base_min_h"))
+		le.add_theme_font_size_override("font_size", 22 if is_portrait else 12)
+	for ch in ctrl.get_children():
+		_scale_overlay_typography(ch, is_portrait)
+
+
+func _apply_responsive_ergonomics(mode: String) -> void:
+	_current_layout_mode = mode
+	var is_port: bool = (mode == "portrait")
+	var is_wide: bool = (mode == "landscape_wide")
+
+	# TopBar font, row split (3 rows in Portrait, 2 rows in Landscape/Desktop) & button sizing
+	var top_lbl_fs: int = 20 if is_port else (13 if is_wide else 12)
+	var base_lbl_fs: int = 18 if is_port else (12 if is_wide else 11)
+	var top_btn_h: float = 52.0 if is_port else (30.0 if is_wide else 26.0)
+	var top_btn_fs: int = 17 if is_port else (11 if is_wide else 10)
+	for lbl in [top_status_label, wave_label, money_label, research_label, refineries_label, clock_label]:
+		if lbl != null:
+			lbl.add_theme_font_size_override("font_size", top_lbl_fs)
+	if enemy_base_label != null:
+		enemy_base_label.add_theme_font_size_override("font_size", base_lbl_fs)
+		enemy_base_label.clip_text = is_port
+	if enemy_base_bar != null:
+		enemy_base_bar.custom_minimum_size = Vector2(180.0, 16.0) if is_port else Vector2(360.0, 10.0)
+	var top_row2 := get_node_or_null("TopBar/VBox/Row2") as HBoxContainer
+	var speed_box := speed_pause_button.get_parent() as Control if speed_pause_button != null else null
+	if top_controls_row != null and top_row2 != null:
+		var ctrl_items: Array[Control] = []
+		if speed_box != null:
+			ctrl_items.append(speed_box)
+		for b in [level_picker_button, menu_button, sandbox_toggle_button, debug_button, fullscreen_button, download_button]:
+			if b != null:
+				ctrl_items.append(b)
+		if is_port:
+			top_controls_row.visible = true
+			for ci in ctrl_items:
+				if ci.get_parent() != top_controls_row:
+					ci.reparent(top_controls_row)
+				if ci != speed_box:
+					ci.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		else:
+			top_controls_row.visible = false
+			for ci in ctrl_items:
+				if ci.get_parent() != top_row2:
+					ci.reparent(top_row2)
+				if ci != speed_box:
+					ci.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			if clock_label != null and clock_label.get_parent() == top_row2:
+				top_row2.move_child(clock_label, top_row2.get_child_count() - 1)
+	for tb in [speed_pause_button, speed_1x_button, speed_2x_button, speed_3x_button, level_picker_button, menu_button, debug_button, fullscreen_button, download_button, sandbox_toggle_button]:
+		if tb != null:
+			tb.custom_minimum_size.y = top_btn_h
+			tb.add_theme_font_size_override("font_size", top_btn_fs)
+	if is_port:
+		speed_pause_button.custom_minimum_size.x = 56.0
+		speed_1x_button.custom_minimum_size.x = 68.0
+		speed_2x_button.custom_minimum_size.x = 56.0
+		speed_3x_button.custom_minimum_size.x = 68.0
+		level_picker_button.custom_minimum_size.x = 0.0
+		menu_button.custom_minimum_size.x = 0.0
+		debug_button.custom_minimum_size.x = 0.0
+		fullscreen_button.custom_minimum_size.x = 0.0
+		download_button.custom_minimum_size.x = 0.0
+		if sandbox_toggle_button != null:
+			sandbox_toggle_button.custom_minimum_size.x = 0.0
+	else:
+		speed_pause_button.custom_minimum_size.x = 34.0 if is_wide else 32.0
+		speed_1x_button.custom_minimum_size.x = 40.0 if is_wide else 36.0
+		speed_2x_button.custom_minimum_size.x = 34.0 if is_wide else 30.0
+		speed_3x_button.custom_minimum_size.x = 40.0 if is_wide else 36.0
+		level_picker_button.custom_minimum_size.x = 92.0 if is_wide else 86.0
+		menu_button.custom_minimum_size.x = 54.0 if is_wide else 50.0
+		debug_button.custom_minimum_size.x = 44.0 if is_wide else 40.0
+		fullscreen_button.custom_minimum_size.x = 44.0 if is_wide else 40.0
+		download_button.custom_minimum_size.x = 68.0 if is_wide else 62.0
+		if sandbox_toggle_button != null:
+			sandbox_toggle_button.custom_minimum_size.x = 90.0
+
+	# Shop, Tower, Bottom & Overlay Responsive Grids (multi-col chunky cards on Portrait so nothing is elongated!)
+	if start_level_grid != null:
+		start_level_grid.columns = 3 if is_port else 5
+	if start_action_grid != null:
+		start_action_grid.columns = 2 if is_port else 5
+		if start_download_button != null:
+			start_download_button.custom_minimum_size.x = 0.0 if is_port else 128.0
+		if start_analytics_button != null:
+			start_analytics_button.custom_minimum_size.x = 0.0 if is_port else 124.0
+	if pause_extra_grid != null:
+		pause_extra_grid.columns = 2 if is_port else 5
+	if analytics_btns_grid != null:
+		analytics_btns_grid.columns = 2 if is_port else 5
+		if analytics_reset_button != null:
+			analytics_reset_button.custom_minimum_size.x = 0.0 if is_port else 116.0
+	var bl_title := get_node_or_null("BetweenLevelsOverlay/Margin/VBox/TitleLabel") as Label
+	if bl_title != null:
+		bl_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var bl_meta := get_node_or_null("BetweenLevelsOverlay/Margin/VBox/MetaResearchStatusLabel") as Label
+	if bl_meta != null:
+		bl_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for lb in [level_1_button, level_2_button, level_3_button, level_4_button, level_5_button]:
+		if lb != null:
+			lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if build_buttons_grid != null:
+		build_buttons_grid.columns = 2 if is_port else 1
+		build_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else 6)
+		build_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else 4)
+	if tower_buttons_grid != null:
+		tower_buttons_grid.columns = 2 if is_port else 1
+		tower_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else 6)
+		tower_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else 4)
+	if bottom_actions_grid != null:
+		bottom_actions_grid.columns = 3 if is_port else 6
+		bottom_actions_grid.add_theme_constant_override("h_separation", 12 if is_port else 8)
+		bottom_actions_grid.add_theme_constant_override("v_separation", 10 if is_port else 8)
+
+	var shop_btn_h: float = 88.0 if is_port else (36.0 if is_wide else 28.0)
+	var shop_btn_fs: int = 22 if is_port else (13 if is_wide else 11)
+	var shop_lbl_fs: int = 21 if is_port else (12 if is_wide else 11)
+	for sb in [build_blaster_button, build_mortar_button, build_laser_button, build_slow_button, build_railgun_button, build_annihilator_button, build_recipes_button, target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button, combine_button, sell_button, manip_upgrade_button]:
+		if sb != null:
+			sb.custom_minimum_size.y = shop_btn_h
+			sb.add_theme_font_size_override("font_size", shop_btn_fs)
+	for sl in [preview_title_label, preview_body_label, preview_mutations_label, wave_summary_label, build_pad_label, tower_header_label, tower_ratings_label, tower_status_label, manip_status_label]:
+		if sl != null:
+			sl.add_theme_font_size_override("font_size", shop_lbl_fs)
+	var meta_hint := get_node_or_null("RightPanel/Margin/VBox/Scroll/ContentVBox/MetaHintLabel") as Label
+	if meta_hint != null:
+		meta_hint.add_theme_font_size_override("font_size", 18 if is_port else 10)
+	hover_info_panel.custom_minimum_size.y = 96.0 if is_port else (48.0 if is_wide else 44.0)
+	var hclip := hover_info_panel.get_node_or_null("HoverMargin/HoverClip") as Control
+	if hclip != null:
+		hclip.custom_minimum_size.y = 82.0 if is_port else (38.0 if is_wide else 34.0)
+	hover_info_label.add_theme_font_size_override("font_size", 20 if is_port else (12 if is_wide else 11))
+
+	# BottomBar labels & Surge bar
+	var bot_lbl_fs: int = 19 if is_port else (12 if is_wide else 12)
+	surge_label.add_theme_font_size_override("font_size", bot_lbl_fs)
+	surge_label.clip_text = is_port
+	surge_penalty_label.add_theme_font_size_override("font_size", bot_lbl_fs)
+	event_feed_label.add_theme_font_size_override("font_size", 18 if is_port else 11)
+	surge_bar.custom_minimum_size = Vector2(210.0 if is_port else 360.0, 30.0 if is_port else 22.0)
+
+	# Overlays + Guide Vex typography
+	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay, guide_panel]:
+		_scale_overlay_typography(ov, is_port)
+	if guide_portrait != null:
+		guide_portrait.custom_minimum_size = Vector2(118, 118) if is_port else Vector2(72, 72)
+	if guide_dismiss_button != null:
+		guide_dismiss_button.custom_minimum_size.x = 220.0 if is_port else 124.0
+	if guide_title_label != null:
+		guide_title_label.clip_text = true
+
+
+func _position_guide_panel(vp_size: Vector2) -> void:
+	if guide_panel == null:
+		return
+	var on_start: bool = (start_menu_overlay != null and start_menu_overlay.visible)
+	if vp_size.x <= 1285.0 and vp_size.y <= 725.0:
+		if on_start:
+			_place_overlay_exact(guide_panel, Vector2(180.0, 576.0), Vector2(920.0, 132.0))
+		else:
+			_place_overlay_exact(guide_panel, Vector2(180.0, 244.0), Vector2(580.0, 128.0))
+	elif vp_size.x >= vp_size.y:
+		if on_start:
+			var gw: float = minf(1040.0, vp_size.x - 40.0)
+			_place_overlay_exact(guide_panel, Vector2(floorf((vp_size.x - gw) * 0.5), vp_size.y - 142.0), Vector2(gw, 130.0))
+		else:
+			var gx: float = (map_ref.position.x + 170.0) if map_ref != null else 220.0
+			var gy: float = (map_ref.position.y + 180.0) if map_ref != null else 244.0
+			_place_overlay_exact(guide_panel, Vector2(gx, gy), Vector2(590.0, 130.0))
+	else:
+		# Portrait Phone: big readable card strictly below StartMenu or docked cleanly at top of Shop below Map
+		if on_start:
+			var sy: float = start_menu_overlay.position.y + start_menu_overlay.size.y + 20.0
+			var gh: float = minf(310.0, maxf(230.0, vp_size.y - sy - 24.0))
+			_place_overlay_exact(guide_panel, Vector2(40.0, sy), Vector2(vp_size.x - 80.0, gh))
+		else:
+			_place_overlay_exact(guide_panel, Vector2(24.0, right_panel.position.y + 12.0), Vector2(vp_size.x - 48.0, 270.0))
 
 
 func _center_overlay(ctrl: Control, vp_size: Vector2, default_size: Vector2) -> void:
@@ -2437,6 +2929,8 @@ func _place_overlay_exact(ctrl: Control, pos: Vector2, sz: Vector2) -> void:
 func apply_responsive_layout(vp_size: Vector2) -> void:
 	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
 		return
+	if AnalyticsManager != null:
+		AnalyticsManager.record_viewport_profile(vp_size, DisplayServer.is_touchscreen_available())
 	var bg := get_parent().get_node_or_null("Background") as ColorRect
 	if bg != null:
 		bg.position = Vector2.ZERO
@@ -2444,9 +2938,10 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 
 	# 1) Desktop / Standard 16:9 (1280x720) — preserve exact desktop coordinates & RightPanel (340x480)
 	if vp_size.x <= 1285.0 and vp_size.y <= 725.0:
+		_apply_responsive_ergonomics("desktop")
 		_apply_bar_safe_margins(top_bar, -2.0)
 		_apply_bar_safe_margins(bottom_bar, 2.0)
-		_set_bottom_button_widths(1.0)
+		_set_bottom_button_widths(1.0, 56.0, 10, false)
 		top_bar.position = Vector2.ZERO
 		top_bar.size = Vector2(1280.0, 64.0)
 		bottom_bar.position = Vector2(0.0, 544.0)
@@ -2466,9 +2961,10 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(pause_overlay, Vector2(240.0, 120.0), Vector2(800.0, 400.0))
 		_place_overlay_exact(between_levels_overlay, Vector2(220.0, 86.0), Vector2(840.0, 444.0))
 		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
-		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 68.0), Vector2(920.0, 560.0))
+		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 22.0), Vector2(920.0, 548.0))
 		_place_overlay_exact(recipes_overlay, Vector2(150.0, 74.0), Vector2(980.0, 560.0))
 		_place_overlay_exact(analytics_overlay, Vector2(140.0, 68.0), Vector2(1000.0, 570.0))
+		_position_guide_panel(vp_size)
 		debug_panel.position = Vector2(16.0, 74.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(12.0, 70.0)
@@ -2476,11 +2972,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			enemy_inspector_panel.position = Vector2(12.0, bottom_bar.position.y - 98.0)
 		return
 
-	# 2) Pixel 11 Pro 20:9 Widescreen Landscape (e.g. 1600x720 / 1603x720)
+	# 2) Widescreen Landscape / Phone Landscape (e.g. Pixel 11 Pro 20:9 1600x720)
 	if vp_size.x >= vp_size.y:
-		var top_h: float = 64.0
-		var bot_h: float = 176.0
-		var rp_w: float = 340.0
+		_apply_responsive_ergonomics("landscape_wide")
+		var top_h: float = 70.0
+		var bot_h: float = 182.0
+		var rp_w: float = 380.0
 		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.08, 0.0, 28.0)
 		_apply_bar_safe_margins(top_bar, safe_x)
 		_apply_bar_safe_margins(bottom_bar, safe_x)
@@ -2489,11 +2986,11 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		top_bar.size = Vector2(vp_size.x, top_h)
 
 		bottom_bar.position = Vector2(0.0, vp_size.y - bot_h)
-		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.22))
+		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.22), 62.0, 12, false)
 		bottom_bar.size = Vector2(vp_size.x, bot_h)
 
-		var middle_h: float = maxf(480.0, vp_size.y - top_h - bot_h)
-		right_panel.custom_minimum_size = Vector2(rp_w, 480.0)
+		var middle_h: float = maxf(468.0, vp_size.y - top_h - bot_h)
+		right_panel.custom_minimum_size = Vector2(rp_w, middle_h)
 		right_panel.position = Vector2(vp_size.x - rp_w, top_h)
 		right_panel.size = Vector2(rp_w, middle_h)
 
@@ -2513,12 +3010,14 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(maxf(safe_x + 12.0, right_panel.position.x - 368.0), top_h + 6.0)
 		prompt_banner.size = Vector2(362.0, 54.0)
-		_center_overlay(pause_overlay, vp_size, Vector2(800.0, 400.0))
-		_center_overlay(between_levels_overlay, vp_size, Vector2(900.0, 480.0))
-		_center_overlay(end_overlay, vp_size, Vector2(640.0, 400.0))
-		_center_overlay(start_menu_overlay, vp_size, Vector2(1060.0, 560.0))
-		_center_overlay(recipes_overlay, vp_size, Vector2(1020.0, 560.0))
-		_center_overlay(analytics_overlay, vp_size, Vector2(1040.0, 570.0))
+		_center_overlay(pause_overlay, vp_size, Vector2(820.0, 420.0))
+		_center_overlay(between_levels_overlay, vp_size, Vector2(920.0, 480.0))
+		_center_overlay(end_overlay, vp_size, Vector2(660.0, 420.0))
+		var sm_w: float = minf(1060.0, vp_size.x - 40.0)
+		_place_overlay_exact(start_menu_overlay, Vector2(floorf((vp_size.x - sm_w) * 0.5), 22.0), Vector2(sm_w, 546.0))
+		_center_overlay(recipes_overlay, vp_size, Vector2(1040.0, 560.0))
+		_center_overlay(analytics_overlay, vp_size, Vector2(1060.0, 570.0))
+		_position_guide_panel(vp_size)
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(safe_x + 12.0, top_h + 8.0)
@@ -2526,19 +3025,20 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			enemy_inspector_panel.position = Vector2(safe_x + 12.0, bottom_bar.position.y - 98.0)
 		return
 
-	# 3) Pixel 11 Pro 9:20 Tall Portrait Fallback (e.g. 1280x2844 when Auto-Rotate is OFF)
+	# 3) Phone Portrait Ergonomic Layout (e.g. 1280x2844 — 3-row TopBar, 2-col chunky shop cards, 3x2 bottom bar, large readable fonts!)
+	_apply_responsive_ergonomics("portrait")
 	var safe_top: float = 36.0
 	var safe_bot: float = 20.0
-	var p_top_h: float = 72.0
-	var p_bot_h: float = 184.0
-	_apply_bar_safe_margins(top_bar, 6.0)
-	_apply_bar_safe_margins(bottom_bar, 6.0)
+	var p_top_h: float = 160.0
+	var p_bot_h: float = 376.0
+	_apply_bar_safe_margins(top_bar, 10.0)
+	_apply_bar_safe_margins(bottom_bar, 10.0)
 
 	top_bar.position = Vector2(0.0, safe_top)
 	top_bar.size = Vector2(vp_size.x, p_top_h)
 
 	var bot_y: float = vp_size.y - safe_bot - p_bot_h
-	var max_map_h: float = maxf(240.0, bot_y - (safe_top + p_top_h) - 240.0)
+	var max_map_h: float = maxf(320.0, bot_y - (safe_top + p_top_h) - 520.0)
 	var p_scale: float = minf(vp_size.x / GameMap.MAP_WIDTH, max_map_h / GameMap.MAP_HEIGHT)
 	var map_h: float = GameMap.MAP_HEIGHT * p_scale
 	if map_ref != null:
@@ -2548,30 +3048,31 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		map_ref.set_viewport_margins(0.0, 0.0)
 
 	bottom_bar.position = Vector2(0.0, bot_y)
-	_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 0.85, 1.0))
+	_set_bottom_button_widths(1.0, 108.0, 20, true)
 	bottom_bar.size = Vector2(vp_size.x, p_bot_h)
 
 	var rp_top: float = safe_top + p_top_h + map_h
-	var rp_h: float = maxf(220.0, bot_y - rp_top)
-	right_panel.custom_minimum_size = Vector2(0.0, 220.0)
+	var rp_h: float = maxf(400.0, bot_y - rp_top)
+	right_panel.custom_minimum_size = Vector2(0.0, 400.0)
 	right_panel.position = Vector2(0.0, rp_top)
 	right_panel.size = Vector2(vp_size.x, rp_h)
 
-	surge_banner.position = Vector2(16.0, safe_top + p_top_h + 6.0)
-	surge_banner.size = Vector2(minf(260.0, vp_size.x * 0.22), 42.0)
-	prompt_banner.position = Vector2(maxf(16.0, vp_size.x - 378.0), safe_top + p_top_h + 6.0)
+	surge_banner.position = Vector2(20.0, safe_top + p_top_h + 10.0)
+	surge_banner.size = Vector2(minf(480.0, vp_size.x * 0.42), 56.0)
+	prompt_banner.position = Vector2(maxf(16.0, vp_size.x - 378.0), rp_top + 8.0)
 	prompt_banner.size = Vector2(362.0, 54.0)
-	_center_overlay(pause_overlay, vp_size, Vector2(960.0, 520.0))
-	_center_overlay(between_levels_overlay, vp_size, Vector2(1080.0, 620.0))
-	_center_overlay(end_overlay, vp_size, Vector2(820.0, 480.0))
-	_center_overlay(start_menu_overlay, vp_size, Vector2(1160.0, 780.0))
-	_center_overlay(recipes_overlay, vp_size, Vector2(1140.0, 760.0))
-	_center_overlay(analytics_overlay, vp_size, Vector2(1140.0, 820.0))
+	_center_overlay(pause_overlay, vp_size, Vector2(1180.0, 960.0))
+	_center_overlay(between_levels_overlay, vp_size, Vector2(1180.0, 1180.0))
+	_center_overlay(end_overlay, vp_size, Vector2(1140.0, 920.0))
+	_place_overlay_exact(start_menu_overlay, Vector2(40.0, 280.0), Vector2(vp_size.x - 80.0, 1480.0))
+	_center_overlay(recipes_overlay, vp_size, Vector2(1180.0, 1460.0))
+	_center_overlay(analytics_overlay, vp_size, Vector2(1180.0, 1520.0))
+	_position_guide_panel(vp_size)
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 	if sandbox_panel != null:
 		sandbox_panel.position = Vector2(16.0, safe_top + p_top_h + 8.0)
 	if enemy_inspector_panel != null:
-		enemy_inspector_panel.position = Vector2(16.0, bottom_bar.position.y - 98.0)
+		enemy_inspector_panel.position = Vector2(20.0, bottom_bar.position.y - 120.0)
 
 
 func _on_selection_cleared() -> void:
@@ -2604,48 +3105,151 @@ func _populate_how_time_works() -> void:
 	])
 
 
+func show_guide_startup() -> void:
+	if guide_panel == null or GameState.prompts_muted or GameState.guide_completed:
+		return
+	_present_guide_beat(
+		"startup",
+		"CHRONO-COMMANDER VEX  —  STARTUP BRIEFING",
+		"Commander! I'm Vex, your over-caffeinated Chrono-Tactician. Welcome to TimeDefense — where bending time is totally legal and aliens are allergic to lasers. Want me to walk you through your first mission, or are you too cool for a guide?",
+		"excited",
+		"Guide Me!"
+	)
+
+
+func trigger_guide_beat(beat_id: String) -> void:
+	if guide_panel == null or GameState.prompts_muted or GameState.guide_completed or GameState.is_sandbox_mode:
+		return
+	if GameState.mission.shown_prompts.get(beat_id, false):
+		return
+	match beat_id:
+		"first_combine":
+			_present_guide_beat(
+				"first_combine",
+				"VEX  —  MAD SCIENCE UNLOCKED!",
+				"Ooh, a tower fusion! Combined turrets save precious zone slots AND share one upgrade track. Tap '21 Recipes' anytime when you're ready to cook up even deadlier combos.",
+				"proud",
+				"Sweet!"
+			)
+		"first_boss":
+			_present_guide_beat(
+				"first_boss",
+				"VEX  —  BOSS INCOMING!",
+				"Heads up — big metal nightmare on the lane! Stack Piercing (180% vs Bosses) + Chrono Bubbles + PAUSE before it turns our Citadel into a pancake!",
+				"alert",
+				"Bring It On!"
+			)
+
+
+func _present_guide_beat(beat_id: String, title_txt: String, body_txt: String, mood: String = "smirk", ack_txt: String = "Got It!") -> void:
+	if guide_panel == null:
+		return
+	if beat_id != "startup":
+		GameState.mission.shown_prompts[beat_id] = true
+	_current_guide_beat = beat_id
+	prompt_banner.visible = false
+	guide_title_label.text = title_txt
+	guide_body_label.text = body_txt
+	guide_ack_button.text = ack_txt
+	guide_panel.visible = true
+	if guide_portrait != null and guide_portrait.has_method("trigger_talk"):
+		guide_portrait.trigger_talk(mood, 3.0)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_guide_event("shown", beat_id)
+	_position_guide_panel(_get_effective_viewport_size())
+
+
 func _check_teaching_prompt() -> void:
-	if GameState.prompts_muted or GameState.mission.is_over or wave_manager_ref == null:
+	prompt_banner.visible = false
+	if GameState.prompts_muted or GameState.guide_completed or GameState.is_sandbox_mode or GameState.mission.is_over or wave_manager_ref == null:
+		return
+	if start_menu_overlay != null and start_menu_overlay.visible:
 		return
 	var w: int = GameState.mission.wave_number
 	var st: int = wave_manager_ref.state
-	var prompt_id: String = ""
-	var text: String = ""
+	var beat_id: String = ""
+	var title_txt: String = ""
+	var body_txt: String = ""
+	var mood: String = "smirk"
 
 	if w == 1 and st == WaveManager.State.BUILD:
-		prompt_id = "wave_1"
-		text = "TIP (1/6): Spend ~90% of your $200 (2 towers) on pads beside the path, then press Start Wave."
+		beat_id = "w1_build"
+		title_txt = "VEX (1/8)  —  LOCK & LOAD"
+		body_txt = "First rule of surviving an alien invasion: spend that $200! Drag a Blaster or Laser Spire from the shop right into the glowing placement zones — then hit START WAVE when you're armed."
+		mood = "excited"
+	elif w == 1 and st == WaveManager.State.SPAWNING:
+		beat_id = "w1_combat"
+		title_txt = "VEX (2/8)  —  PACE & INTEL"
+		body_txt = "Here they come! Default 1x speed is snappy (the old 3x!) — tap 0.5x up top if things get spicy, 1.5x if you're feeling bold, or || to pause-plan. Tap any alien on the path to inspect its armor!"
+		mood = "smirk"
+	elif w == 2 and st == WaveManager.State.BUILD:
+		beat_id = "w2_build"
+		title_txt = "VEX (3/8)  —  COMBINE & UPGRADE"
+		body_txt = "Nice work! Pro move: drag a second tower RIGHT ON TOP of an existing tower (or tap a tower -> Combine) to fuse any 2 base towers into 21 wild hybrids. Or upgrade Damage, Speed, and Range!"
+		mood = "excited"
 	elif w == 2 and st == WaveManager.State.SPAWNING:
-		prompt_id = "wave_2"
-		text = "TIP (2/6): PAUSE freezes aliens 8s while towers keep firing. (Cost: Thaw-hardened +5% HP on future waves.)"
+		beat_id = "w2_combat"
+		title_txt = "VEX (4/8)  —  BENDING TIME"
+		body_txt = "Meet your Time Powers below: PAUSE freezes aliens cold while towers keep firing, HASTE supercharges fire & build speed, and REWIND replays a wave. Fair warning: aliens mutate slightly whenever you mess with time!"
+		mood = "smirk"
 	elif w == 3 and st == WaveManager.State.BUILD:
-		prompt_id = "wave_3"
-		text = "TIP (3/6): SURGE DEADLINE is start of Wave 6. Use at least one time power every 5 waves or towers lose 5% speed."
+		beat_id = "w3_build"
+		title_txt = "VEX (5/8)  —  DON'T LET IT SURGE!"
+		body_txt = "See that glowing SURGE countdown bar? Ignore your Time Powers for 5 straight waves and our reactor snaps — docking -5% tower speed permanently per Surge. Pop ANY power every 5 waves to discharge it safely!"
+		mood = "alert"
 	elif w == 4 and st == WaveManager.State.BUILD:
-		prompt_id = "wave_4"
-		text = "TIP (4/6): Match damage types: Laser (150% vs Standard), Piercing Blaster (180% vs Juggernaut), Chrono Slow + Decay."
+		beat_id = "w4_build"
+		title_txt = "VEX (6/8)  —  ARMOR CHEAT SHEET"
+		body_txt = "Quick cheat sheet so you don't look silly: Lasers fry Standard swarms (150%) but bounce off Reflective shields (10%); Piercing Blasters & Annihilators shred Brutes & Bosses (180%); Chrono Bubbles slow packs & melt shields!"
+		mood = "smirk"
 	elif w == 5 and st == WaveManager.State.BUILD:
-		prompt_id = "wave_5"
-		text = "TIP (5/6): REWIND in BUILD phase replays previous wave (no new mut; +5% HP next wave). Spend Research in Levels/Lab."
+		beat_id = "w5_build"
+		title_txt = "VEX (7/8)  —  MONEY & META LAB"
+		body_txt = "Feeling rich? Refineries ($250) print passive cash during waves, and Meta-Research earned from kills persists FOREVER — spend it in Levels / Lab between missions!"
+		mood = "proud"
 	elif w == 6 and st == WaveManager.State.BUILD:
-		prompt_id = "wave_6"
-		text = "TIP (6/6): Win by destroying the Enemy Base (500 HP). Each Hive Destroyer shot costs $450 (30s charge, no Haste)."
+		beat_id = "w6_build"
+		title_txt = "VEX (8/8)  —  BLOW UP THE HIVE!"
+		body_txt = "Final lesson before I graduate you: surviving waves alone won't win! Charge the Hive Destroyer ($450, 30s — Haste can't rush it) 3 times to vaporize the Alien Hive before Wave 10's boss shows up. You've got this, Commander!"
+		mood = "proud"
+	elif w == 10 and st == WaveManager.State.BUILD:
+		trigger_guide_beat("first_boss")
+		return
 
-	if prompt_id != "" and not GameState.mission.shown_prompts.get(prompt_id, false):
-		GameState.mission.shown_prompts[prompt_id] = true
-		prompt_label.text = text
-		prompt_banner.visible = true
+	if beat_id != "" and not GameState.mission.shown_prompts.get(beat_id, false):
+		_present_guide_beat(beat_id, title_txt, body_txt, mood, "Got It!")
+
+
+func _on_guide_ack_pressed() -> void:
+	if guide_panel != null:
+		guide_panel.visible = false
+	if _current_guide_beat == "w6_build":
+		GameState.guide_completed = true
+		GameState.save_meta_progress()
+		if AnalyticsManager != null:
+			AnalyticsManager.record_guide_event("completed", _current_guide_beat)
+	_current_guide_beat = ""
+
+
+func _on_guide_dismiss_all_pressed() -> void:
+	if AnalyticsManager != null:
+		AnalyticsManager.record_guide_event("dismissed", _current_guide_beat)
+	_current_guide_beat = ""
+	set_prompts_muted(true)
 
 
 func _on_prompt_dismiss_pressed() -> void:
 	prompt_banner.visible = false
+	_on_guide_ack_pressed()
 
 
 func _on_prompt_mute_pressed() -> void:
-	set_prompts_muted(true)
+	_on_guide_dismiss_all_pressed()
 
 
 func _on_pause_mute_toggled(toggled_on: bool) -> void:
+	if not toggled_on:
+		GameState.guide_completed = false
 	set_prompts_muted(toggled_on)
 
 
@@ -2655,6 +3259,9 @@ func set_prompts_muted(muted: bool) -> void:
 		pause_mute_check.button_pressed = muted
 	if muted:
 		prompt_banner.visible = false
+		if guide_panel != null:
+			guide_panel.visible = false
+	GameState.save_meta_progress()
 
 
 func _toggle_pause_menu() -> void:
@@ -2723,6 +3330,9 @@ func _on_mission_reset() -> void:
 	surge_banner.visible = false
 	prompt_banner.visible = false
 	pause_overlay.visible = false
+	if guide_panel != null and _current_guide_beat != "startup":
+		guide_panel.visible = false
+		_current_guide_beat = ""
 	if recipes_overlay != null:
 		recipes_overlay.visible = false
 	if analytics_overlay != null:

@@ -174,26 +174,40 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	assert(lines.size() <= 9)
 	assert(htw.contains("Armoured") and htw.contains("Thaw-hardened") and htw.contains("Swift") and htw.contains("SURGE"))
 
-	# Verify prompts Wave 1-2 & mute
-	hud._on_prompt_dismiss_pressed()
+	# Verify witty Guide Vex replaces dry tips (first playthrough Wave 1-2 beats + startup dismiss)
+	assert(not hud.prompt_banner.visible, "Legacy PromptBanner tips must stay hidden")
+	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("VEX"), "Guide Vex must show Wave 1 build beat on first playthrough")
+	hud._on_guide_ack_pressed()
+	assert(not hud.guide_panel.visible)
 	wm.start_wave()
+	assert(hud.guide_panel.visible and hud.guide_body_label.text.contains("0.5x"), "Guide Vex must explain new 0.5x / 1x / 1.5x speed during Wave 1 combat")
+	hud._on_guide_ack_pressed()
 	while wm.is_wave_active():
 		wm.step_wave(1.0)
 		for e in map.get_active_enemies():
 			e.take_damage(9999.0)
 	wm.start_wave()
-	assert(hud.prompt_banner.visible and hud.prompt_label.text.contains("TIP (2/6)"))
-	hud._on_prompt_dismiss_pressed()
+	assert(hud.guide_panel.visible and hud.guide_title_label.text.contains("4/8"), "Guide Vex must present Wave 2 Time Powers beat")
+	hud._on_guide_ack_pressed()
 	wm.restart_wave_for_rewind()
-	assert(not hud.prompt_banner.visible)
+	assert(not hud.guide_panel.visible)
 
-	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait (1280x2844)
+	# Verify speed options: Default = 3.0 (1x), 0.5x = 1.5, 1.5x = 4.5
+	assert(is_equal_approx(GameState.game_speed, Balance.DEFAULT_GAME_SPEED), "Default speed must be 3.0 (1x)")
+	hud.speed_1x_button.pressed.emit()
+	assert(is_equal_approx(GameState.game_speed, 1.5) and GameState.get_relative_speed_label() == "0.5x")
+	hud.speed_3x_button.pressed.emit()
+	assert(is_equal_approx(GameState.game_speed, 4.5) and GameState.get_relative_speed_label() == "1.5x")
+	hud.speed_2x_button.pressed.emit()
+	assert(is_equal_approx(GameState.game_speed, 3.0) and GameState.get_relative_speed_label() == "1x")
+
+	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait Phone (1280x2844)
 	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
 	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
-	assert(hud.right_panel.position == Vector2(1260.0, 64.0) and hud.right_panel.size == Vector2(340.0, 480.0))
-	assert(is_equal_approx(map.extra_left_margin, 160.0) and is_equal_approx(map.extra_right_margin, 160.0))
-	assert(map.position == Vector2(160.0, 64.0) and map.scale == Vector2.ONE)
-	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "PromptBanner"]:
+	assert(hud.right_panel.position == Vector2(1220.0, 70.0) and hud.right_panel.size.x == 380.0)
+	assert(hud.build_blaster_button.custom_minimum_size.y >= 36.0, "Phone landscape shop buttons must be bigger (>=36px)")
+	assert(map.scale.x >= 0.95)
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "GuidePanel"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
 		var r := Rect2(ctrl.position, ctrl.size)
 		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
@@ -201,12 +215,19 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 			assert(not r.has_point(pad_screen), "20:9 Landscape %s overlaps Pad P%d!" % [ctrl_name, i + 1])
 
 	hud.apply_responsive_layout(Vector2(1280.0, 2844.0))
-	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.position.y, 36.0))
-	assert(map.scale.x > 1.35 and is_equal_approx(map.position.y, 108.0))
+	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.position.y, 36.0), "Portrait TopBar must fit 1280px width cleanly, got %s" % str(hud.top_bar.size))
+	assert(is_equal_approx(hud.top_bar.size.y, 160.0), "Portrait TopBar must use 3-row touch-friendly height (160px), got %.1f" % hud.top_bar.size.y)
+	assert(map.scale.x > 1.35 and is_equal_approx(map.position.y, 196.0))
+	assert(hud.top_controls_row.visible, "Portrait TopBar must split controls onto dedicated Row 3")
+	assert(hud.build_buttons_grid.columns == 2, "Portrait shop must use 2-column grid (no elongated 1280px strips!)")
+	assert(hud.tower_buttons_grid.columns == 2, "Portrait tower upgrades must use 2-column grid")
+	assert(hud.bottom_actions_grid.columns == 3, "Portrait bottom bar must use 3x2 chunky touch grid")
+	assert(hud.build_blaster_button.custom_minimum_size.y >= 84.0, "Portrait shop buttons must be chunky thumb targets (>=84px)")
+	assert(hud.start_wave_button.custom_minimum_size.y >= 104.0, "Portrait bottom buttons must be chunky thumb targets (>=104px)")
 	assert(hud.right_panel.position.x == 0.0 and is_equal_approx(hud.right_panel.size.x, 1280.0))
 	assert(hud.right_panel.position.y >= map.position.y + GameMap.MAP_HEIGHT * map.scale.y - 1.0)
 	assert(hud.bottom_bar.position.x == 0.0 and is_equal_approx(hud.bottom_bar.size.x, 1280.0))
-	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "PromptBanner"]:
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar", "GuidePanel"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
 		var r := Rect2(ctrl.position, ctrl.size)
 		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
@@ -214,21 +235,28 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 			assert(not r.has_point(pad_screen), "9:20 Portrait %s overlaps Pad P%d!" % [ctrl_name, i + 1])
 
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+	assert(hud.build_buttons_grid.columns == 1 and hud.bottom_actions_grid.columns == 6)
 	assert(hud.right_panel.size == Vector2(340.0, 480.0) and is_equal_approx(map.extra_left_margin, 0.0))
 	assert(map.position == Vector2(0.0, 64.0) and map.scale == Vector2.ONE)
 
-	# Verify Start Menu, Play button, PauseOverlay, BetweenLevelsOverlay, EndOverlay stay strictly within screen bounds across all modes!
+	# Verify Start Menu + Startup Guide Vex greeting & Dismiss button fit inside all 3 viewports!
 	hud.open_start_menu()
 	await get_tree().process_frame
 	await get_tree().process_frame
+	assert(hud.guide_panel.visible and hud.guide_ack_button.text == "Guide Me!", "Vex must greet player at startup so they can dismiss or follow")
 	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
 		hud.apply_responsive_layout(test_vp)
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var sm_r: Rect2 = hud.start_menu_overlay.get_global_rect()
 		var play_r: Rect2 = hud.start_play_button.get_global_rect()
+		var gp_r: Rect2 = hud.guide_panel.get_global_rect()
 		assert(sm_r.position.x >= 0.0 and sm_r.position.y >= 0.0 and sm_r.end.x <= test_vp.x + 1.0 and sm_r.end.y <= test_vp.y + 1.0, "StartMenu overflow at %s: %s" % [str(test_vp), str(sm_r)])
 		assert(play_r.end.y <= test_vp.y + 1.0 and play_r.end.y <= sm_r.end.y + 1.0, "StartPlayButton pushed off-screen at %s: %s" % [str(test_vp), str(play_r)])
+		assert(gp_r.position.x >= 0.0 and gp_r.end.x <= test_vp.x + 1.0 and gp_r.end.y <= test_vp.y + 1.0, "GuidePanel startup overflow at %s: %s" % [str(test_vp), str(gp_r)])
+		assert(not gp_r.intersects(play_r), "GuidePanel must NOT overlap StartPlayButton at %s" % str(test_vp))
+	hud.guide_dismiss_button.pressed.emit()
+	assert(not hud.guide_panel.visible and GameState.prompts_muted, "Dismiss Vex must hide and mute guide")
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
 	hud.close_start_menu()
 
@@ -1200,16 +1228,19 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 			break
 	assert(c1.is_dead_or_leaked, "Pulse-Plasma Carbine should eliminate test crawler")
 
-	# Track boss penetration & player behavior telemetry (targeting switch, recipes opened, speed sampling)
+	# Track boss penetration & player behavior + UI button/screen tap heatmap telemetry
 	var j_pen: EnemyUnit = map.spawn_enemy("juggernaut", 10)
 	j_pen.advance_along_path(12.0)
 	AnalyticsManager.record_enemy_progress("juggernaut", j_pen.get_path_progress_pct(), false)
 	map.clear_all_enemies()
 	AnalyticsManager._process(0.5)
 	map.select_tower_unit(merged)
-	hud._on_cycle_target_mode_pressed()
+	hud.target_mode_button.pressed.emit()
 	hud.open_recipes_overlay()
 	hud.recipes_overlay.visible = false
+	AnalyticsManager.record_screen_tap(Vector2(640.0, 360.0), Vector2(1280.0, 720.0), false)
+	AnalyticsManager.record_screen_tap(Vector2(640.0, 1422.0), Vector2(1280.0, 2844.0), true)
+	AnalyticsManager.record_button_press("ChargeButton", true)
 
 	GameState.lose_lives(1, "crawler", Vector2.ZERO)
 	assert(tp.activate_power("pause"))
@@ -1229,6 +1260,10 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 	assert(not summary["zone_builds"].is_empty(), "Analytics must record placement zone heatmap")
 	assert(int(summary["powers_used"]["pause"]) >= 1, "Analytics must record Pause cast")
 	assert(int(summary["enemy_leaks"].get("crawler", 0)) == 1, "Analytics must record crawler leak")
+	var ui_sum: Dictionary = summary["ui_summary"]
+	assert(int(ui_sum["button_presses"].get("TargetModeButton", 0)) >= 1, "UI analytics must record button presses")
+	assert(int(ui_sum["disabled_taps"].get("ChargeButton", 0)) >= 1, "UI analytics must record disabled button taps")
+	assert(int(ui_sum["total_taps"]) >= 2 and not ui_sum["tap_grid_landscape"].is_empty() and not ui_sum["tap_grid_portrait"].is_empty(), "UI analytics must record landscape & portrait screen tap heatmaps")
 
 	# Verify Supabase upsert row schema & private scratch-key cleanup
 	var sb_row: Dictionary = AnalyticsManager.build_supabase_row(AnalyticsManager.runs[0])

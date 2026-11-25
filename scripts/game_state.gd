@@ -68,9 +68,10 @@ var is_enemies_frozen: bool = false
 var is_haste_active: bool = false
 var base_attack_charging_active: bool = false
 var prompts_muted: bool = false
+var guide_completed: bool = false
 
-# --- Speed Toggle (1x / 2x / 3x + Pause) ---
-var game_speed: float = 1.0
+# --- Speed Toggle (0.5x=1.5, 1x=3.0 DEFAULT, 1.5x=4.5 + Pause) ---
+var game_speed: float = Balance.DEFAULT_GAME_SPEED
 var is_speed_paused: bool = false
 
 # --- Persistent Rogue-Like Meta-Progression (Persists across missions, levels & sessions via user://) ---
@@ -114,6 +115,7 @@ func save_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 		cfg.set_value("medals", "level_%d" % int(lvl_id), level_medals[lvl_id])
 	cfg.set_value("prefs", "difficulty", difficulty_key)
 	cfg.set_value("prefs", "prompts_muted", prompts_muted)
+	cfg.set_value("prefs", "guide_completed", guide_completed)
 	cfg.set_value("prefs", "show_damage_numbers", show_damage_numbers)
 	cfg.set_value("prefs", "auto_wave", auto_wave_enabled)
 	if SfxManager != null:
@@ -139,6 +141,7 @@ func load_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	if Balance.DIFFICULTY_PRESETS.has(saved_diff):
 		difficulty_key = saved_diff
 	prompts_muted = bool(cfg.get_value("prefs", "prompts_muted", false))
+	guide_completed = bool(cfg.get_value("prefs", "guide_completed", false))
 	show_damage_numbers = bool(cfg.get_value("prefs", "show_damage_numbers", true))
 	auto_wave_enabled = bool(cfg.get_value("prefs", "auto_wave", false))
 	if SfxManager != null:
@@ -206,9 +209,22 @@ func get_sim_delta(delta: float) -> float:
 
 
 func set_game_speed(mult: float) -> void:
-	game_speed = clampf(mult, 1.0, 3.0)
+	game_speed = clampf(mult, 0.5, 6.0)
 	is_speed_paused = false
 	speed_changed.emit(game_speed, is_speed_paused)
+
+
+func get_relative_speed_label() -> String:
+	if is_speed_paused:
+		return "0x"
+	var rel: float = game_speed / Balance.DEFAULT_GAME_SPEED
+	if absf(rel - 0.5) < 0.05:
+		return "0.5x"
+	if absf(rel - 1.0) < 0.05:
+		return "1x"
+	if absf(rel - 1.5) < 0.05:
+		return "1.5x"
+	return "%.1fx" % rel
 
 
 func set_speed_paused(paused: bool) -> void:
@@ -245,6 +261,7 @@ func reset_meta_progression() -> void:
 	difficulty_key = "standard"
 	is_endless_mode = false
 	is_sandbox_mode = false
+	guide_completed = false
 	_sync_mission_research_mirror()
 	economy_changed.emit()
 
@@ -268,7 +285,7 @@ func reset_mission() -> void:
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
 	is_speed_paused = false
-	game_speed = 1.0
+	game_speed = Balance.DEFAULT_GAME_SPEED
 	is_wave_active = false
 	is_enemies_frozen = false
 	is_haste_active = false

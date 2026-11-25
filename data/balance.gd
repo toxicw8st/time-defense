@@ -8,7 +8,11 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v1.2-cloud-telemetry"
+const BALANCE_VERSION: String = "v1.3-guide-mobile-ui-ux"
+const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
+const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
+const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
+const SPEED_OPTION_FAST: float = 4.5  # 1.5x of default
 const VIEWPORT_WIDTH: int = 1280
 const VIEWPORT_HEIGHT: int = 720
 const TARGET_PATH_LENGTH_PX: float = 1891.0

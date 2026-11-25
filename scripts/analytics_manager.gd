@@ -62,16 +62,35 @@ func _process(delta: float) -> void:
 	if GameState.is_wave_active:
 		var spd: float = GameState.game_speed
 		var bucket: String = "1x"
-		if spd >= 2.5:
-			bucket = "3x"
-		elif spd >= 1.5:
-			bucket = "2x"
+		if spd >= 3.75:
+			bucket = "1.5x"
+		elif spd <= 2.1:
+			bucket = "0.5x"
 		var st: Dictionary = current_run["speed_time_sec"]
 		st[bucket] = float(st.get(bucket, 0.0)) + delta
-		current_run["_speed_weighted_sum"] = float(current_run.get("_speed_weighted_sum", 0.0)) + delta * spd
+		current_run["_speed_weighted_sum"] = float(current_run.get("_speed_weighted_sum", 0.0)) + delta * (spd / Balance.DEFAULT_GAME_SPEED)
 		current_run["_speed_total_real_sec"] = float(current_run.get("_speed_total_real_sec", 0.0)) + delta
 	elif int(current_run.get("waves_started", 0)) > 0:
 		current_run["build_phase_sec"] = float(current_run.get("build_phase_sec", 0.0)) + delta
+
+
+func _input(event: InputEvent) -> void:
+	if current_run.is_empty():
+		return
+	var tap_pos := Vector2(-1.0, -1.0)
+	var is_touch_ev: bool = false
+	if event is InputEventScreenTouch and event.pressed:
+		tap_pos = event.position
+		is_touch_ev = true
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return # Avoid double-counting touch-emulated mouse clicks
+		tap_pos = event.position
+	if tap_pos.x < 0.0 or tap_pos.y < 0.0:
+		return
+	var vp: Viewport = get_viewport()
+	var vp_size: Vector2 = vp.get_visible_rect().size if vp != null else Vector2(1280.0, 720.0)
+	record_screen_tap(tap_pos, vp_size, is_touch_ev)
 
 
 func _init_player_id() -> void:
@@ -192,7 +211,7 @@ func _start_new_run() -> void:
 		"zone_builds": {},
 		"upgrade_counts": {"damage": 0, "range": 0, "fire_rate": 0},
 		"combine_methods": {"drag_shop": 0, "two_tower": 0},
-		"speed_time_sec": {"1x": 0.0, "2x": 0.0, "3x": 0.0},
+		"speed_time_sec": {"0.5x": 0.0, "1x": 0.0, "1.5x": 0.0},
 		"avg_game_speed": 1.0,
 		"_speed_weighted_sum": 0.0,
 		"_speed_total_real_sec": 0.0,
@@ -200,6 +219,27 @@ func _start_new_run() -> void:
 			"target_mode_changes": 0,
 			"recipes_opened": 0,
 			"enemies_inspected": 0,
+		},
+		# UI button & screen tap heatmap telemetry
+		"ui_telemetry": {
+			"button_presses": {},
+			"disabled_taps": {},
+			"tap_grid_landscape": {},
+			"tap_grid_portrait": {},
+			"total_taps": 0,
+			"touch_taps": 0,
+			"scroll_events": 0,
+			"viewport_profile": {
+				"width": 1280,
+				"height": 720,
+				"orientation": "landscape",
+				"is_touch": false,
+			},
+			"guide_stats": {
+				"beats_shown": 0,
+				"dismissed_at": "",
+				"completed": false,
+			},
 		},
 		"meta_ranks_start": GameState.meta_research_ranks.duplicate(true),
 		"mutations_end": {"armoured": 0, "thaw": 0, "swift": 0},
@@ -300,7 +340,7 @@ func _sync_run_snapshot() -> void:
 	if spd_tot > 0.01:
 		current_run["avg_game_speed"] = snappedf(float(current_run.get("_speed_weighted_sum", spd_tot)) / spd_tot, 0.01)
 	else:
-		current_run["avg_game_speed"] = snappedf(GameState.game_speed, 0.01)
+		current_run["avg_game_speed"] = snappedf(GameState.game_speed / Balance.DEFAULT_GAME_SPEED, 0.01)
 
 	current_run["mutations_end"] = {
 		"armoured": int(m.mutations.get("armoured_stacks", 0)),
@@ -618,6 +658,66 @@ func record_feature_used(feature_key: String) -> void:
 	fu[feature_key] = int(fu.get(feature_key, 0)) + 1
 
 
+func record_viewport_profile(vp_size: Vector2, is_touch: bool = false) -> void:
+	if current_run.is_empty() or not current_run.has("ui_telemetry"):
+		return
+	var ui: Dictionary = current_run["ui_telemetry"]
+	var orient: String = "portrait" if vp_size.y > vp_size.x else "landscape"
+	ui["viewport_profile"] = {
+		"width": int(round(vp_size.x)),
+		"height": int(round(vp_size.y)),
+		"orientation": orient,
+		"is_touch": is_touch or bool(ui["viewport_profile"].get("is_touch", false)),
+	}
+
+
+func record_button_press(button_id: String, was_disabled: bool = false) -> void:
+	if current_run.is_empty() or button_id == "" or not current_run.has("ui_telemetry"):
+		return
+	var ui: Dictionary = current_run["ui_telemetry"]
+	var target_dict: Dictionary = ui["disabled_taps"] if was_disabled else ui["button_presses"]
+	target_dict[button_id] = int(target_dict.get(button_id, 0)) + 1
+
+
+func record_screen_tap(screen_pos: Vector2, vp_size: Vector2, is_touch: bool = false) -> void:
+	if current_run.is_empty() or vp_size.x <= 1.0 or vp_size.y <= 1.0 or not current_run.has("ui_telemetry"):
+		return
+	var ui: Dictionary = current_run["ui_telemetry"]
+	ui["total_taps"] = int(ui.get("total_taps", 0)) + 1
+	if is_touch:
+		ui["touch_taps"] = int(ui.get("touch_taps", 0)) + 1
+		ui["viewport_profile"]["is_touch"] = true
+	var nx: float = clampf(screen_pos.x / vp_size.x, 0.0, 0.9999)
+	var ny: float = clampf(screen_pos.y / vp_size.y, 0.0, 0.9999)
+	var is_portrait: bool = vp_size.y > vp_size.x
+	var cols: int = 9 if is_portrait else 16
+	var rows: int = 16 if is_portrait else 9
+	var gx: int = clampi(int(floor(nx * float(cols))), 0, cols - 1)
+	var gy: int = clampi(int(floor(ny * float(rows))), 0, rows - 1)
+	var cell_key: String = "%d,%d" % [gx, gy]
+	var grid: Dictionary = ui["tap_grid_portrait"] if is_portrait else ui["tap_grid_landscape"]
+	grid[cell_key] = int(grid.get(cell_key, 0)) + 1
+
+
+func record_ui_scroll() -> void:
+	if current_run.is_empty() or not current_run.has("ui_telemetry"):
+		return
+	var ui: Dictionary = current_run["ui_telemetry"]
+	ui["scroll_events"] = int(ui.get("scroll_events", 0)) + 1
+
+
+func record_guide_event(kind: String, beat_id: String = "") -> void:
+	if current_run.is_empty() or not current_run.has("ui_telemetry"):
+		return
+	var gs: Dictionary = current_run["ui_telemetry"]["guide_stats"]
+	if kind == "shown":
+		gs["beats_shown"] = int(gs.get("beats_shown", 0)) + 1
+	elif kind == "dismissed":
+		gs["dismissed_at"] = beat_id
+	elif kind == "completed":
+		gs["completed"] = true
+
+
 func record_refinery_started(cost: int, next_count: int) -> void:
 	if current_run.is_empty():
 		return
@@ -844,6 +944,15 @@ func compute_aggregate_summary(include_sandbox: bool = false, version_filter: St
 	var total_upgrades := {"damage": 0, "range": 0, "fire_rate": 0}
 	var total_combines := {"drag_shop": 0, "two_tower": 0}
 	var zone_builds: Dictionary = {}
+	var button_presses: Dictionary = {}
+	var disabled_taps: Dictionary = {}
+	var tap_grid_landscape: Dictionary = {}
+	var tap_grid_portrait: Dictionary = {}
+	var orientations := {"landscape": 0, "portrait": 0}
+	var total_taps: int = 0
+	var total_scrolls: int = 0
+	var guide_dismissed_count: int = 0
+	var guide_completed_count: int = 0
 	var by_level: Dictionary = {}
 	var by_difficulty: Dictionary = {}
 	var by_version: Dictionary = {}
@@ -894,6 +1003,31 @@ func compute_aggregate_summary(include_sandbox: bool = false, version_filter: St
 		var zb: Dictionary = r.get("zone_builds", {})
 		for zk in zb.keys():
 			zone_builds[zk] = int(zone_builds.get(zk, 0)) + int(zb[zk])
+
+		var ui_t: Dictionary = r.get("ui_telemetry", {})
+		if not ui_t.is_empty():
+			total_taps += int(ui_t.get("total_taps", 0))
+			total_scrolls += int(ui_t.get("scroll_events", 0))
+			var vp_prof: Dictionary = ui_t.get("viewport_profile", {})
+			var orient: String = str(vp_prof.get("orientation", "landscape"))
+			orientations[orient] = int(orientations.get(orient, 0)) + 1
+			var bp: Dictionary = ui_t.get("button_presses", {})
+			for bk in bp.keys():
+				button_presses[bk] = int(button_presses.get(bk, 0)) + int(bp[bk])
+			var dt: Dictionary = ui_t.get("disabled_taps", {})
+			for dk2 in dt.keys():
+				disabled_taps[dk2] = int(disabled_taps.get(dk2, 0)) + int(dt[dk2])
+			var gl: Dictionary = ui_t.get("tap_grid_landscape", {})
+			for ck in gl.keys():
+				tap_grid_landscape[ck] = int(tap_grid_landscape.get(ck, 0)) + int(gl[ck])
+			var gp: Dictionary = ui_t.get("tap_grid_portrait", {})
+			for ck2 in gp.keys():
+				tap_grid_portrait[ck2] = int(tap_grid_portrait.get(ck2, 0)) + int(gp[ck2])
+			var gs: Dictionary = ui_t.get("guide_stats", {})
+			if str(gs.get("dismissed_at", "")) != "":
+				guide_dismissed_count += 1
+			if bool(gs.get("completed", false)):
+				guide_completed_count += 1
 
 		var bv: String = str(r.get("balance_version", "v1.0"))
 		if not by_version.has(bv):
@@ -1065,6 +1199,17 @@ func compute_aggregate_summary(include_sandbox: bool = false, version_filter: St
 		"upgrade_counts": total_upgrades,
 		"combine_methods": total_combines,
 		"zone_builds": zone_builds,
+		"ui_summary": {
+			"button_presses": button_presses,
+			"disabled_taps": disabled_taps,
+			"tap_grid_landscape": tap_grid_landscape,
+			"tap_grid_portrait": tap_grid_portrait,
+			"orientations": orientations,
+			"total_taps": total_taps,
+			"total_scrolls": total_scrolls,
+			"guide_dismissed_count": guide_dismissed_count,
+			"guide_completed_count": guide_completed_count,
+		},
 		"by_version": by_version,
 		"by_level": by_level,
 		"by_difficulty": by_difficulty,

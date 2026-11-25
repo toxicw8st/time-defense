@@ -78,22 +78,22 @@ theme_override_font_sizes/font_size = 10
 text = "||"
 
 [node name="Speed1xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(32, 26)
+custom_minimum_size = Vector2(36, 26)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "0.5x"
+
+[node name="Speed2xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
+custom_minimum_size = Vector2(30, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
 text = "1x"
 
-[node name="Speed2xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(32, 26)
-layout_mode = 2
-theme_override_font_sizes/font_size = 10
-text = "2x"
-
 [node name="Speed3xButton" type="Button" parent="TopBar/VBox/Row2/SpeedBox"]
-custom_minimum_size = Vector2(32, 26)
+custom_minimum_size = Vector2(36, 26)
 layout_mode = 2
 theme_override_font_sizes/font_size = 10
-text = "3x"
+text = "1.5x"
 
 [node name="LevelPickerButton" type="Button" parent="TopBar/VBox/Row2"]
 custom_minimum_size = Vector2(86, 26)
