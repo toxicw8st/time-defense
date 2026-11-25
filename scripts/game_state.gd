@@ -73,7 +73,9 @@ var prompts_muted: bool = false
 var game_speed: float = 1.0
 var is_speed_paused: bool = false
 
-# --- Persistent Rogue-Like Meta-Progression (Persists across missions & levels!) ---
+# --- Persistent Rogue-Like Meta-Progression (Persists across missions, levels & sessions via user://) ---
+const SAVE_FILE_PATH: String = "user://timedefense_save.cfg"
+
 var meta_research: int = 0
 var meta_research_ranks: Dictionary = {
 	"rapid_cycling": 0,
@@ -82,8 +84,13 @@ var meta_research_ranks: Dictionary = {
 	"efficient_manipulator": 0,
 	"hive_breaker": 0,
 }
+var level_medals: Dictionary = {} # level_id (int) -> {"cleared": bool, "best_difficulty": String, "best_wave": int}
 var selected_mission_level: int = Balance.BASE_ATTACK_DEFAULT_LEVEL # 1/N rule: Level 1..5 shots
-var selected_map_level: int = 1 # Map layout 1..5 (Level 1 = Chrono Rows, 2 = Vertical Corridors, 3 = Citadel Islands, 4 = Spiral Labyrinth, 5 = Omega Gauntlet)
+var selected_map_level: int = 1 # Map layout 1..5
+var difficulty_key: String = "standard" # "standard" | "hard" | "nightmare"
+var is_endless_mode: bool = false
+var auto_wave_enabled: bool = false
+var show_damage_numbers: bool = true
 var is_sandbox_mode: bool = false
 var sandbox_instant_build: bool = true
 var sandbox_no_loss: bool = true
@@ -91,7 +98,97 @@ var sandbox_leaks: int = 0
 
 
 func _ready() -> void:
+	if DisplayServer.get_name() != "headless":
+		load_meta_progress()
 	reset_mission()
+
+
+func save_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
+	if DisplayServer.get_name() == "headless" and path == SAVE_FILE_PATH:
+		return false
+	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "research", meta_research)
+	for k in meta_research_ranks.keys():
+		cfg.set_value("ranks", k, int(meta_research_ranks[k]))
+	for lvl_id in level_medals.keys():
+		cfg.set_value("medals", "level_%d" % int(lvl_id), level_medals[lvl_id])
+	cfg.set_value("prefs", "difficulty", difficulty_key)
+	cfg.set_value("prefs", "prompts_muted", prompts_muted)
+	cfg.set_value("prefs", "show_damage_numbers", show_damage_numbers)
+	cfg.set_value("prefs", "auto_wave", auto_wave_enabled)
+	if SfxManager != null:
+		cfg.set_value("prefs", "sfx_muted", SfxManager.muted)
+	return cfg.save(path) == OK
+
+
+func load_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(path) != OK:
+		return false
+	meta_research = maxi(0, int(cfg.get_value("meta", "research", 0)))
+	for k in meta_research_ranks.keys():
+		meta_research_ranks[k] = maxi(0, int(cfg.get_value("ranks", k, 0)))
+	level_medals.clear()
+	for lvl_id in range(1, Balance.MAX_MISSION_LEVELS + 1):
+		var key_str: String = "level_%d" % lvl_id
+		if cfg.has_section_key("medals", key_str):
+			var v = cfg.get_value("medals", key_str, {})
+			if v is Dictionary:
+				level_medals[lvl_id] = v
+	var saved_diff: String = str(cfg.get_value("prefs", "difficulty", "standard"))
+	if Balance.DIFFICULTY_PRESETS.has(saved_diff):
+		difficulty_key = saved_diff
+	prompts_muted = bool(cfg.get_value("prefs", "prompts_muted", false))
+	show_damage_numbers = bool(cfg.get_value("prefs", "show_damage_numbers", true))
+	auto_wave_enabled = bool(cfg.get_value("prefs", "auto_wave", false))
+	if SfxManager != null:
+		SfxManager.set_muted(bool(cfg.get_value("prefs", "sfx_muted", false)))
+	_sync_mission_research_mirror()
+	economy_changed.emit()
+	return true
+
+
+func set_difficulty(diff_key: String) -> void:
+	if Balance.DIFFICULTY_PRESETS.has(diff_key):
+		difficulty_key = diff_key
+		save_meta_progress()
+		economy_changed.emit()
+
+
+func get_difficulty_cfg() -> Dictionary:
+	return Balance.DIFFICULTY_PRESETS.get(difficulty_key, Balance.DIFFICULTY_PRESETS["standard"])
+
+
+func get_level_cfg() -> Dictionary:
+	return Balance.LEVELS.get(selected_map_level, Balance.LEVELS[1])
+
+
+func record_level_clear(lvl_id: int, diff_key: String, wave_reached: int) -> void:
+	if is_sandbox_mode:
+		return
+	var prev: Dictionary = level_medals.get(lvl_id, {"cleared": false, "best_difficulty": "standard", "best_wave": 0})
+	var diff_rank := {"standard": 1, "hard": 2, "nightmare": 3}
+	var best_diff: String = str(prev.get("best_difficulty", "standard"))
+	if not bool(prev.get("cleared", false)) or int(diff_rank.get(diff_key, 1)) > int(diff_rank.get(best_diff, 1)):
+		best_diff = diff_key
+	level_medals[lvl_id] = {
+		"cleared": true,
+		"best_difficulty": best_diff,
+		"best_wave": maxi(int(prev.get("best_wave", 0)), wave_reached),
+	}
+	save_meta_progress()
+
+
+func continue_into_endless() -> void:
+	if mission == null:
+		return
+	mission.is_over = false
+	mission.outcome = ""
+	mission.end_reason = ""
+	is_clock_paused = false
+	is_endless_mode = true
+	event_logged.emit("ENDLESS CHRONO MODE ACTIVATED — survive as far as you can!")
+	economy_changed.emit()
 
 
 func _process(delta: float) -> void:
@@ -140,8 +237,11 @@ func reset_meta_progression() -> void:
 	meta_research = 0
 	for k in meta_research_ranks.keys():
 		meta_research_ranks[k] = 0
+	level_medals.clear()
 	selected_mission_level = Balance.BASE_ATTACK_DEFAULT_LEVEL
 	selected_map_level = 1
+	difficulty_key = "standard"
+	is_endless_mode = false
 	is_sandbox_mode = false
 	_sync_mission_research_mirror()
 	economy_changed.emit()
@@ -159,7 +259,10 @@ func reset_mission() -> void:
 	mission = MissionState.new()
 	if is_sandbox_mode:
 		mission.economy["money"] = 999999
+	else:
+		mission.economy["money"] = Balance.STARTING_MONEY + int(get_level_cfg().get("starting_money_bonus", 0))
 	sandbox_leaks = 0
+	is_endless_mode = false
 	mission_elapsed_seconds = 0.0
 	is_clock_paused = false
 	is_speed_paused = false
@@ -218,6 +321,7 @@ func add_research(amount: int, is_replay: bool = false) -> int:
 	meta_research += granted
 	mission.stats["research_earned"] += granted
 	_sync_mission_research_mirror()
+	save_meta_progress()
 	economy_changed.emit()
 	return granted
 
@@ -227,6 +331,7 @@ func spend_research(amount: int) -> bool:
 		return false
 	meta_research -= amount
 	_sync_mission_research_mirror()
+	save_meta_progress()
 	economy_changed.emit()
 	return true
 
@@ -273,6 +378,8 @@ func end_mission(outcome: String, reason: String) -> void:
 	mission.outcome = outcome
 	mission.end_reason = reason
 	is_clock_paused = true
+	if outcome == "won":
+		record_level_clear(selected_map_level, difficulty_key, mission.wave_number)
 	mission_ended.emit(outcome, reason)
 
 
@@ -284,26 +391,40 @@ func normalize_enemy_type(enemy_type: String) -> String:
 	return enemy_type
 
 
-## Stacked HP multiplier from Rewind (+5% per stack, applied after replay to next new wave)
-## and Pause (+5% per stack on subsequent waves). With 1 Rewind + 1 Pause: 1.05 * 1.05 = 1.1025 (~1.10x).
+## Stacked HP multiplier from Rewind (+5%), Pause (+5%), Difficulty preset, and Sector modifier.
 func get_enemy_hp_multiplier() -> float:
 	var arm_stacks: int = mission.mutations.get("armoured_active_stacks", 0)
 	var thaw_hp_stacks: int = mission.mutations.get("thaw_hp_stacks", 0)
 	var arm_mult: float = pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], arm_stacks)
 	var thaw_mult: float = pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_hp_stacks)
-	return arm_mult * thaw_mult
+	var diff_mult: float = float(get_difficulty_cfg().get("hp_mult", 1.0))
+	var lvl_mult: float = 1.0 + float(get_level_cfg().get("enemy_hp_bonus", 0.0))
+	return arm_mult * thaw_mult * diff_mult * lvl_mult
 
 
 func get_enemy_speed_multiplier() -> float:
 	if is_enemies_frozen:
 		return 0.0
 	var stacks: int = mission.mutations.get("swift_stacks", 0)
-	return pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], stacks)
+	var diff_mult: float = float(get_difficulty_cfg().get("speed_mult", 1.0))
+	return pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], stacks) * diff_mult
+
+
+func get_enemy_bounty_multiplier() -> float:
+	var diff_mult: float = float(get_difficulty_cfg().get("bounty_mult", 1.0))
+	var lvl_mult: float = 1.0 + float(get_level_cfg().get("bounty_bonus", 0.0))
+	return diff_mult * lvl_mult
+
+
+func get_level_tower_range_multiplier() -> float:
+	return 1.0 + float(get_level_cfg().get("tower_range_bonus", 0.0))
 
 
 func get_effective_enemy_speed(enemy_type: String) -> float:
 	var key: String = normalize_enemy_type(enemy_type)
 	var base_speed: float = Balance.ENEMIES[key]["speed"]
+	if key == "blitzer":
+		base_speed *= (1.0 + float(get_level_cfg().get("blitzer_speed_bonus", 0.0)))
 	return base_speed * get_enemy_speed_multiplier()
 
 

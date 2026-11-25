@@ -21,8 +21,9 @@ func _ready() -> void:
 	_test_e_wave_length_speed_toggle_and_wave_10_tightness()
 	_test_slow_railgun_decay_and_wave10_package()
 	await _test_g_combos_bubble_and_sandbox()
+	await _test_h_rebalance_and_pass2_polish()
 
-	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok)")
+	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok rebalance=ok pass2=ok)")
 	get_tree().quit(0)
 
 
@@ -984,3 +985,168 @@ func _test_g_combos_bubble_and_sandbox() -> void:
 	remove_child(inst)
 	inst.queue_free()
 	print("CHECK_COMBOS_BUBBLE_SANDBOX_PASS combos=21 bubble=ok sandbox=ok")
+
+
+func _test_h_rebalance_and_pass2_polish() -> void:
+	# 1) Tower-cost-scaled upgrade costs & merge upgrade-transfer anti-exploit
+	var blaster_lv1: int = Balance.get_tower_upgrade_cost("damage", 0, "blaster")
+	var mac_lv1: int = Balance.get_tower_upgrade_cost("damage", 0, "annihilator+annihilator")
+	assert(blaster_lv1 == 60, "$90 Blaster Lv1 Damage must remain $60, got %d" % blaster_lv1)
+	assert(mac_lv1 == 255, "$640 MAC Cannon Lv1 Damage must scale to $255, got %d" % mac_lv1)
+	assert(mac_lv1 > blaster_lv1 * 3, "Endgame combo upgrade cost must scale significantly above $90 Blaster")
+	var transfer_fee: int = Balance.get_merge_upgrade_transfer_fee("blaster", {"damage": 3, "range": 0, "fire_rate": 0}, "annihilator", {}, "blaster+annihilator")
+	assert(transfer_fee > 0, "Transferring cheap Blaster Lv3 upgrades onto expensive hybrid must charge a positive transfer fee, got %d" % transfer_fee)
+
+	# 2) Wave 16+ Colossus Siege Boss & monotonic post-W10 threat curve
+	assert(Balance.ENEMIES.has("colossus"), "Wave 16+ Colossus enemy must exist in Balance.ENEMIES")
+	assert(is_equal_approx(float(Balance.ENEMIES["colossus"]["base_hp"]), 14000.0), "Colossus base HP must be 14000")
+	var w16: Dictionary = WavesData.compute_wave_stats(16)
+	var w25: Dictionary = WavesData.compute_wave_stats(25)
+	assert(int(w16["counts"].get("colossus", 0)) >= 1, "Wave 16 must introduce Colossus siege boss")
+	assert(int(w25["s_dollars"]) > int(w16["s_dollars"]), "Post-W10 s$ threat must climb monotonically (W16=%d, W25=%d)" % [int(w16["s_dollars"]), int(w25["s_dollars"])])
+	assert(int(w25["dps_needed"]) > 650, "Wave 25 DPS required must not collapse (got %d)" % int(w25["dps_needed"]))
+
+	# 3) Save/Load Meta-Research, Medals & Preferences round-trip (isolated test file)
+	var test_save_path: String = "user://test_verify_save_step8.cfg"
+	GameState.reset_meta_progression()
+	GameState.meta_research = 123
+	GameState.meta_research_ranks["rapid_cycling"] = 2
+	GameState.record_level_clear(1, "hard", 18)
+	GameState.difficulty_key = "hard"
+	GameState.auto_wave_enabled = true
+	GameState.show_damage_numbers = false
+	assert(GameState.save_meta_progress(test_save_path), "save_meta_progress must succeed")
+	GameState.reset_meta_progression()
+	GameState.difficulty_key = "standard"
+	GameState.auto_wave_enabled = false
+	GameState.show_damage_numbers = true
+	assert(GameState.load_meta_progress(test_save_path), "load_meta_progress must succeed")
+	assert(GameState.meta_research == 123, "Loaded meta_research mismatch")
+	assert(int(GameState.meta_research_ranks["rapid_cycling"]) == 2, "Loaded rank mismatch")
+	assert(bool(GameState.level_medals.get(1, {}).get("cleared", false)), "Loaded level medal mismatch")
+	assert(GameState.difficulty_key == "hard" and GameState.auto_wave_enabled and not GameState.show_damage_numbers, "Loaded prefs mismatch")
+	var abs_save: String = ProjectSettings.globalize_path(test_save_path)
+	if FileAccess.file_exists(test_save_path):
+		DirAccess.remove_absolute(abs_save)
+	GameState.reset_meta_progression()
+	GameState.difficulty_key = "standard"
+	GameState.auto_wave_enabled = false
+	GameState.show_damage_numbers = true
+
+	# 4) Combat bug fixes, telemetry, Enemy Inspector, RecipesOverlay, Early-Call, Hive Retaliation & Endless Mode
+	GameState.set_sandbox_mode(false)
+	GameState.prompts_muted = true
+	GameState.reset_mission()
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var inst: Node = main_scene.instantiate()
+	add_child(inst)
+	await get_tree().process_frame
+
+	var map: GameMap = inst.get_node("Map")
+	var wm: WaveManager = inst.get_node("WaveManager")
+	var hud: CanvasLayer = inst.get_node("HUD")
+	GameState.mission.economy["money"] = 50000
+
+	# 4a) 30% max_hp Time Decay tick cap
+	var cap_crawler: EnemyUnit = map.spawn_enemy("crawler", 1) # 50 max HP -> max tick 15.0
+	var cap_dmg: float = cap_crawler.apply_time_decay_tick(500.0)
+	assert(cap_dmg <= cap_crawler.max_hp * Balance.TIME_DECAY_MAX_TICK_PCT + 0.01, "Decay tick must obey 30%% max HP cap (dealt=%.2f)" % cap_dmg)
+	map.clear_all_enemies()
+
+	# 4b) blaster+mortar direct_primary_only (no double-dip primary splash)
+	var fm_t: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	fm_t.current_job = null
+	fm_t.is_built = true
+	fm_t.transform_to_combo("blaster+mortar", 0, {}, 0.0, true)
+	var fm_c: EnemyUnit = map.spawn_enemy("crawler", 1) # Standard: Piercing 75% (15*0.75=11.25), Normal 100% (11)
+	fm_c.advance_along_path(3.8) # (218, 75) -> 43px from Pad 0 (220, 32)
+	var fm_hp0: float = fm_c.hp
+	for _s in range(15):
+		fm_t.advance_tower(0.1)
+		for p in map.projectiles_container.get_children():
+			if p is ProjectileEffect:
+				p.advance_projectile(0.1)
+		if fm_c.hp < fm_hp0:
+			break
+	# One shot should deal direct 11.25 + secondary splash 11.0 = 22.25 (NOT 11.25 + 11.25 + 11.0 = 33.5!)
+	var single_hit_dealt: float = fm_hp0 - fm_c.hp
+	assert(single_hit_dealt > 10.0 and single_hit_dealt < 25.0, "blaster+mortar must NOT double-dip primary damage (dealt=%.2f)" % single_hit_dealt)
+	map.clear_all_enemies()
+	map.clear_all_projectiles()
+	map.sell_tower(fm_t)
+
+	# 4c) laser+laser 35% chain refraction arc + Tower Telemetry (total_damage_dealt / total_kills / DPS)
+	var ll_t: TowerUnit = map.build_tower_on_pad(0, "laser")
+	ll_t.current_job = null
+	ll_t.is_built = true
+	ll_t.transform_to_combo("laser+laser", 0, {}, 0.0, true)
+	assert(ll_t.get_estimated_dps() > 15.0, "Tower get_estimated_dps() must return positive numeric DPS")
+	var ch1: EnemyUnit = map.spawn_enemy("crawler", 1)
+	var ch2: EnemyUnit = map.spawn_enemy("crawler", 1)
+	ch1.advance_along_path(3.8) # (218, 75) -> 43px from Pad 0
+	ch2.advance_along_path(3.0) # (195, 75) -> 23px behind ch1 (< 70px refract radius)
+	var ch2_hp0: float = ch2.hp
+	for _s in range(40):
+		ll_t.advance_tower(0.1)
+		if ch1.is_dead_or_leaked and ch2.hp < ch2_hp0:
+			break
+	assert(ch2.hp < ch2_hp0, "laser+laser must refract 35%% chain arc onto nearby enemy within 70px")
+	assert(ll_t.total_damage_dealt > 0.0 and ll_t.total_kills >= 1, "Tower telemetry must record damage and kills (dmg=%.1f kills=%d)" % [ll_t.total_damage_dealt, ll_t.total_kills])
+	map.select_tower_unit(ll_t)
+	hud._refresh_all()
+	assert(hud.tower_ratings_label.text.contains("DPS"), "HUD must show live numeric DPS")
+	assert(hud.tower_status_label.text.contains("Kills"), "HUD must show live tower Kills telemetry")
+	map.clear_all_enemies()
+	map.sell_tower(ll_t)
+
+	# 4d) laser+annihilator 3-stack Armor Shred cap
+	var la_t: TowerUnit = map.build_tower_on_pad(0, "laser")
+	la_t.current_job = null
+	la_t.is_built = true
+	la_t.transform_to_combo("laser+annihilator", 0, {}, 0.0, true)
+	var jugg_s: EnemyUnit = map.spawn_enemy("juggernaut", 10)
+	jugg_s.advance_along_path(5.2) # ~109px -> (219, 75), 43px from Pad 0
+	for _s in range(60):
+		la_t.advance_tower(0.1)
+	assert(jugg_s.armor_shred_stacks == 3, "laser+annihilator must stack Armor Shred up to 3 stacks (got %d)" % jugg_s.armor_shred_stacks)
+
+	# 4e) Enemy Inspector Card & RecipesOverlay responsive layout across all 3 viewports
+	map.inspect_enemy(jugg_s)
+	hud._refresh_all()
+	assert(hud.enemy_inspector_panel.visible and hud.enemy_inspector_label.text.contains("Juggernaut"), "Enemy Inspector must display tapped enemy details")
+	hud.open_recipes_overlay()
+	assert(hud.recipes_overlay.visible and hud.recipes_list_box.get_child_count() == 21, "RecipesOverlay must list all 21 combinations")
+	for test_vp in [Vector2(1280.0, 720.0), Vector2(1600.0, 720.0), Vector2(1280.0, 2844.0)]:
+		hud.apply_responsive_layout(test_vp)
+		await get_tree().process_frame
+		var rr: Rect2 = hud.recipes_overlay.get_global_rect()
+		var er: Rect2 = hud.enemy_inspector_panel.get_global_rect()
+		assert(rr.position.x >= 0.0 and rr.end.x <= test_vp.x + 1.0 and rr.end.y <= test_vp.y + 1.0, "RecipesOverlay overflow at %s: %s" % [str(test_vp), str(rr)])
+		assert(er.position.x >= 0.0 and er.end.x <= test_vp.x + 1.0 and er.end.y <= test_vp.y + 1.0, "EnemyInspectorPanel overflow at %s: %s" % [str(test_vp), str(er)])
+	hud.recipes_overlay.visible = false
+	map.clear_all_enemies()
+
+	# 4f) Early-Call Next Wave bonus + Hive Retaliation + Endless Mode
+	GameState.mission.wave_number = 3
+	wm.state = WaveManager.State.FIGHTING
+	GameState.is_wave_active = true
+	var ec_e: EnemyUnit = map.spawn_enemy("crawler", 3)
+	assert(wm.can_call_next_wave_early(), "Early-Call must be allowed during FIGHTING with active wave < max")
+	var money_before_ec: int = GameState.mission.economy["money"]
+	var expected_bonus: int = wm.get_early_call_bonus()
+	var ec_ok: bool = wm.call_next_wave_early()
+	assert(ec_ok and expected_bonus >= 5 and GameState.mission.economy["money"] == money_before_ec + expected_bonus, "Early-Call must grant immediate cash bonus")
+	assert(GameState.mission.wave_number == 4, "Early-Call must advance to Wave 4")
+	var before_retal: int = map.get_active_enemies().size()
+	map.trigger_hive_retaliation(330, 4)
+	assert(map.get_active_enemies().size() >= before_retal + 4, "Hive Retaliation must spawn enraged counter-squad")
+	GameState.end_mission("won", "Test victory")
+	assert(hud.end_endless_button.visible, "Continue into Endless button must show on non-sandbox victory")
+	GameState.continue_into_endless()
+	assert(GameState.is_endless_mode and not GameState.mission.is_over, "Endless Mode must clear is_over and enable wave 46+ play")
+
+	GameState.is_endless_mode = false
+	GameState.prompts_muted = false
+	remove_child(inst)
+	inst.queue_free()
+	print("CHECK_REBALANCE_AND_PASS2_PASS scaled_upg=ok colossus=ok save_load=ok bugs_fixed=ok ui=ok")

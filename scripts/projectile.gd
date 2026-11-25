@@ -24,11 +24,14 @@ var _explosion_flash_timer: float = 0.0
 var blast_color: Color = Color(1.0, 0.52, 0.16)
 var secondary_damage: float = 0.0
 var secondary_damage_type: String = "Normal"
+var direct_primary_only: bool = false
 var mirv_subshells: int = 0
+var mirv_damage_ratio: float = 0.36
 var shell_slow_pct: float = 0.0
 var shell_slow_dur: float = 0.0
 var shell_decay_flat: float = 0.0
 var shell_spawn_bubble: Dictionary = {}
+var source_tower_ref: WeakRef = null
 
 # Chrono status bubble fields
 var bubble_radius: float = 42.0
@@ -88,16 +91,22 @@ func configure_mortar_extras(
 	p_slow_pct: float = 0.0,
 	p_slow_dur: float = 0.0,
 	p_decay_flat: float = 0.0,
-	p_spawn_bubble: Dictionary = {}
+	p_spawn_bubble: Dictionary = {},
+	p_direct_primary_only: bool = false,
+	p_mirv_damage_ratio: float = 0.36,
+	p_source_tower: Node = null
 ) -> void:
 	blast_color = p_blast_color
 	secondary_damage = p_secondary_damage
 	secondary_damage_type = p_secondary_type
 	mirv_subshells = p_mirv_subshells
+	mirv_damage_ratio = p_mirv_damage_ratio
+	direct_primary_only = p_direct_primary_only
 	shell_slow_pct = p_slow_pct
 	shell_slow_dur = p_slow_dur
 	shell_decay_flat = p_decay_flat
 	shell_spawn_bubble = p_spawn_bubble.duplicate()
+	source_tower_ref = weakref(p_source_tower) if p_source_tower != null else null
 
 
 func setup_chrono_bubble(
@@ -111,7 +120,8 @@ func setup_chrono_bubble(
 	p_burn_dps: float = 0.0,
 	p_burn_type: String = "Laser",
 	p_color: Color = Color(0.64, 0.48, 1.0),
-	p_slow_linger: float = 0.45
+	p_slow_linger: float = 0.45,
+	p_source_tower: Node = null
 ) -> void:
 	is_tracer = false
 	is_bubble = true
@@ -128,6 +138,7 @@ func setup_chrono_bubble(
 	bubble_burn_type = p_burn_type
 	bubble_color = p_color
 	map_ref = p_map
+	source_tower_ref = weakref(p_source_tower) if p_source_tower != null else null
 	_bubble_pulse_accum = 0.0
 	position = p_center
 	_apply_bubble_pulse(0.0)
@@ -179,33 +190,59 @@ func advance_projectile(delta: float) -> void:
 		_detonate()
 
 
+func _get_source_tower() -> Node:
+	if source_tower_ref == null:
+		return null
+	var obj = source_tower_ref.get_ref()
+	return obj if (obj != null and is_instance_valid(obj)) else null
+
+
 func _apply_bubble_pulse(pulse_dt: float) -> void:
 	if map_ref == null:
 		return
+	var src_t: Node = _get_source_tower()
+	# Time-Power Synergy: Pause overcharges active Chrono Bubbles (+25% radius)
+	var eff_radius: float = bubble_radius * (1.25 if GameState.is_enemies_frozen else 1.0)
 	for enemy in map_ref.get_active_enemies():
 		if not is_instance_valid(enemy) or not enemy.is_alive():
 			continue
-		if enemy.position.distance_to(position) <= bubble_radius:
-			enemy.apply_bubble_aura(bubble_slow_pct, bubble_slow_linger, bubble_decay_flat, bubble_decay_ticks)
+		if enemy.position.distance_to(position) <= eff_radius:
+			enemy.apply_bubble_aura(bubble_slow_pct, bubble_slow_linger, bubble_decay_flat, bubble_decay_ticks, src_t)
 			if bubble_burn_dps > 0.0 and pulse_dt > 0.0:
-				enemy.take_damage(bubble_burn_dps * pulse_dt, bubble_burn_type)
+				enemy.take_damage(bubble_burn_dps * pulse_dt, bubble_burn_type, src_t)
 
 
 func _detonate() -> void:
 	_exploded = true
 	_explosion_flash_timer = 0.24
 	position = target_pos
+	if SfxManager != null:
+		SfxManager.play("mortar", 0.08, -2.0)
+	var src_t: Node = _get_source_tower()
 	if map_ref != null:
-		for enemy in map_ref.get_active_enemies():
+		var active: Array[EnemyUnit] = map_ref.get_active_enemies()
+		var center_target: EnemyUnit = null
+		if direct_primary_only:
+			var best_d: float = maxf(28.0, splash_radius * 0.45)
+			for enemy in active:
+				var cd: float = enemy.position.distance_to(target_pos)
+				if cd <= best_d:
+					best_d = cd
+					center_target = enemy
+		for enemy in active:
 			var d: float = enemy.position.distance_to(target_pos)
 			if d <= splash_radius:
 				var falloff: float = lerpf(1.0, splash_edge_ratio, d / maxf(1.0, splash_radius))
 				if damage > 0.0:
-					enemy.take_damage(damage * falloff, damage_type)
+					if direct_primary_only:
+						if enemy == center_target:
+							enemy.take_damage(damage, damage_type, src_t)
+					else:
+						enemy.take_damage(damage * falloff, damage_type, src_t)
 				if secondary_damage > 0.0 and enemy.is_alive():
-					enemy.take_damage(secondary_damage * falloff, secondary_damage_type)
+					enemy.take_damage(secondary_damage * falloff, secondary_damage_type, src_t)
 				if shell_slow_pct > 0.0 and enemy.is_alive():
-					enemy.apply_time_hit(shell_slow_pct, shell_slow_dur, shell_decay_flat, 2)
+					enemy.apply_time_hit(shell_slow_pct, shell_slow_dur, shell_decay_flat, 2, src_t)
 		if mirv_subshells > 0:
 			for i in range(mirv_subshells):
 				var angle: float = (TAU / float(mirv_subshells)) * float(i) + 0.35
@@ -215,13 +252,13 @@ func _detonate() -> void:
 					target_pos,
 					sub_target,
 					0.24,
-					damage * 0.36,
-					maxf(32.0, splash_radius * 0.55),
-					0.55,
+					damage * mirv_damage_ratio,
+					maxf(34.0, splash_radius * 0.58),
+					0.58,
 					map_ref,
 					damage_type
 				)
-				sub_proj.configure_mortar_extras(blast_color)
+				sub_proj.configure_mortar_extras(blast_color, 0.0, "Normal", 0, 0.0, 0.0, 0.0, {}, false, 0.36, src_t)
 		if not shell_spawn_bubble.is_empty():
 			var bubble_proj: ProjectileEffect = map_ref.spawn_projectile()
 			bubble_proj.setup_chrono_bubble(
@@ -235,7 +272,8 @@ func _detonate() -> void:
 				float(shell_spawn_bubble.get("burn_dps", 0.0)),
 				String(shell_spawn_bubble.get("burn_type", "Laser")),
 				shell_spawn_bubble.get("color", Color(0.64, 0.48, 1.0)),
-				float(shell_spawn_bubble.get("slow_linger", 0.45))
+				float(shell_spawn_bubble.get("slow_linger", 0.45)),
+				src_t
 			)
 	queue_redraw()
 
@@ -246,7 +284,8 @@ func _draw() -> void:
 		var fade_in: float = clampf(elapsed / 0.14, 0.0, 1.0)
 		var fade_out: float = clampf((flight_time - elapsed) / 0.45, 0.0, 1.0)
 		var alpha: float = minf(fade_in, fade_out)
-		var r: float = bubble_radius * (0.45 + 0.55 * fade_in)
+		var eff_b_rad: float = bubble_radius * (1.25 if GameState.is_enemies_frozen else 1.0)
+		var r: float = eff_b_rad * (0.45 + 0.55 * fade_in)
 		var fill_col := Color(bubble_color.r, bubble_color.g, bubble_color.b, 0.16 * alpha)
 		var mid_col := Color(bubble_color.r, bubble_color.g, bubble_color.b, 0.48 * alpha)
 		var rim_col := Color(lerpf(bubble_color.r, 1.0, 0.35), lerpf(bubble_color.g, 1.0, 0.35), lerpf(bubble_color.b, 1.0, 0.35), 0.88 * alpha)

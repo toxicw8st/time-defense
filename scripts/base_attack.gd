@@ -120,6 +120,8 @@ func _fire_hive_destroyer() -> void:
 
 	if map_ref != null:
 		map_ref.trigger_hive_beam_effect(dmg)
+	if SfxManager != null:
+		SfxManager.play("hive_beam")
 
 	var msg: String = "Hive destroyer hit - %d damage (%d / %d HP)" % [dmg, m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP]
 	GameState.event_logged.emit(msg)
@@ -127,3 +129,5 @@ func _fire_hive_destroyer() -> void:
 
 	if m.enemy_base_hp <= 0:
 		GameState.end_mission("won", "Enemy Base destroyed by Hive Destroyer!")
+	elif map_ref != null and GameState.is_wave_active and not GameState.is_sandbox_mode and m.wave_number >= 3:
+		map_ref.trigger_hive_retaliation(m.enemy_base_hp, m.wave_number)

@@ -92,6 +92,8 @@ func step_powers(delta: float) -> void:
 			GameState.mission.manipulator_level += 1
 			var new_lvl: int = GameState.mission.manipulator_level
 			manipulator_upgraded.emit(new_lvl)
+			if SfxManager != null:
+				SfxManager.play("build")
 			GameState.event_logged.emit("Manipulator upgraded to Level %d - powers online!" % new_lvl)
 
 	# Hive Destroyer charging pauses all time abilities (active durations + cooldown recovery)
@@ -178,6 +180,8 @@ func activate_power(power_name: String) -> bool:
 		return false
 
 	GameState.mission.stats["powers_used"][power_name] += 1
+	if SfxManager != null:
+		SfxManager.play("power")
 
 	match power_name:
 		"pause":

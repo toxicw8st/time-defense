@@ -3,6 +3,7 @@ class_name GameMap
 
 signal pad_selected(pad_index: int)
 signal tower_selected(tower: TowerUnit)
+signal enemy_inspected(enemy: EnemyUnit)
 signal selection_cleared
 
 const MAP_WIDTH: float = 940.0
@@ -117,6 +118,9 @@ var drag_status_reason: String = ""
 var drag_merge_target: TowerUnit = null
 var drag_merge_combo_type: String = ""
 var combine_source_tower: TowerUnit = null
+var inspected_enemy: EnemyUnit = null
+var _shake_timer: float = 0.0
+var _shake_intensity: float = 0.0
 
 
 static func get_level_config(level_id: int) -> Dictionary:
@@ -363,7 +367,8 @@ func evaluate_drop_position(local_pos: Vector2, incoming_tower_type: String = ""
 		if target_t != null and target_t.can_combine():
 			var combo_key: String = Balance.get_combo_key(target_t.tower_type, eff_in_type)
 			if Balance.TOWERS.has(combo_key):
-				var total_cost: int = int(Balance.TOWERS[eff_in_type]["cost"]) + Balance.get_merge_surcharge(target_t.tower_type, eff_in_type)
+				var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(target_t.tower_type, target_t.levels, eff_in_type, {}, combo_key)
+				var total_cost: int = int(Balance.TOWERS[eff_in_type]["cost"]) + Balance.get_merge_surcharge(target_t.tower_type, eff_in_type) + upg_xfer
 				var can_pay: bool = GameState.is_sandbox_mode or GameState.mission.economy["money"] >= total_cost
 				return {
 					"valid": can_pay,
@@ -542,15 +547,38 @@ func show_refinery_tick_floaters(owned_count: int) -> void:
 			spawn_floater(Vector2(rx, ry), "+%d$" % Balance.REFINERY_INCOME_PER_TICK, Color(0.55, 0.95, 0.65))
 
 
+func trigger_screen_shake(duration: float = 0.25, intensity: float = 3.5) -> void:
+	_shake_timer = maxf(_shake_timer, duration)
+	_shake_intensity = maxf(_shake_intensity, intensity)
+
+
 func trigger_hive_beam_effect(dmg: int = Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE) -> void:
 	hive_beam_timer = 0.85
+	trigger_screen_shake(0.32, 4.5)
 	spawn_floater(active_enemy_base_pos + Vector2(-20, -45), "-%d HP!" % dmg, Color(1.0, 0.72, 0.25))
+	queue_redraw()
+
+
+func trigger_hive_retaliation(remaining_hp: int, wave_num: int) -> void:
+	if enemy_path == null or enemy_path.curve == null:
+		return
+	trigger_screen_shake(0.38, 5.2)
+	var squad: Array[String] = ["rusher", "rusher", "rusher", "blitzer"]
+	if remaining_hp <= 200 and wave_num >= 8:
+		squad.append("juggernaut")
+	for i in range(squad.size()):
+		var e: EnemyUnit = spawn_enemy(squad[i], wave_num)
+		if i > 0:
+			e.advance_along_path(float(i) * 0.28)
+	spawn_floater(active_enemy_base_pos + Vector2(-26, 36), "HIVE RETALIATION!", Color(1.0, 0.30, 0.36))
+	GameState.event_logged.emit("HIVE RETALIATION! Enraged squad erupts from the Alien Base!")
 	queue_redraw()
 
 
 func trigger_surge_explosion(_surge_count: int = 1) -> void:
 	surge_explosion_max_timer = 1.65
 	surge_explosion_timer = surge_explosion_max_timer
+	trigger_screen_shake(0.35, 4.8)
 	surge_explosion_sparks.clear()
 	for i in range(28):
 		var ang: float = float(i) * TAU / 28.0 + sin(float(i) * 2.3) * 0.12
@@ -651,6 +679,13 @@ func _process(delta: float) -> void:
 		leak_flash_timer = maxf(0.0, leak_flash_timer - delta)
 	if hive_beam_timer > 0.0:
 		hive_beam_timer = maxf(0.0, hive_beam_timer - delta)
+	if _shake_timer > 0.0:
+		_shake_timer = maxf(0.0, _shake_timer - delta)
+		if _shake_timer <= 0.0:
+			_shake_intensity = 0.0
+	if inspected_enemy != null and (not is_instance_valid(inspected_enemy) or not inspected_enemy.is_alive()):
+		inspected_enemy = null
+		enemy_inspected.emit(null)
 	if surge_explosion_timer > 0.0:
 		surge_explosion_timer = maxf(0.0, surge_explosion_timer - delta)
 		for sp in surge_explosion_sparks:
@@ -689,6 +724,29 @@ func _find_tower_at(local_pos: Vector2) -> TowerUnit:
 			best_d2 = d2
 			best_t = t
 	return best_t
+
+
+func _find_enemy_at(local_pos: Vector2) -> EnemyUnit:
+	var best_e: EnemyUnit = null
+	var best_d2: float = 24.0 * 24.0
+	for e in get_active_enemies():
+		var d2: float = local_pos.distance_squared_to(e.position)
+		if d2 <= best_d2:
+			best_d2 = d2
+			best_e = e
+	return best_e
+
+
+func inspect_enemy(enemy: EnemyUnit) -> void:
+	if inspected_enemy != null and is_instance_valid(inspected_enemy):
+		inspected_enemy.is_inspected = false
+		inspected_enemy.queue_redraw()
+	inspected_enemy = enemy
+	if inspected_enemy != null and is_instance_valid(inspected_enemy):
+		inspected_enemy.is_inspected = true
+		inspected_enemy.queue_redraw()
+	enemy_inspected.emit(inspected_enemy)
+	queue_redraw()
 
 
 func _on_map_gui_input(event: InputEvent) -> void:
@@ -759,9 +817,19 @@ func _on_map_gui_input(event: InputEvent) -> void:
 		var existing_t: TowerUnit = _find_tower_at(local_pos)
 		if existing_t != null:
 			pending_build_type = ""
+			inspect_enemy(null)
 			select_tower_unit(existing_t)
 			map_click_area.accept_event()
 			return
+
+		# 2b) Check if clicking an active enemy on the path for live Enemy Inspector
+		var clicked_enemy: EnemyUnit = _find_enemy_at(local_pos)
+		if clicked_enemy != null:
+			pending_build_type = ""
+			inspect_enemy(clicked_enemy)
+			map_click_area.accept_event()
+			return
+		inspect_enemy(null)
 
 		# 3) Check if clicking a pad or a placement zone
 		var clicked_pad: int = _find_pad_at(local_pos)
@@ -931,13 +999,16 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	var combo_key: String = Balance.get_combo_key(target_tower.tower_type, shop_type)
 	if not Balance.TOWERS.has(combo_key):
 		return null
-	var cost: int = int(Balance.TOWERS[shop_type]["cost"]) + Balance.get_merge_surcharge(target_tower.tower_type, shop_type)
+	var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(target_tower.tower_type, target_tower.levels, shop_type, {}, combo_key)
+	var cost: int = int(Balance.TOWERS[shop_type]["cost"]) + Balance.get_merge_surcharge(target_tower.tower_type, shop_type) + upg_xfer
 	if not GameState.spend_money(cost, true):
 		return null
 	var b_time: float = Balance.get_merge_build_time(target_tower.tower_type, shop_type)
 	cancel_combine_partner_pick()
 	target_tower.transform_to_combo(combo_key, cost, target_tower.levels.duplicate(), b_time)
 	select_tower_unit(target_tower)
+	if SfxManager != null:
+		SfxManager.play("combine")
 	spawn_floater(target_tower.position + Vector2(-46.0, -32.0), "COMBINED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
 	queue_redraw()
 	return target_tower
@@ -953,7 +1024,8 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 	var combo_key: String = Balance.get_combo_key(tower_a.tower_type, tower_b.tower_type)
 	if not Balance.TOWERS.has(combo_key):
 		return null
-	var surcharge: int = Balance.get_merge_surcharge(tower_a.tower_type, tower_b.tower_type)
+	var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(tower_a.tower_type, tower_a.levels, tower_b.tower_type, tower_b.levels, combo_key)
+	var surcharge: int = Balance.get_merge_surcharge(tower_a.tower_type, tower_b.tower_type) + upg_xfer
 	if not GameState.spend_money(surcharge, true):
 		return null
 	var merged_levels := {
@@ -961,6 +1033,8 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 		"range": maxi(int(tower_a.levels["range"]), int(tower_b.levels["range"])),
 		"fire_rate": maxi(int(tower_a.levels["fire_rate"]), int(tower_b.levels["fire_rate"])),
 	}
+	tower_a.total_damage_dealt += tower_b.total_damage_dealt
+	tower_a.total_kills += tower_b.total_kills
 	var added_spent: int = tower_b.total_spent + surcharge
 	var b_pad: int = tower_b.pad_index
 	if b_pad >= 0 and b_pad < pad_occupancy.size() and pad_occupancy[b_pad] == tower_b:
@@ -971,6 +1045,8 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 	cancel_combine_partner_pick()
 	tower_a.transform_to_combo(combo_key, added_spent, merged_levels, b_time)
 	select_tower_unit(tower_a)
+	if SfxManager != null:
+		SfxManager.play("combine")
 	spawn_floater(tower_a.position + Vector2(-46.0, -32.0), "MERGED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
 	queue_redraw()
 	return tower_a
@@ -1045,6 +1121,9 @@ func _on_mission_reset() -> void:
 	preview_tower_type = ""
 	pending_build_type = ""
 	combine_source_tower = null
+	inspected_enemy = null
+	_shake_timer = 0.0
+	_shake_intensity = 0.0
 	next_enemy_id = 1
 	next_tower_id = 1
 	queue_redraw()
@@ -1052,17 +1131,36 @@ func _on_mission_reset() -> void:
 
 func _on_enemy_leaked(_enemy_type: String, _lives_lost: int, _world_pos: Vector2) -> void:
 	leak_flash_timer = 0.35
+	trigger_screen_shake(0.22, 3.0)
+	if SfxManager != null:
+		SfxManager.play("leak")
 	queue_redraw()
 
 
-func _on_enemy_killed(_enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2) -> void:
+func _on_enemy_killed(enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2) -> void:
+	if enemy_type == "juggernaut" or enemy_type == "colossus":
+		trigger_screen_shake(0.28, 4.2)
 	var local_p: Vector2 = to_local(world_pos)
+	if floating_texts.size() < 32:
+		floating_texts.append({
+			"pos": local_p + Vector2(-18.0, -14.0),
+			"money_text": "+%d$" % money_gained,
+			"research_text": "+%dR" % research_gained,
+			"timer": 0.9,
+			"max_timer": 0.9,
+		})
+	queue_redraw()
+
+
+func spawn_damage_popup(local_pos: Vector2, dmg_val: int, col: Color, is_crit: bool = false) -> void:
+	if floating_texts.size() >= 32:
+		return
 	floating_texts.append({
-		"pos": local_p + Vector2(-18.0, -14.0),
-		"money_text": "+%d$" % money_gained,
-		"research_text": "+%dR" % research_gained,
-		"timer": 0.9,
-		"max_timer": 0.9,
+		"pos": local_pos + Vector2(randf_range(-10.0, 10.0), -18.0),
+		"custom_text": ("-%d!" % dmg_val) if is_crit else ("-%d" % dmg_val),
+		"custom_color": col,
+		"timer": 0.65,
+		"max_timer": 0.65,
 	})
 	queue_redraw()
 
@@ -1291,6 +1389,12 @@ func get_enemy_base_visual_state() -> Dictionary:
 
 
 func _draw() -> void:
+	if _shake_timer > 0.0 and _shake_intensity > 0.0:
+		var ox: float = sin(visual_time * 58.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
+		var oy: float = cos(visual_time * 67.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
+		draw_set_transform(Vector2(ox, oy))
+	else:
+		draw_set_transform(Vector2.ZERO)
 	var font: Font = ThemeDB.fallback_font
 	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
 	var left_x: float = -extra_left_margin
@@ -1404,6 +1508,13 @@ func _draw() -> void:
 					draw_line(w_l, tip, chev_col, 1.5)
 					draw_line(w_r, tip, chev_col, 1.5)
 				d_cur += 68.0
+			# Pre-Wave-1 bright animated route preview beacons so players immediately read the sector path
+			if not GameState.is_wave_active and GameState.mission.wave_number == 1 and plen > 40.0:
+				for b_i in range(4):
+					var frac: float = fmod(visual_time * 0.18 + float(b_i) * 0.25, 1.0)
+					var bp: Vector2 = enemy_path.curve.sample_baked(plen * frac, false)
+					draw_circle(bp, 7.0, Color(0.35, 0.92, 1.0, 0.28))
+					draw_circle(bp, 3.2, Color(0.75, 0.98, 1.0, 0.85))
 
 	# 4) Designated Tower Placement Areas / Zones (Rows in Level 1; Columns, Islands, Spiral Pockets, Pillboxes in Levels 2-5)
 	var active_preview_type: String = drag_tower_type if drag_tower_type != "" else (pending_build_type if pending_build_type != "" else preview_tower_type)

@@ -17,6 +17,7 @@ var _wave_elapsed: float = 0.0
 var _is_replay_attempt: bool = false
 var _last_cleared_wave: int = 0
 var _post_wave_rewind_timer: float = 0.0
+var _auto_wave_countdown: float = 0.0
 var _last_seen_mutations: Dictionary = {
 	"armoured_stacks": 0,
 	"thaw_stacks": 0,
@@ -65,6 +66,16 @@ func _process(delta: float) -> void:
 		return
 	if _post_wave_rewind_timer > 0.0:
 		_post_wave_rewind_timer = maxf(0.0, _post_wave_rewind_timer - sim_dt)
+	if state == State.BUILD and GameState.auto_wave_enabled and not GameState.is_sandbox_mode and GameState.mission.wave_number > 1:
+		if _auto_wave_countdown <= 0.0:
+			_auto_wave_countdown = 2.5
+		else:
+			_auto_wave_countdown = maxf(0.0, _auto_wave_countdown - delta)
+			if _auto_wave_countdown <= 0.0:
+				start_wave()
+				return
+	else:
+		_auto_wave_countdown = 0.0
 	step_wave(sim_dt)
 
 
@@ -92,7 +103,38 @@ func step_wave(delta: float) -> void:
 func start_wave(is_replay: bool = false) -> bool:
 	if GameState.mission.is_over or state != State.BUILD:
 		return false
+	_auto_wave_countdown = 0.0
 	_begin_wave_internal(GameState.mission.wave_number, is_replay)
+	return true
+
+
+func can_call_next_wave_early() -> bool:
+	if GameState.mission.is_over or state != State.FIGHTING or GameState.is_sandbox_mode:
+		return false
+	if GameState.mission.wave_number >= max_waves_limit and not GameState.is_endless_mode:
+		return false
+	return true
+
+
+func get_early_call_bonus() -> int:
+	if not can_call_next_wave_early():
+		return 0
+	var active_cnt: int = map_ref.get_active_enemies().size() if map_ref != null else 0
+	return clampi(5 + active_cnt * 2 + int(GameState.mission.wave_number / 3), 5, 35)
+
+
+func call_next_wave_early() -> bool:
+	if not can_call_next_wave_early():
+		return false
+	var bonus: int = get_early_call_bonus()
+	var prev_w: int = GameState.mission.wave_number
+	GameState.mission.cleared_waves[prev_w] = true
+	GameState.mission.stats["waves_completed"] += 1
+	GameState.add_money(bonus, true)
+	GameState.event_logged.emit("EARLY WAVE CALL (+$%d bonus)! Launching Wave %d!" % [bonus, prev_w + 1])
+	GameState.wave_cleared.emit(prev_w)
+	GameState.mission.wave_number = prev_w + 1
+	_begin_wave_internal(GameState.mission.wave_number, false)
 	return true
 
 
@@ -176,7 +218,7 @@ func _complete_current_wave() -> void:
 	_post_wave_rewind_timer = Balance.TIME_POWERS["rewind"]["post_wave_window"]
 	_last_seen_mutations = GameState.mission.mutations.duplicate()
 
-	if wave_num >= max_waves_limit:
+	if wave_num >= max_waves_limit and not GameState.is_endless_mode:
 		if GameState.is_sandbox_mode:
 			state = State.BUILD
 			state_changed.emit(state)

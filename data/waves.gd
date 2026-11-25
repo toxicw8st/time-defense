@@ -145,22 +145,28 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 
 	var w: int = maxi(1, wave_number)
 	var raw_budget_s: int = get_target_threat_s_dollars(w, player_assets_spent)
-	# Ensure Waves 11+ continue smoothly upward from Wave 9/10 (s$210) instead of dipping to s$39
-	var smooth_post10_s: int = int(round(215.0 * pow(1.055, float(maxi(0, w - 11)))))
+	# Smooth post-Wave 10 escalation (255 * 1.095^(w-11)) so Waves 11-45 never collapse into an idle curve
+	var smooth_post10_s: int = int(round(255.0 * pow(1.095, float(maxi(0, w - 11)))))
 	var budget_s: int = maxi(raw_budget_s, smooth_post10_s)
 	var remaining_s: int = budget_s
 	var is_boss_wave: bool = (w % 10 == 0)
 
+	var colossus_count: int = 0
 	var jugg_count: int = 0
 	var blitzer_count: int = 0
 	var brute_count: int = 0
 	var rusher_count: int = 0
 	var crawler_count: int = 0
 
+	if w >= 16:
+		var col_share: float = 0.45 if is_boss_wave else 0.25
+		colossus_count = int(floor(float(remaining_s) * col_share / 95.0))
+		remaining_s -= colossus_count * 95
+
 	if is_boss_wave:
-		# Boss waves (20, 30, 40...): spend ~55% of s$ on Juggernauts (s$40), rest on Blitzers/Brutes/Rushers
-		jugg_count = maxi(2, int(floor(float(remaining_s) * 0.55 / 40.0)))
-		remaining_s -= jugg_count * 40
+		# Boss waves (20, 30, 40...): heavy Juggernaut + Colossus assault
+		jugg_count = maxi(4, int(floor(float(remaining_s) * 0.55 / 40.0)))
+		remaining_s = maxi(0, remaining_s - jugg_count * 40)
 		blitzer_count = int(floor(float(remaining_s) * 0.35 / 26.0))
 		remaining_s -= blitzer_count * 26
 		brute_count = int(floor(float(remaining_s) * 0.45 / 8.0))
@@ -169,18 +175,18 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		remaining_s -= rusher_count * 2
 		crawler_count = maxi(0, remaining_s)
 	else:
-		# Regular waves 11+: Juggernauts in regular pool (~22% of s$), Blitzers (~22%), Brutes (~26%), Rushers (~18%), Crawlers (~12%)
-		jugg_count = int(floor(float(remaining_s) * 0.24 / 40.0))
-		remaining_s -= jugg_count * 40
-		blitzer_count = int(floor(float(remaining_s) * 0.26 / 26.0))
+		# Regular waves 11+: at least 2 Juggernauts (grows smoothly with s$), Blitzers, Brutes, Rushers, Crawlers
+		jugg_count = maxi(2, int(floor(float(remaining_s) * 0.40 / 40.0)))
+		remaining_s = maxi(0, remaining_s - jugg_count * 40)
+		blitzer_count = int(floor(float(remaining_s) * 0.35 / 26.0))
 		remaining_s -= blitzer_count * 26
-		brute_count = int(floor(float(remaining_s) * 0.38 / 8.0))
+		brute_count = int(floor(float(remaining_s) * 0.45 / 8.0))
 		remaining_s -= brute_count * 8
-		rusher_count = int(floor(float(remaining_s) * 0.55 / 2.0))
+		rusher_count = int(floor(float(remaining_s) * 0.60 / 2.0))
 		remaining_s -= rusher_count * 2
 		crawler_count = maxi(0, remaining_s)
 
-	# Steady, continuous spawn stream across the wave (no huge 60-115s empty platoon gaps or instant clumped bursts)
+	# Steady, continuous spawn stream across the wave (no huge empty platoon gaps or instant clumped bursts)
 	var spawn_span: float = clampf(38.0 + float(w - 10) * 1.4, 40.0, 95.0)
 	var tracks: Array[Dictionary] = []
 
@@ -188,7 +194,7 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "crawler",
 			"count": crawler_count,
-			"interval": clampf(spawn_span / float(maxi(1, crawler_count)), 0.45, 1.40),
+			"interval": clampf(spawn_span / float(maxi(1, crawler_count)), 0.35, 1.40),
 			"group_size": 0,
 			"group_delay": 0.0,
 			"start_delay": 0.0,
@@ -197,7 +203,7 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "rusher",
 			"count": rusher_count,
-			"interval": clampf(spawn_span / float(maxi(1, rusher_count)), 0.55, 1.80),
+			"interval": clampf(spawn_span / float(maxi(1, rusher_count)), 0.45, 1.80),
 			"group_size": 0,
 			"group_delay": 0.0,
 			"start_delay": 1.2,
@@ -206,7 +212,7 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "brute",
 			"count": brute_count,
-			"interval": clampf(spawn_span / float(maxi(1, brute_count)), 3.20, 7.50),
+			"interval": clampf(spawn_span / float(maxi(1, brute_count)), 2.20, 7.50),
 			"group_size": 0,
 			"group_delay": 0.0,
 			"start_delay": 2.5,
@@ -215,7 +221,7 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "blitzer",
 			"count": blitzer_count,
-			"interval": clampf(spawn_span / float(maxi(1, blitzer_count)), 4.00, 9.00),
+			"interval": clampf(spawn_span / float(maxi(1, blitzer_count)), 2.80, 9.00),
 			"group_size": 0,
 			"group_delay": 0.0,
 			"start_delay": 4.0,
@@ -224,10 +230,19 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "juggernaut",
 			"count": jugg_count,
-			"interval": clampf(spawn_span / float(maxi(1, jugg_count)), 8.50, 14.00),
+			"interval": clampf(spawn_span / float(maxi(1, jugg_count)), 4.00, 14.00),
 			"group_size": 0,
 			"group_delay": 0.0,
 			"start_delay": 6.0,
+		})
+	if colossus_count > 0:
+		tracks.append({
+			"type": "colossus",
+			"count": colossus_count,
+			"interval": clampf(spawn_span / float(maxi(1, colossus_count)), 7.50, 16.00),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 8.0,
 		})
 
 	return {
@@ -279,8 +294,10 @@ static func compute_wave_stats(wave_number: int, hp_mutation_mult: float = -1.0)
 	var avg_speed: float = weighted_speed_sum / float(maxi(1, total_units))
 	var mutated_hp: int = int(round(base_hp_sum * mut_mult))
 	var wave_len: float = Balance.get_wave_length(wave_number)
-	# Effective engagement window = wave_length * 0.30 * difficulty_k = 37.0 + 3.0 * (wave - 1)
+	# Effective engagement window = 37 + 3*(w-1) for W1-10, capped at 68s for W11+ so late-game DPS needed stays honest
 	var eff_engagement: float = 37.0 + 3.0 * float(maxi(0, wave_number - 1))
+	if wave_number > 10:
+		eff_engagement = minf(68.0, eff_engagement)
 	var difficulty_k: float = eff_engagement / (wave_len * Balance.ENGAGEMENT_FRACTION)
 	var dps_needed: int = int(round(( float(mutated_hp) / (wave_len * Balance.ENGAGEMENT_FRACTION * difficulty_k) ) * avg_speed))
 

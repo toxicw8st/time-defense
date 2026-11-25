@@ -119,6 +119,7 @@ func buy_research(node_key: String, from_between_levels: bool = false) -> bool:
 	var new_rank: int = GameState.get_research_rank(node_key) + 1
 	GameState.meta_research_ranks[node_key] = new_rank
 	GameState._sync_mission_research_mirror()
+	GameState.save_meta_progress()
 	GameState.economy_changed.emit()
 	research_purchased.emit(node_key)
 	GameState.event_logged.emit("Meta-Research %s Rank %d unlocked (%d R)" % [

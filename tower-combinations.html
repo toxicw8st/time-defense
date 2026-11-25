@@ -418,12 +418,12 @@
       <h2>1. Merge Rules, Economy &amp; Damage Matrix</h2>
       <div class="rule-grid">
         <div class="panel">
-          <h3>Merge Cost &amp; Build-Time Formula</h3>
+          <h3>Merge Cost, Scaling Upgrades &amp; Build Formula</h3>
           <ul>
             <li><strong>How to Merge:</strong> Drag any tower onto another built tower inside a Placement Zone (or tap Upgrade &rarr; Combine).</li>
-            <li><strong>Total Asset Cost (<code>$</code>):</strong> <code>Base A ($A) + Base B ($B) + 30% Merge Surcharge</code> (rounded to nearest <code>$5</code>).</li>
-            <li><strong>Construction Time:</strong> <code>round((Build A + Build B) &times; 0.65)</code> seconds during active waves (<strong>+50% faster</strong> with <em>Haste</em>; paused between waves).</li>
-            <li><strong>50% Sell Rule Preserved:</strong> Selling a combined tower refunds <code>50%</code> of total <code>$</code> invested (both base towers + merge surcharge + any Lv 1&ndash;5 upgrades).</li>
+            <li><strong>Total Asset Cost (<code>$</code>):</strong> <code>Base A ($A) + Base B ($B) + ~30&ndash;35% Merge Surcharge</code> (plus upgrade-transfer fee if transferring cheap Lv1&ndash;5 ranks onto an expensive hybrid).</li>
+            <li><strong>Tower-Cost-Scaled Upgrades:</strong> Lv 1&ndash;5 Damage (<code>+30%&ndash;+235%</code>) &amp; Fire Rate (<code>+18%&ndash;+120%</code>) scale cleanly with base/combo tower cost so <code>$90</code> Blasters stay affordable while <code>$640</code> MAC Cannons pay fair endgame costs.</li>
+            <li><strong>50% Sell Rule Preserved:</strong> Selling a combined tower refunds <code>50%</code> of total <code>$</code> invested (both base towers + merge surcharge + transfer fees + Lv 1&ndash;5 upgrades).</li>
           </ul>
         </div>
 
@@ -436,7 +436,7 @@
                 <th>Standard</th>
                 <th>Armored</th>
                 <th>Reflective</th>
-                <th>Juggernaut</th>
+                <th>Juggernaut / Colossus</th>
               </tr>
             </thead>
             <tbody>
@@ -447,7 +447,7 @@
             </tbody>
           </table>
           <p style="margin-top:8px;">
-            *<strong>Locked Boss Rules:</strong> Time Decay stays strictly <strong>flat DoT</strong> (never <code>% HP</code>, capped at 30%/tick, uses <strong>150%</strong> highest-only vs Juggernaut). Juggernaut slows are halved (e.g., 30% &rarr; 15%).
+            *<strong>Locked Boss Rules:</strong> Time Decay stays strictly <strong>flat DoT</strong> (never <code>% HP</code>, hard-capped at 30% max HP/tick, uses <strong>150%</strong> highest-only vs Juggernaut &amp; Wave 16+ <strong>Colossus</strong> 14,000 HP siege bosses). Boss slows are halved (e.g., 30% &rarr; 15%).
           </p>
         </div>
 
@@ -455,9 +455,9 @@
           <h3>Why Merge? (Zone Efficiency vs. Coverage)</h3>
           <ul>
             <li><strong>Frees Placement Zone Space:</strong> Turns 2 towers into 1 stronger unit, opening tight spots in <em>Level 1 Row Zones</em> or <em>Level 5 Hairpin Pillboxes</em>.</li>
-            <li><strong>Dual-Matrix Hybrids:</strong> Cross-type merges combine two mechanics (e.g. Splash + Chrono Bubble, or Laser + Piercing) on a single shared <strong>Lv 1&ndash;5 Upgrade Track</strong>.</li>
-            <li><strong>Chrono Status Bubble Update:</strong> Chrono Slow &amp; its Slow-hybrids fire slower pulsing bolts that deploy an AoE <strong>Status Bubble</strong> on the target; upgrading <strong>Damage</strong> boosts lessened Decay DoT AND expands bubble radius.</li>
-            <li><strong>In-Game Sandbox Studio:</strong> Launch any level (1&ndash;5) in <strong>Sandbox Mode</strong> for infinite <code>$</code>, instant builds, any Wave <code>1&ndash;45</code> runner, and single/squad enemy spawning to test all 21 combinations.</li>
+            <li><strong>In-Game 21-Recipe Book &amp; Inspector:</strong> Open the searchable Recipe Book in-game anytime, tap enemies to inspect live HP/armor/debuffs, and choose <strong>Standard</strong>, <strong>Hard</strong>, or <strong>Chrono Nightmare</strong> difficulty.</li>
+            <li><strong>Chrono Status Bubble &amp; Time Synergies:</strong> Chrono Slow &amp; its Slow-hybrids deploy AoE <strong>Status Bubbles</strong> (Damage upgrades grow radius); <em>Time Pause</em> overcharges bubble radius <code>+25%</code> and <em>Time Haste</em> doubles Laser ramp speed.</li>
+            <li><strong>In-Game Sandbox Studio &amp; Endless Mode:</strong> Launch any level (1&ndash;5) in <strong>Sandbox Mode</strong> (infinite <code>$</code>, instant builds, Wave <code>1&ndash;45</code> runner, Colossus/Juggernaut spawner) or push past victory into <strong>Endless Mode (Wave 46+)</strong>.</li>
           </ul>
         </div>
       </div>
@@ -510,12 +510,12 @@
       blaster: {
         id: "blaster", name: "Blaster Turret", cost: 90, build: 4.0, dmg: 11.5, rate: 1.2, range: 108,
         type: "Piercing", color: "#4fa3ff", target: "First",
-        summary: "Twin-barrel autocannon. 13.8 base DPS; 180% vs Juggernaut."
+        summary: "Twin-barrel autocannon. 13.8 base DPS; 180% vs Juggernaut/Colossus."
       },
       mortar: {
-        id: "mortar", name: "Cluster Mortar", cost: 110, build: 7.0, dmg: 22.0, rate: 0.20, range: 135,
+        id: "mortar", name: "Cluster Mortar", cost: 110, build: 7.0, dmg: 25.0, rate: 0.20, range: 135,
         type: "Normal", color: "#5ce69a", target: "First",
-        summary: "Heavy 5s-reload splash shell (70px AoE, 60px blind spot)."
+        summary: "Heavy 5s-reload splash shell (25 dmg, 70px AoE, 60px blind spot)."
       },
       laser: {
         id: "laser", name: "Laser Spire", cost: 100, build: 5.0, dmg: 6.2, rate: 2.5, range: 112,
@@ -525,17 +525,17 @@
       slow: {
         id: "slow", name: "Chrono Slow Tower", cost: 100, build: 5.0, dmg: 0, rate: 0.40, range: 115,
         type: "Time", color: "#40e8ff", target: "First",
-        summary: "0.40/s Chrono Status Bubble (42->74px radius w/ Dmg upg): 30% AoE slow (15% Jugg) + lessened 0..38/s Decay."
+        summary: "0.40/s Chrono Status Bubble (42->74px radius w/ Dmg upg): 30% AoE slow (15% Boss) + 0..38/s Decay."
       },
       railgun: {
         id: "railgun", name: "Time Decay Rail Gun", cost: 375, build: 8.0, dmg: 140.0, rate: 0.20, range: 310,
         type: "Time", color: "#b873ff", target: "First",
-        summary: "310px hitscan: 140 Time hit + 50% slow 4s (25% Jugg) + 25..235/s Decay."
+        summary: "310px hitscan: 140 Time hit + 50% slow 4s (25% Boss) + 25..235/s Decay."
       },
       annihilator: {
-        id: "annihilator", name: "Gauss Annihilator", cost: 240, build: 6.5, dmg: 65.0, rate: 0.75, range: 155,
+        id: "annihilator", name: "Gauss Annihilator", cost: 240, build: 6.5, dmg: 56.0, rate: 0.72, range: 155,
         type: "Piercing", color: "#ffaf38", target: "Strongest",
-        summary: "Anti-boss rail cannon. 65 dmg @ 0.75/s (117/hit vs Jugg at Lv0)."
+        summary: "Anti-boss rail cannon. 56 dmg @ 0.72/s (101/hit vs Boss at Lv0)."
       }
     };
 
@@ -548,13 +548,13 @@
         name: "Twin-Linked Vulcan Battery",
         categories: ["same", "boss", "budget"],
         types: ["Piercing"],
-        mergeCost: 55, buildTime: 5.0,
-        range: "125 px", rate: "2.60 /s (4-round burst)", dmgText: "13.0 /shot (33.8 base DPS)",
+        mergeCost: 65, buildTime: 5.0,
+        range: "125 px", rate: "2.25 /s (4-round burst)", dmgText: "11.5 /shot (27.5 eff. base DPS)",
         target: "First / Strongest",
         matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
         look: "Wide reinforced gunmetal octagon cradling four staggered cyan-rimmed rotary barrels and dual ammo feed drums under a spinning radar visor.",
-        does: "Fires rapid 4-round Piercing salvos at more than double a Blaster's cadence. Every 4th consecutive hit on the same alien deals a +25% Armor-Crack bonus, shredding Brutes, Blitzers, and early Juggernaut armor without needing expensive late-game slots.",
-        bestFor: "Waves 5-10 Armored Brutes, Reflective Blitzers & mid-tier Juggernaut chip",
+        does: "Fires rapid Piercing rotary salvos at 2.25/s. Every 4th consecutive hit on the same alien triggers a +25% Armor-Crack strike, cleanly outperforming 2 unmerged Blasters in a single zone slot.",
+        bestFor: "Waves 5-12 Armored Brutes, Reflective Blitzers & mid-tier Juggernaut chip",
         weakness: "Still takes 75% penalty vs dense Standard Crawler/Rusher swarms."
       },
       {
@@ -563,27 +563,27 @@
         categories: ["same", "aoe", "budget"],
         types: ["Normal"],
         mergeCost: 65, buildTime: 9.0,
-        range: "155 px (min 60 px)", rate: "0.22 /s (4.5s reload)", dmgText: "18.0 x 3 sub-shells (80 px splash)",
+        range: "155 px (min 60 px)", rate: "0.25 /s (4.0s reload)", dmgText: "23 main + 3x 44% sub-shells (82 px splash)",
         target: "First",
         matrix: { std: "100%", arm: "50%", refl: "110%", jugg: "55%" },
         look: "Massive triple-bore olive siege turret anchored by six heavy hydraulic recoil struts, glowing amber warhead loader belts, and twin rangefinder pods.",
-        does: "Lobs a heavy cluster canister that splits mid-air into 3 staggered sub-shells forming a tight triangle blast zone (80 px splash each). Overlapping blasts hit slow bunched crowds multiple times while keeping the 60 px min-range blind spot and slow reload.",
-        bestFor: "Waves 4-9 dense Crawler & Rusher packs at bends",
-        weakness: "Very slow 4.5s reload and 50% penalty vs Brutes; fast Blitzers can dodge without Slow support."
+        does: "Lobs a heavy MIRV canister every 4.0s that detonates for 23 Normal splash plus 3 staggered 44%-power sub-shells across an 82 px triangle blast zone, erasing slow bunched packs.",
+        bestFor: "Waves 4-12 dense Crawler & Rusher packs at bends",
+        weakness: "4.0s reload and 50% penalty vs Brutes; fast Blitzers can slip past without Chrono Slow support."
       },
       {
         id: "laser+laser", a: "laser", b: "laser", same: true,
         name: "Prismatic Focus Obelisk",
         categories: ["same", "budget"],
         types: ["Laser"],
-        mergeCost: 60, buildTime: 6.5,
-        range: "130 px", rate: "3.2 /s (continuous thermal ticks)", dmgText: "7.5 ramping up to 16.0 /tick",
+        mergeCost: 65, buildTime: 6.5,
+        range: "130 px", rate: "2.80 /s (continuous thermal ticks)", dmgText: "7.4 ramping up to +84% (13.6/tick) + 35% chain",
         target: "First",
         matrix: { std: "150%", arm: "85%", refl: "10%", jugg: "8.5%" },
         look: "Tall twin-crystal magenta pyramid surrounded by six orbiting cyan resonator nodes that converge into a thick white-pink hyper-beam.",
-        does: "Locks a sustained thermal beam onto one target, ramping from 24 base DPS up to 51 base DPS (+150% vs Standard) after 2.5s on the same target; beams refract a 35% intensity arc onto 1 nearby Standard unit within 55 px.",
+        does: "Locks a sustained thermal beam onto one target, ramping +12% per tick up to 7 stacks (+84% peak; ramps 2x faster during Time Haste) AND refracting a live 35% prism arc onto 1 nearby alien within 70 px.",
         bestFor: "Deleting Standard waves (Crawlers & Rushers) + finishing wounded Brutes",
-        weakness: "Hard-walled by Reflective units (10% vs Blitzers, 8.5% vs Juggernauts)."
+        weakness: "Hard-walled by Reflective units (10% vs Blitzers, 8.5% vs Bosses)."
       },
       {
         id: "slow+slow", a: "slow", b: "slow", same: true,
@@ -591,41 +591,41 @@
         categories: ["same", "slow", "aoe", "budget"],
         types: ["Time"],
         mergeCost: 60, buildTime: 6.5,
-        range: "135 px", rate: "0.45 /s (2.2s bubble cycle)", dmgText: "4.2s Bubble (56->96px) | 40% Slow | 0..56/s Decay",
+        range: "135 px", rate: "0.36 /s (2.8s bubble cycle)", dmgText: "4.2s Bubble (54->92px) | 40% Slow | 0..52/s Decay",
         target: "First",
         matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
         look: "Dual counter-spinning cyan & violet clockwork rings suspended over an orbiting chrono-core that projects wide Status Bubbles.",
-        does: "Fires a compressed stasis bolt at 0.45/s that blooms into an oversized Chrono Status Bubble (56 px base, expanding up to 96 px with Damage upgrades) for 4.2s. Slows ALL enemies entering the bubble by 40% (Juggernaut 20%) while ticking lessened flat Time Decay across the entire pack.",
+        does: "Fires a compressed stasis bolt at 0.36/s that blooms into an oversized Chrono Status Bubble (54 px base, expanding up to 92 px with Damage upgrades, +25% radius during Time Pause) for 4.2s. Slows ALL enemies entering by 40% (Bosses 20%) while ticking flat Time Decay.",
         bestFor: "Hairpin chokes where Slow + Mortar or Blaster overlap (mass bubble control)",
-        weakness: "Slower attack cadence & lessened single-target Decay DoT; relies on DPS teammates to kill Juggernauts."
+        weakness: "Slower attack cadence & low solo DPS; relies on DPS teammates to finish Bosses."
       },
       {
         id: "railgun+railgun", a: "railgun", b: "railgun", same: true,
         name: "Chrono-Breach Supercollider",
         categories: ["same", "boss", "slow", "endgame"],
         types: ["Time"],
-        mergeCost: 225, buildTime: 10.5,
-        range: "380 px", rate: "0.22 /s (4.5s recharge)", dmgText: "260 Time line-pierce + 55..310/s Decay",
+        mergeCost: 235, buildTime: 10.5,
+        range: "380 px", rate: "0.20 /s (5.0s recharge)", dmgText: "210 Time line-pierce (3 foes) + 30..250/s Decay",
         target: "Strongest / First",
         matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
         look: "Overlength twin-tiered violet magnetic accelerator spanning two coil racks with floating golden capacitor rings and a glowing plasma breech.",
-        does: "Fires a map-spanning Time rail slug that punches straight through up to 3 lined-up enemies along the shot line, dealing 260 base Time damage (390 vs Reflective/Juggernaut before upgrades), 55% slow for 4.5s (Jugg 27.5%), and heavy flat Time Decay DoT.",
-        bestFor: "Long straight lanes (Level 1 Row 2, Level 2 Col 1-3) Waves 12-45",
-        weakness: "Massive $975 total cost & 10.5s build lock; wasted if aimed across curved corners."
+        does: "Fires a map-spanning Time rail slug that punches straight through up to 3 lined-up enemies along the shot line, dealing 210 base Time damage (315 vs Reflective/Boss at Lv0), 55% slow for 4.5s (Boss 27.5%), and heavy flat Time Decay DoT.",
+        bestFor: "Long straight lanes (Level 1 Row 2, Level 2 Col 1-3) Waves 14-45",
+        weakness: "Massive $985 total cost & 10.5s build lock; needs aligned straightaways to hit 3 targets."
       },
       {
         id: "annihilator+annihilator", a: "annihilator", b: "annihilator", same: true,
         name: "Hyper-Velocity MAC Cannon",
         categories: ["same", "boss", "endgame"],
         types: ["Piercing"],
-        mergeCost: 145, buildTime: 8.5,
-        range: "190 px", rate: "0.85 /s", dmgText: "145.0 /shot (261/hit vs Jugg at Lv0)",
+        mergeCost: 160, buildTime: 8.5,
+        range: "190 px", rate: "0.78 /s", dmgText: "115.0 /shot (207/hit vs Boss at Lv0, +20% opener)",
         target: "Strongest",
         matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
         look: "Colossal bronze-and-gold double-rail siege cannon with heavy hydraulic stabilizer claws and glowing amber muzzle shock rings.",
-        does: "Launches tungsten-core Piercing sabot slugs built specifically as a boss assassin: 145 base dmg (261 vs Juggernaut at Lv0, over 1,090/hit at Lv5 Damage!) plus a 0.35s micro-stagger on non-bosses and +20% bonus damage while target is above 50% HP.",
-        bestFor: "Deleting Wave 10 Juggernauts and Waves 15-45 multi-boss waves",
-        weakness: "Single-target only; completely overwhelmed by 40+ Rusher swarms without backup."
+        does: "Launches tungsten-core Piercing sabot slugs built specifically as a boss assassin: 115 base dmg (207 vs Juggernaut/Colossus at Lv0, ~694/hit at Lv5 Damage) plus a +20% bonus damage opener while target is above 50% HP.",
+        bestFor: "Deleting Wave 10+ Juggernauts and Wave 16-45 Colossus siege bosses",
+        weakness: "Single-target only & high scaled upgrade costs; overwhelmed by Rusher swarms without backup."
       },
 
       // === 15 CROSS-TYPE HYBRIDS ===
@@ -635,11 +635,11 @@
         categories: ["hybrid", "aoe", "budget"],
         types: ["Piercing", "Normal"],
         mergeCost: 60, buildTime: 7.0,
-        range: "135 px (no blind spot)", rate: "0.95 /s (shrapnel bursts)", dmgText: "14 Piercing direct + 12 Normal shrapnel (55px)",
+        range: "135 px (no blind spot)", rate: "0.90 /s (shrapnel bursts)", dmgText: "15 Piercing direct + 11 Normal shrapnel (55px)",
         target: "First",
         matrix: { std: "85%", arm: "105%", refl: "115%", jugg: "125%" },
         look: "Short fat twin-muzzle green-blue flak cannon on a reinforced rotary drum with brass shell-hopper pods.",
-        does: "Replaces the Mortar's blind spot and 5s delay with rapid airburst flak shells: main target takes Piercing impact while a 55 px shrapnel cone splashes surrounding enemies with Normal fragment damage.",
+        does: "Replaces the Mortar's blind spot and 5s delay with rapid airburst flak shells: main target takes a 15 Piercing direct impact while a 55 px shrapnel ring splashes surrounding enemies with 11 Normal fragment damage (no double-dip bug).",
         bestFor: "Mid-game all-purpose defense against mixed Rushers + Brutes",
         weakness: "Lower peak single-target damage vs full bosses than pure Piercing."
       },
@@ -648,14 +648,14 @@
         name: "Pulse-Plasma Carbine",
         categories: ["hybrid", "budget"],
         types: ["Piercing", "Laser"],
-        mergeCost: 55, buildTime: 6.0,
-        range: "122 px", rate: "2.20 /s", dmgText: "9.0 /shot (auto-picks optimal Piercing/Laser ratio)",
+        mergeCost: 65, buildTime: 6.0,
+        range: "122 px", rate: "2.05 /s", dmgText: "8.6 /shot (auto-picks optimal Piercing/Laser matrix)",
         target: "First",
-        matrix: { std: "135%", arm: "135%", refl: "95%", jugg: "140%" },
+        matrix: { std: "150%", arm: "150%", refl: "120%", jugg: "180%" },
         look: "Sleek cyan-and-magenta prism-barreled carbine combining dual blaster rails with a glowing violet crystal emitter core.",
-        does: "Fires alternating high-frequency kinetic-plasma bolts with smart matrix calibration: hits Standard units using the Laser beam profile (150%) and Armored/Reflective units using Piercing bolts (150% / 120%), eliminating the Laser Spire's Reflective blind spot.",
-        bestFor: "Waves 3-9 flexible early-to-mid anchor covering every armor type",
-        weakness: "Jack-of-all-trades ceiling; outscaled in Wave 15+ by dedicated boss killers."
+        does: "Fires rapid kinetic-plasma bolts with smart matrix calibration: hits Standard units using Laser (150%) and Armored/Reflective/Boss units using Piercing (150% / 120% / 180%), eliminating the Laser Spire's Reflective blind spot.",
+        bestFor: "Waves 3-10 flexible early-to-mid anchor covering every armor type",
+        weakness: "Jack-of-all-trades ceiling; outscaled in Wave 16+ by dedicated boss killers."
       },
       {
         id: "blaster+slow", a: "blaster", b: "slow", same: false,
@@ -663,13 +663,13 @@
         categories: ["hybrid", "slow", "aoe", "budget"],
         types: ["Piercing", "Time"],
         mergeCost: 55, buildTime: 6.0,
-        range: "120 px", rate: "0.75 /s (suppressor burst)", dmgText: "10 Piercing + 3.0s Bubble (40->70px) + 0..32/s Decay",
-        target: "First / Fastest",
+        range: "124 px", rate: "1.05 /s (suppressor burst)", dmgText: "12 Piercing + 3.0s Bubble (40->68px) + 0..36/s Decay",
+        target: "Fastest / First",
         matrix: { std: "85%", arm: "140%", refl: "130%", jugg: "170%" },
         look: "Twin-barrel Blaster turret encircled by a spinning cyan clockwork halo with twin cryo-capacitor canisters.",
-        does: "Fires slower kinetic-stasis rounds (0.75/s) that deal 10 Piercing damage on hit and burst into a 3.0s Chrono Status Bubble (40 px -> 70 px with Damage upgrades), slowing nearby Blitzers/Rushers by 30% (15% Jugg) while ticking lessened flat Decay.",
-        bestFor: "Intercepting Wave 8-9 Blitzers & keeping pack speed pinned inside Blaster lanes",
-        weakness: "Lower sustained fire rate than pure Blaster and smaller bubble than Stasis Singularity."
+        does: "Fires steady kinetic-stasis rounds (1.05/s) targeting Fastest threats first—dealing 12 Piercing damage on hit and bursting into a 3.0s Chrono Status Bubble (40 px -> 68 px with Damage upgrades) for 30% AoE slow (15% Boss) and flat Decay.",
+        bestFor: "Intercepting Wave 8-12 Blitzers & keeping pack speed pinned inside Blaster lanes",
+        weakness: "Smaller bubble than Stasis Singularity and lower raw DPS than Vulcan Battery."
       },
       {
         id: "blaster+railgun", a: "blaster", b: "railgun", same: false,
@@ -677,11 +677,11 @@
         categories: ["hybrid", "boss", "slow", "endgame"],
         types: ["Piercing", "Time"],
         mergeCost: 140, buildTime: 8.0,
-        range: "260 px", rate: "0.45 /s (2.2s cycle)", dmgText: "92 Time + 20 Piercing shrapnel + Slow/Decay",
+        range: "260 px", rate: "0.42 /s (2.4s cycle)", dmgText: "78 Time + 18 Piercing shrapnel + Slow/Decay",
         target: "Strongest / First",
         matrix: { std: "95%", arm: "130%", refl: "145%", jugg: "160%" },
         look: "Long sleek violet-and-cyan dual-rail carbine with rapid-cooling fin vents and triple accelerator coils.",
-        does: "Sacrifices a bit of the Rail Gun's maximum range (310 -> 260 px) to more than DOUBLE its fire rate (0.20 -> 0.45/s), delivering steady long-range 45% slows (Jugg 22.5%), 112 hybrid hit damage, and permanent flat Decay uptime across distant lanes.",
+        does: "Sacrifices a bit of the Rail Gun's maximum range (310 -> 260 px) to more than DOUBLE its fire rate (0.20 -> 0.42/s), delivering steady long-range 45% slows (Boss 22.5%), 96 hybrid hit damage, and permanent flat Decay uptime across distant lanes.",
         bestFor: "Long-range sniping across two rows in Level 1 or Level 3 Islands",
         weakness: "Costs $605 total; requires an unobstructed cross-map firing lane to shine."
       },
@@ -691,12 +691,12 @@
         categories: ["hybrid", "boss"],
         types: ["Piercing"],
         mergeCost: 100, buildTime: 7.0,
-        range: "148 px", rate: "1.15 /s", dmgText: "48.0 Piercing /shot (86/hit vs Jugg at Lv0)",
+        range: "148 px", rate: "1.05 /s", dmgText: "42.0 Piercing /shot (76/hit vs Boss at Lv0)",
         target: "Strongest",
         matrix: { std: "75%", arm: "150%", refl: "120%", jugg: "180%" },
         look: "Heavy orange-gold Gauss chassis twin-mounted with cyan Blaster recoil barrels and a rapid rotary breech.",
-        does: "Blends the Annihilator's heavy armor-piercing punch with the Blaster's faster firing cadence (`0.75/s -> 1.15/s`). Smooths out overkill waste against Brutes while still hitting Wave 10 Juggernauts for ~100 base Piercing DPS.",
-        bestFor: "Wave 7-15 Brute squads and early Wave 10 Juggernaut focus fire",
+        does: "Blends the Annihilator's heavy armor-piercing punch with the Blaster's faster firing cadence (0.72/s -> 1.05/s). Smooths out overkill waste against Brutes while hitting Wave 10+ Juggernauts for ~79 base Piercing DPS.",
+        bestFor: "Wave 7-18 Brute squads and mid-game Juggernaut focus fire",
         weakness: "Low crowd AoE and weaker against cheap Standard swarms (75%)."
       },
       {
@@ -705,13 +705,13 @@
         categories: ["hybrid", "aoe", "budget"],
         types: ["Normal", "Laser"],
         mergeCost: 65, buildTime: 8.0,
-        range: "145 px (min 50 px)", rate: "0.38 /s (2.6s reload)", dmgText: "18 Normal blast + 14 Laser thermal burn (65 px)",
+        range: "145 px (min 50 px)", rate: "0.40 /s (2.5s reload)", dmgText: "20 Normal blast + 16 Laser thermal burn (68 px)",
         target: "First",
         matrix: { std: "125%", arm: "68%", refl: "60%", jugg: "32%" },
         look: "Armored emerald mortar tube topped with a glowing magenta focusing crystal that fires superheated pink plasma globes.",
-        does: "Lobs glowing plasma shells that detonate into a 65 px searing Laser+Normal explosion, melting Standard Crawler & Rusher swarms on impact and leaving a 1.5s thermal scorch glow.",
-        bestFor: "Waves 4-12 massive Standard hordes (150% Laser portion shreds Crawlers)",
-        weakness: "Bad vs Juggernauts (32%) and Armored Brutes; needs Piercing/Time teammates."
+        does: "Lobs glowing plasma shells every 2.5s that detonate into a 68 px searing Laser+Normal explosion (20 Normal + 16 Laser), melting dense Standard Crawler & Rusher swarms on impact.",
+        bestFor: "Waves 4-15 massive Standard hordes (150% Laser portion shreds Crawlers)",
+        weakness: "Bad vs Bosses (32%) and Armored Brutes; needs Piercing/Time teammates."
       },
       {
         id: "mortar+slow", a: "mortar", b: "slow", same: false,
@@ -719,13 +719,13 @@
         categories: ["hybrid", "aoe", "slow", "budget"],
         types: ["Normal", "Time"],
         mergeCost: 65, buildTime: 8.0,
-        range: "145 px (min 50 px)", rate: "0.24 /s (4.2s reload)", dmgText: "15 Normal blast + 4.0s Bubble (54->84px) | 35% Slow",
+        range: "145 px (min 50 px)", rate: "0.26 /s (3.8s reload)", dmgText: "20 Normal blast + 4.0s Bubble (54->88px) | 34% Slow",
         target: "First",
         matrix: { std: "100%", arm: "85%", refl: "130%", jugg: "102%" },
         look: "Frosted teal siege mortar wrapped in glowing chrono-runes and twin cryogenic canisters launching ice-blue stasis bombs.",
-        does: "Heavy shell detonates into a 15 Normal blast AND leaves behind a huge 4.0s Chrono Status Bubble (54 px -> 84 px with Damage upgrades), trapping entire platoons in a 35% slow field (17.5% Jugg) with lessened flat Time Decay DoT.",
+        does: "Heavy shell detonates into a 20 Normal splash (70 px) AND leaves behind a huge 4.0s Chrono Status Bubble (54 px -> 88 px with Damage upgrades), trapping entire platoons in a 34% slow field (17% Boss) with flat Time Decay DoT.",
         bestFor: "Level 3 Islands & Level 5 Switchbacks; locks whole platoons inside kill zones",
-        weakness: "4.2s reload & 50 px blind spot; lower shell burst damage than pure Mortar."
+        weakness: "3.8s reload & 50 px blind spot; lower shell burst damage than MIRV Howitzer."
       },
       {
         id: "mortar+railgun", a: "mortar", b: "railgun", same: false,
@@ -733,13 +733,13 @@
         categories: ["hybrid", "aoe", "slow", "endgame"],
         types: ["Time", "Normal"],
         mergeCost: 145, buildTime: 10.0,
-        range: "285 px (min 40 px)", rate: "0.24 /s (4.2s fire)", dmgText: "125 Time direct + 40 splash (75px) + 50% Slow",
+        range: "285 px (min 40 px)", rate: "0.23 /s (4.3s fire)", dmgText: "110 Time center + 38 splash (75px) + 50% Slow",
         target: "Strongest / First",
         matrix: { std: "100%", arm: "100%", refl: "140%", jugg: "120%" },
         look: "Long violet railgun cradle mounted vertically like a heavy siege howitzer, launching arcing purple-gold shock shells across the map.",
-        does: "Launches long-range temporal shells 285 px across the map—bypassing terrain bends to detonate for a 125 Time core strike + 40 Normal/Time splash (75 px) + 50% slow + flat Time Decay to the entire blast group.",
+        does: "Launches long-range temporal shells 285 px across the map—delivering a 110 Time direct strike on the primary target + 38 Normal splash (75 px) + 50% slow + flat Time Decay to the blast group.",
         bestFor: "Cross-map crowd suppression & hitting spawn lanes early in Level 4 Spiral",
-        weakness: "Expensive ($630) and slow 4.2s cycle; best paired with faster cleanup towers."
+        weakness: "Expensive ($630) and slow 4.3s cycle; best paired with faster cleanup towers."
       },
       {
         id: "mortar+annihilator", a: "mortar", b: "annihilator", same: false,
@@ -747,27 +747,27 @@
         categories: ["hybrid", "aoe", "boss"],
         types: ["Piercing", "Normal"],
         mergeCost: 105, buildTime: 9.0,
-        range: "160 px (min 45 px)", rate: "0.42 /s (2.4s reload)", dmgText: "68 Piercing center hit + 24 splash (65 px)",
+        range: "160 px (min 45 px)", rate: "0.42 /s (2.4s reload)", dmgText: "62 Piercing center hit + 24 splash (65 px)",
         target: "Strongest",
         matrix: { std: "85%", arm: "125%", refl: "118%", jugg: "148%" },
         look: "Monstrous copper-and-olive siege cannon with twin Gauss stabilizer rails guiding heavy armor-piercing warhead shells.",
-        does: "Fires direct-arc bunker-buster shells: the primary target suffers a massive 68 Piercing core impact (122 vs Juggernaut at Lv0) while nearby escorts take 24 splash damage in a 65 px shock ring—wiping Brute packs alongside bosses.",
-        bestFor: "Wave 8-20 escort waves where Brutes & Crawlers body-block Juggernauts",
+        does: "Fires direct-arc bunker-buster shells: the primary target suffers a 62 Piercing core impact (112 vs Boss at Lv0) while nearby escorts take 24 Normal splash damage in a 65 px shock ring—wiping Brute packs alongside bosses.",
+        bestFor: "Wave 8-22 escort waves where Brutes & Crawlers body-block Juggernauts",
         weakness: "45 px min-range deadzone right around its own pad; slower than pure Annihilator."
       },
       {
         id: "laser+slow", a: "laser", b: "slow", same: false,
-        name: "Stasis Beam Projector",
+        name: "Stasis Bubble Projector",
         categories: ["hybrid", "slow", "aoe", "budget"],
         types: ["Laser", "Time"],
         mergeCost: 60, buildTime: 6.5,
-        range: "125 px", rate: "0.65 /s (prism pulse)", dmgText: "7 Laser hit + 3.5s Burn Bubble (46->76px) + 32% Slow",
+        range: "125 px", rate: "0.85 /s (prism pulse)", dmgText: "14 Laser hit + 3.2s Burn Bubble (45->73px) + 5/s burn",
         target: "First",
         matrix: { std: "135%", arm: "100%", refl: "65%", jugg: "65%" },
         look: "Magenta-and-cyan crystal prism spire spinning inside a frost-blue chrono ring with tri-lens optics.",
-        does: "Fires a refracting prism pulse at 0.65/s that spawns a chromatic Chrono Status Bubble (46 px -> 76 px with Damage upgrades) for 3.5s—slowing all enemies inside by 32% (16% Jugg) while searing them with thermal-Decay pulses.",
+        does: "Fires an ionized prism pulse at 0.85/s (14 Laser hit) that spawns a chromatic Chrono Status Bubble (45 px -> 73 px with Damage upgrades) for 3.2s—slowing enemies 30% (15% Boss) while searing everyone inside with 5/s thermal burn + flat Decay.",
         bestFor: "Cooking compressed Standard Rusher packs inside a glowing slow dome",
-        weakness: "Much slower cadence than Laser Spire and weaker vs Reflective shields."
+        weakness: "Weaker vs Reflective Blitzer shields (10% Laser portion) than Kinetic Suppressor."
       },
       {
         id: "laser+railgun", a: "laser", b: "railgun", same: false,
@@ -775,13 +775,13 @@
         categories: ["hybrid", "boss", "slow", "endgame"],
         types: ["Time", "Laser"],
         mergeCost: 145, buildTime: 8.5,
-        range: "290 px", rate: "0.50 /s (2.0s pulse lance)", dmgText: "85 Time+Laser beam + 45% Slow + Decay",
+        range: "290 px", rate: "0.46 /s (2.2s pulse lance)", dmgText: "50 Time + 28 Laser beam + 45% Slow + Decay",
         target: "First / Strongest",
         matrix: { std: "130%", arm: "110%", refl: "95%", jugg: "100%" },
         look: "Crystal-tipped violet rail barrel projecting a razor-thin 290 px magenta-white temporal lance with capacitor rings along the beam.",
-        does: "Sweeps a high-range thermal-chronon lance every 2.0s across 290 px, instantly striking distant targets with 85 hybrid damage (amplified 150% vs Standard squads and 150% Decay vs Reflective), leaving a 45% slow & Decay burn.",
+        does: "Sweeps a high-range thermal-chronon lance every 2.2s across 290 px, instantly striking distant targets with 50 Time + 28 Laser hybrid damage (amplified 150% vs Standard squads and 150% Time/Decay vs Reflective), leaving a 45% slow & Decay burn.",
         bestFor: "Sniping incoming Rushers/Crawlers & Blitzers right as they leave the Hive",
-        weakness: "Not as cost-efficient vs Juggernauts as Railgun + Annihilator."
+        weakness: "Not as cost-efficient vs Colossus/Juggernauts as Omega Gauss-Rail."
       },
       {
         id: "laser+annihilator", a: "laser", b: "annihilator", same: false,
@@ -789,13 +789,13 @@
         categories: ["hybrid", "boss"],
         types: ["Piercing", "Laser"],
         mergeCost: 100, buildTime: 7.5,
-        range: "152 px", rate: "1.10 /s", dmgText: "44 Piercing/Laser hybrid /shot (up to 1.35x melt)",
+        range: "152 px", rate: "1.00 /s", dmgText: "32 Piercing + 10 Laser /shot (+10%x3 = +30% Armor Shred)",
         target: "Strongest",
         matrix: { std: "120%", arm: "130%", refl: "85%", jugg: "135%" },
         look: "Orange-gold Annihilator housing fused with a blazing magenta crystal emitter between its Gauss rails.",
-        does: "Every Gauss slug superheats the target's armor for 3s (+10% vulnerability to follow-up shots, stacking to +30%), combining fast 1.10/s Laser-paced precision with heavy Piercing penetrators.",
-        bestFor: "Primary boss debuffer amplifying all nearby Blasters & Annihilators",
-        weakness: "Lower raw 1-shot Juggernaut multiplier than pure Piercing unless stacked."
+        does: "Every Gauss slug superheats the target's armor for 3.5s, stacking +10% vulnerability per hit up to 3 stacks (+30% total damage amplified for ALL nearby towers!), making it the premier force-multiplier against Wave 16+ Colossus bosses.",
+        bestFor: "Primary boss debuffer amplifying all nearby Blasters, MACs, and Annihilators",
+        weakness: "Lower raw 1-shot burst than pure Piercing until paired with a DPS team."
       },
       {
         id: "slow+railgun", a: "slow", b: "railgun", same: false,
@@ -803,13 +803,13 @@
         categories: ["hybrid", "boss", "slow", "aoe", "endgame"],
         types: ["Time"],
         mergeCost: 145, buildTime: 8.5,
-        range: "330 px", rate: "0.20 /s (5.0s shot)", dmgText: "95 Time + 4.5s Super-Bubble (52->84px) | 55% Slow",
+        range: "330 px", rate: "0.22 /s (4.5s shot)", dmgText: "105 Time + 4.5s Super-Bubble (60->96px) | 55% Slow",
         target: "Strongest / First",
         matrix: { std: "100%", arm: "120%", refl: "150%", jugg: "150%" },
         look: "Obsidian clockwork dial fused to twin 330 px ice-violet rail barrels with four capacitor coils and ticking hands.",
-        does: "Long-range Time-Control sniper: fires every 5.0s across 330 px, dealing 95 direct Time damage and detonating an Absolute Zero Status Bubble (52 px -> 84 px with Damage upgrades) that slows the entire escort group by 55% (27.5% Jugg) with flat Decay.",
-        bestFor: "Stalling Wave 10+ Juggernauts and their entire Brute/Blitzer escort across the map",
-        weakness: "5.0s reload and lessened rail burst vs single targets compared to Omega Gauss-Rail."
+        does: "Long-range Time-Control sniper: fires every 4.5s across 330 px, dealing 105 direct Time damage and detonating an Absolute Zero Status Bubble (60 px -> 96 px with Damage upgrades) that slows the entire escort group by 55% (27.5% Boss) with flat Decay.",
+        bestFor: "Stalling Wave 10+ Juggernauts, Wave 16+ Colossus, and their escorts across the map",
+        weakness: "4.5s reload and lessened rail burst vs single targets compared to Omega Gauss-Rail."
       },
       {
         id: "slow+annihilator", a: "slow", b: "annihilator", same: false,
@@ -817,27 +817,27 @@
         categories: ["hybrid", "boss", "slow", "aoe"],
         types: ["Piercing", "Time"],
         mergeCost: 100, buildTime: 7.5,
-        range: "165 px", rate: "0.48 /s (2.1s cycle)", dmgText: "46 Piercing + 3.5s Stasis Bubble (44->74px) + 32% Slow",
+        range: "155 px", rate: "0.58 /s (1.7s cycle)", dmgText: "48 Piercing + 3.2s Stasis Bubble (44->70px) + 30% Slow",
         target: "Strongest",
         matrix: { std: "85%", arm: "145%", refl: "135%", jugg: "175%" },
         look: "Heavy bronze-gold Annihilator turret framed by angled shoulder plates and a rotating cyan-violet Chrono ring around the breech.",
-        does: "Anti-boss stasis breaker: fires 46 Piercing sabot rounds every 2.1s (82 vs Juggernaut at Lv0) that open a 3.5s Chrono Status Bubble (44 px -> 74 px with Damage upgrades) around the boss—slowing it 16% (escorts 32%) while ticking flat Decay.",
-        bestFor: "Wave 10 & Waves 15-45 Juggernauts (keeps bosses pinned in its 165 px zone)",
-        weakness: "Slower fire rate & lower single-hit burst than pure Gauss Annihilator."
+        does: "Anti-boss stasis breaker: fires 48 Piercing sabot rounds every 1.7s (86 vs Boss at Lv0) that open a 3.2s Chrono Status Bubble (44 px -> 70 px with Damage upgrades) around the boss—slowing it 15% (escorts 30%) while ticking flat Decay.",
+        bestFor: "Wave 10 & Waves 15-45 Juggernauts/Colossus (keeps bosses pinned in its 155 px zone)",
+        weakness: "Slower fire rate & lower raw burst than pure Gauss Annihilator."
       },
       {
         id: "railgun+annihilator", a: "railgun", b: "annihilator", same: false,
         name: "Omega Singularity Gauss-Rail",
         categories: ["hybrid", "boss", "slow", "endgame"],
         types: ["Piercing", "Time"],
-        mergeCost: 185, buildTime: 9.5,
-        range: "275 px", rate: "0.40 /s (2.5s charge)", dmgText: "185 Piercing/Time hybrid + 50% Slow 4s + Decay",
+        mergeCost: 205, buildTime: 9.5,
+        range: "275 px", rate: "0.38 /s (2.6s charge)", dmgText: "110 Piercing + 42 Time hybrid + 50% Slow 4s + Decay",
         target: "Strongest",
         matrix: { std: "90%", arm: "145%", refl: "140%", jugg: "172%" },
         look: "Towering endgame gold-and-violet dual-accelerator turret with four glowing magnetic rings and a hyper-dense plasma core.",
-        does: "Apex anti-boss superweapon: combines Annihilator's Piercing punch with Rail Gun's 275 px reach, 50% slow (25% Jugg), and flat Time Decay DoT. Fires 185 hybrid damage every 2.5s (~318 damage per hit vs Juggernauts at Lv0, >1,300/hit at Lv5) from across the battlefield.",
-        bestFor: "Waves 15-45 multi-Juggernaut & High-Mutation Endgame Boss Deletion",
-        weakness: "Highest hybrid price ($800 total) and 9.5s construction lock."
+        does: "Apex anti-boss superweapon: combines Annihilator's 110 Piercing punch with Rail Gun's 42 Time hit, 275 px reach, 50% slow (25% Boss), and 22..200/s flat Time Decay DoT—delivering ~261 impact vs Bosses at Lv0 from across the battlefield.",
+        bestFor: "Waves 16-45 Colossus & multi-Juggernaut Endgame Boss Deletion",
+        weakness: "Highest hybrid price ($820 total), high scaled upgrades, and 9.5s construction lock."
       }
     ];
 

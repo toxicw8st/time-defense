@@ -37,6 +37,28 @@ var _shot_counter: int = 0
 var _ramp_target_id: int = -1
 var _ramp_stacks: int = 0
 var _opened_enemy_ids: Dictionary = {}
+var total_damage_dealt: float = 0.0
+var total_kills: int = 0
+
+
+func record_damage(amount: float, killed: bool = false) -> void:
+	if amount > 0.0:
+		total_damage_dealt += amount
+	if killed:
+		total_kills += 1
+
+
+func get_estimated_dps() -> float:
+	var cfg: Dictionary = Balance.TOWERS[tower_type]
+	var rate: float = get_effective_fire_rate()
+	var dmg: float = get_effective_damage()
+	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
+	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier()
+	var sec: float = float(cfg.get("secondary_damage", 0.0)) * dmg_scale
+	var direct: float = (dmg + sec) * rate
+	var decay: float = get_decay_flat_damage()
+	var burn: float = float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale
+	return direct + decay + burn
 
 
 func setup(p_id: int, p_type: String, p_pad_index: int, p_pos: Vector2, p_map: GameMap) -> void:
@@ -55,6 +77,8 @@ func setup(p_id: int, p_type: String, p_pad_index: int, p_pos: Vector2, p_map: G
 	_ramp_target_id = -1
 	_ramp_stacks = 0
 	_opened_enemy_ids.clear()
+	total_damage_dealt = 0.0
+	total_kills = 0
 	if GameState.is_sandbox_mode and GameState.sandbox_instant_build:
 		current_job = null
 		is_built = true
@@ -160,7 +184,7 @@ func get_effective_range() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["range"])
 	var rng_lvl: int = clampi(int(levels["range"]), 0, Balance.TOWER_RANGE_TOTAL_BONUSES.size() - 1)
 	var upg_mult: float = 1.0 + Balance.TOWER_RANGE_TOTAL_BONUSES[rng_lvl]
-	return base * upg_mult * GameState.get_tower_range_research_multiplier()
+	return base * upg_mult * GameState.get_tower_range_research_multiplier() * GameState.get_level_tower_range_multiplier()
 
 
 func get_min_range() -> float:
@@ -191,15 +215,15 @@ func can_start_upgrade(stat_key: String) -> bool:
 	var lvl: int = int(levels.get(stat_key, 0))
 	if lvl >= Balance.TOWER_UPGRADE_MAX_LEVEL:
 		return false
-	var cost: int = Balance.get_tower_upgrade_cost(stat_key, lvl)
-	return GameState.mission.economy["money"] >= cost
+	var cost: int = Balance.get_tower_upgrade_cost(stat_key, lvl, tower_type)
+	return GameState.is_sandbox_mode or GameState.mission.economy["money"] >= cost
 
 
 func start_upgrade(stat_key: String) -> bool:
 	if not can_start_upgrade(stat_key):
 		return false
 	var lvl: int = int(levels[stat_key])
-	var cost: int = Balance.get_tower_upgrade_cost(stat_key, lvl)
+	var cost: int = Balance.get_tower_upgrade_cost(stat_key, lvl, tower_type)
 	var build_time: float = Balance.TOWER_UPGRADE_BUILD_TIMES[lvl]
 	if GameState.is_sandbox_mode and GameState.sandbox_instant_build:
 		total_spent += cost
@@ -244,13 +268,19 @@ func advance_tower(delta: float) -> void:
 			current_job = null
 			if completed_job.kind == "tower_build":
 				is_built = true
+				if SfxManager != null:
+					SfxManager.play("build")
 				GameState.event_logged.emit("%s built on P%d" % [Balance.TOWERS[tower_type]["name"], pad_index + 1])
 			elif completed_job.kind == "tower_combine":
 				is_built = true
+				if SfxManager != null:
+					SfxManager.play("combine")
 				GameState.event_logged.emit("Combined into %s!" % Balance.TOWERS[tower_type]["name"])
 			elif completed_job.kind == "tower_upgrade":
 				var key: String = completed_job.target_key
 				levels[key] = int(levels.get(key, 0)) + 1
+				if SfxManager != null:
+					SfxManager.play("build")
 				var disp_key: String = "Decay" if (key == "damage" and uses_decay_upgrades()) else key.capitalize()
 				GameState.event_logged.emit("%s %s upgraded to Lvl %d" % [Balance.TOWERS[tower_type]["name"], disp_key, levels[key]])
 			construction_completed.emit(self)
@@ -347,30 +377,35 @@ func _fire_at(target: EnemyUnit) -> void:
 				best_type = cand
 		dtype = best_type
 
-	# Ramp bonus on locked target (e.g. laser+laser)
+	# Ramp bonus on locked target (e.g. laser+laser) — Haste doubles ramp speed!
 	if bool(cfg.get("ramps_damage", false)):
+		var max_r: int = int(cfg.get("ramp_max_stacks", 7))
+		var per_r: float = float(cfg.get("ramp_per_stack", 0.12))
+		var step_r: int = 2 if GameState.is_haste_active else 1
 		if _ramp_target_id == target.enemy_id:
-			_ramp_stacks = mini(10, _ramp_stacks + 1)
+			_ramp_stacks = mini(max_r, _ramp_stacks + step_r)
 		else:
 			_ramp_target_id = target.enemy_id
 			_ramp_stacks = 0
-		dmg *= (1.0 + float(_ramp_stacks) * 0.15)
+		dmg *= (1.0 + float(_ramp_stacks) * per_r)
 	else:
 		_ramp_stacks = 0
 
-	# First-shot opener bonus (e.g. blaster+annihilator / laser+annihilator)
+	# First-shot opener bonus (e.g. annihilator+annihilator)
 	var opener_bonus: float = float(cfg.get("opener_bonus_pct", 0.0))
+	var triggered_opener: bool = false
 	if opener_bonus > 0.0 and not _opened_enemy_ids.has(target.enemy_id):
 		if _opened_enemy_ids.size() > 128:
 			_opened_enemy_ids.clear()
 		_opened_enemy_ids[target.enemy_id] = true
 		dmg *= (1.0 + opener_bonus)
+		triggered_opener = true
 
-	# Every-Nth-shot armor crack burst
+	# Every-Nth-shot armor crack burst (exact +25% multiplier per spec, NO unintended global shred)
 	var crack_every: int = int(cfg.get("armor_crack_every", 0))
 	var is_crack_shot: bool = crack_every > 0 and (_shot_counter % crack_every == 0)
 	if is_crack_shot:
-		dmg *= 1.45
+		dmg *= float(cfg.get("armor_crack_mult", 1.25))
 
 	var sec_dmg: float = float(cfg.get("secondary_damage", 0.0)) * dmg_scale
 	var sec_type: String = String(cfg.get("secondary_damage_type", "Laser" if tower_type.contains("laser") else "Time"))
@@ -397,6 +432,8 @@ func _fire_at(target: EnemyUnit) -> void:
 	var splash_r: float = float(cfg.get("splash_radius", 0.0))
 	if splash_r > 0.0:
 		# Mortar & mortar-hybrid shell delivery
+		if SfxManager != null:
+			SfxManager.play("blaster", 0.12, -5.0)
 		if map_ref != null:
 			var shell: ProjectileEffect = projectile_scene.instantiate()
 			map_ref.projectiles_container.add_child(shell)
@@ -418,11 +455,24 @@ func _fire_at(target: EnemyUnit) -> void:
 				slow_pct if not creates_bubble else 0.0,
 				slow_dur,
 				decay_flat,
-				bubble_cfg
+				bubble_cfg,
+				bool(cfg.get("direct_primary_only", false)),
+				float(cfg.get("mirv_damage_ratio", 0.36)),
+				self
 			)
 		return
 
 	# Direct beam / rail / tracer / bubble-projector fire
+	if SfxManager != null:
+		if creates_bubble:
+			SfxManager.play("bubble")
+		elif tower_type.contains("railgun") or tower_type.contains("annihilator"):
+			SfxManager.play("railgun")
+		elif tower_type.contains("laser"):
+			SfxManager.play("laser")
+		else:
+			SfxManager.play("blaster")
+
 	var pierce_cnt: int = maxi(1, int(cfg.get("pierce_count", 1)))
 	var hit_targets: Array[EnemyUnit] = [target]
 	var beam_end: Vector2 = target.position
@@ -490,25 +540,51 @@ func _fire_at(target: EnemyUnit) -> void:
 				float(bubble_cfg["burn_dps"]),
 				String(bubble_cfg["burn_type"]),
 				accent_col,
-				float(bubble_cfg["slow_linger"])
+				float(bubble_cfg["slow_linger"]),
+				self
 			)
 
 	var shred_pct: float = float(cfg.get("armor_shred_pct", 0.0))
+	var shred_max: int = int(cfg.get("armor_shred_max_stacks", 3))
 	for i in range(hit_targets.size()):
 		var h_target: EnemyUnit = hit_targets[i]
 		if not is_instance_valid(h_target) or not h_target.is_alive():
 			continue
+		var t_pos_snap: Vector2 = h_target.position
 		var falloff_mult: float = 1.0 if i == 0 else 0.78
+		var dealt_total: float = 0.0
 		if dmg > 0.0:
-			h_target.take_damage(dmg * falloff_mult, dtype)
+			dealt_total += h_target.take_damage(dmg * falloff_mult, dtype, self)
 		if sec_dmg > 0.0 and is_instance_valid(h_target) and h_target.is_alive():
-			h_target.take_damage(sec_dmg * falloff_mult, sec_type)
+			dealt_total += h_target.take_damage(sec_dmg * falloff_mult, sec_type, self)
+		if map_ref != null and GameState.show_damage_numbers and (is_crack_shot or triggered_opener or dealt_total >= 120.0):
+			var pop_col := Color(1.0, 0.90, 0.36) if (is_crack_shot or triggered_opener) else Color(0.96, 0.72, 1.0)
+			map_ref.spawn_damage_popup(t_pos_snap, int(round(dealt_total)), pop_col, is_crack_shot or triggered_opener)
 		if is_instance_valid(h_target) and h_target.is_alive():
-			if (shred_pct > 0.0 or is_crack_shot):
-				var stacks: int = maxi(1, int(round(maxf(shred_pct, 0.20) / 0.10)))
-				h_target.apply_armor_shred(stacks, 4.0)
+			if shred_pct > 0.0:
+				h_target.apply_armor_shred(shred_max, 3.5)
 			if slow_pct > 0.0 and not creates_bubble:
-				h_target.apply_time_hit(slow_pct, slow_dur, decay_flat, decay_ticks)
+				h_target.apply_time_hit(slow_pct, slow_dur, decay_flat, decay_ticks, self)
+
+	# Secondary Prism Chain Refraction (laser+laser: 35% beam arc to 1 nearby target!)
+	var refract_r: float = float(cfg.get("refract_radius", 0.0))
+	var refract_ratio: float = float(cfg.get("refract_ratio", 0.0))
+	if refract_r > 0.0 and refract_ratio > 0.0 and map_ref != null:
+		var best_chain: EnemyUnit = null
+		var best_cd: float = refract_r
+		var origin_p: Vector2 = beam_end
+		for cand in map_ref.get_active_enemies():
+			if cand == target or not is_instance_valid(cand) or not cand.is_alive():
+				continue
+			var cd: float = origin_p.distance_to(cand.position)
+			if cd <= best_cd:
+				best_cd = cd
+				best_chain = cand
+		if best_chain != null:
+			var arc: ProjectileEffect = projectile_scene.instantiate()
+			map_ref.projectiles_container.add_child(arc)
+			arc.setup_tracer(origin_p, best_chain.position, Color(0.55, 0.96, 1.0), 1.9, 0.11)
+			best_chain.take_damage(dmg * refract_ratio, "Laser", self)
 
 
 func _make_octagon(r: float) -> PackedVector2Array:

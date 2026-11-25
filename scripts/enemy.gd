@@ -39,6 +39,8 @@ var armor_shred_stacks: int = 0
 var armor_shred_timer: float = 0.0
 var anim_time: float = 0.0
 var hit_flash_timer: float = 0.0
+var is_inspected: bool = false
+var _decay_source_ref: WeakRef = null
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
@@ -52,18 +54,23 @@ func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D) -> void:
 	spawn_cost_s = int(cfg["spawn_cost_s"])
 	bounty_b = int(cfg["bounty_b"])
 	base_speed = float(cfg["speed"])
+	if enemy_type == "blitzer":
+		base_speed *= (1.0 + float(GameState.get_level_cfg().get("blitzer_speed_bonus", 0.0)))
 	leak_cost = int(cfg["leak_cost"])
-	money_on_kill = int(cfg["money_on_kill"])
+	money_on_kill = maxi(1, int(round(float(cfg["money_on_kill"]) * GameState.get_enemy_bounty_multiplier())))
 	research_on_kill = int(cfg["research_on_kill"])
 	armour_label = str(cfg.get("armour_label", "Standard"))
 	armour_tags = cfg.get("armour_tags", ["Standard"]).duplicate()
 
 	swift_stacks_at_spawn = GameState.mission.mutations.get("swift_stacks", 0)
-	speed_multiplier_at_spawn = pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], swift_stacks_at_spawn)
+	var diff_spd: float = float(GameState.get_difficulty_cfg().get("speed_mult", 1.0))
+	speed_multiplier_at_spawn = pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], swift_stacks_at_spawn) * diff_spd
 	max_hp = float(cfg["base_hp"]) * GameState.get_enemy_hp_multiplier()
 	hp = max_hp
 	distance_along_path = 0.0
 	is_dead_or_leaked = false
+	is_inspected = false
+	_decay_source_ref = null
 	slow_pct = 0.0
 	slow_remaining = 0.0
 	decay_base_pct = 0.0
@@ -82,11 +89,12 @@ func get_current_move_speed() -> float:
 	return base_speed * speed_multiplier_at_spawn * slow_mult
 
 
-func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float, ticks: int = 3) -> void:
+func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float, ticks: int = 3, source_tower: Node = null) -> void:
 	if is_dead_or_leaked:
 		return
-	# Juggernaut resists slow by half
-	var eff_slow: float = raw_slow_pct * (0.5 if enemy_type == "juggernaut" else 1.0)
+	# Bosses (Juggernaut & Colossus) resist slow by half
+	var is_boss: bool = (enemy_type == "juggernaut" or enemy_type == "colossus")
+	var eff_slow: float = raw_slow_pct * (0.5 if is_boss else 1.0)
 	if slow_remaining <= 0.0 or eff_slow >= slow_pct:
 		slow_pct = eff_slow
 	slow_remaining = maxf(slow_remaining, slow_dur)
@@ -94,9 +102,13 @@ func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float,
 	# Flat Time Decay DoT refreshes 3s / 3-tick timer on re-hit; NEVER stacks
 	if raw_decay_flat > 0.0:
 		if decay_ticks_remaining > 0:
+			if raw_decay_flat >= decay_base_pct and source_tower != null:
+				_decay_source_ref = weakref(source_tower)
 			decay_base_pct = maxf(decay_base_pct, raw_decay_flat)
 		else:
 			decay_base_pct = raw_decay_flat
+			if source_tower != null:
+				_decay_source_ref = weakref(source_tower)
 		decay_ticks_remaining = ticks
 		decay_tick_timer = 1.0
 	queue_redraw()
@@ -104,10 +116,11 @@ func apply_time_hit(raw_slow_pct: float, slow_dur: float, raw_decay_flat: float,
 
 ## Called continuously while inside a Chrono Slow Status Bubble: refreshes slow smoothly
 ## WITHOUT resetting decay_tick_timer so 1.0s DoT ticks still fire reliably inside the bubble!
-func apply_bubble_aura(raw_slow_pct: float, slow_linger: float, raw_decay_flat: float, ticks: int = 3) -> void:
+func apply_bubble_aura(raw_slow_pct: float, slow_linger: float, raw_decay_flat: float, ticks: int = 3, source_tower: Node = null) -> void:
 	if is_dead_or_leaked:
 		return
-	var eff_slow: float = raw_slow_pct * (0.5 if enemy_type == "juggernaut" else 1.0)
+	var is_boss: bool = (enemy_type == "juggernaut" or enemy_type == "colossus")
+	var eff_slow: float = raw_slow_pct * (0.5 if is_boss else 1.0)
 	if slow_remaining <= 0.0 or eff_slow >= slow_pct:
 		slow_pct = eff_slow
 	slow_remaining = maxf(slow_remaining, slow_linger)
@@ -117,7 +130,11 @@ func apply_bubble_aura(raw_slow_pct: float, slow_linger: float, raw_decay_flat: 
 			decay_base_pct = raw_decay_flat
 			decay_ticks_remaining = ticks
 			decay_tick_timer = 1.0
+			if source_tower != null:
+				_decay_source_ref = weakref(source_tower)
 		else:
+			if raw_decay_flat >= decay_base_pct and source_tower != null:
+				_decay_source_ref = weakref(source_tower)
 			decay_base_pct = maxf(decay_base_pct, raw_decay_flat)
 			decay_ticks_remaining = maxi(decay_ticks_remaining, ticks)
 	queue_redraw()
@@ -159,22 +176,32 @@ func step_status_effects(delta: float) -> void:
 			decay_base_pct = 0.0
 
 
-## Applies flat Time Decay damage per tick multiplied by the Time row of DAMAGE_MATRIX (100% Std, 120% Arm, 150% Refl/Jugg).
+## Applies flat Time Decay damage per tick multiplied by the Time row of DAMAGE_MATRIX (100% Std, 120% Arm, 150% Refl/Jugg),
+## capped at 30% of max HP per tick, with execute rule if remaining HP < 1.0.
 func apply_time_decay_tick(raw_flat_dmg: float) -> float:
 	if is_dead_or_leaked or raw_flat_dmg <= 0.0:
 		return 0.0
 	var matrix_mult: float = Balance.get_damage_multiplier("Time", armour_tags)
-	var dmg: float = raw_flat_dmg * matrix_mult
+	var dmg: float = minf(raw_flat_dmg * matrix_mult, maxf(1.0, max_hp) * Balance.TIME_DECAY_MAX_TICK_PCT)
+	var dealt: float = minf(hp, dmg)
 	hp -= dmg
+	var killed: bool = false
 	# Execute rule: if remaining HP < 1.0 after a tick, kill immediately!
 	if hp < 1.0:
 		hp = 0.0
 		is_dead_or_leaked = true
+		killed = true
+		if SfxManager != null:
+			SfxManager.play("boss_kill" if (enemy_type == "juggernaut" or enemy_type == "colossus") else "kill")
 		died.emit(self)
 		queue_free()
 	else:
 		hit_flash_timer = 0.09
 		queue_redraw()
+	if _decay_source_ref != null:
+		var src = _decay_source_ref.get_ref()
+		if src != null and is_instance_valid(src) and src.has_method("record_damage"):
+			src.record_damage(dealt, killed)
 	return dmg
 
 
@@ -223,9 +250,9 @@ func _sync_transform_to_path() -> void:
 		last_tangent = delta_vec.normalized()
 
 
-func take_damage(amount: float, damage_type: String = "") -> void:
+func take_damage(amount: float, damage_type: String = "", source_tower: Node = null) -> float:
 	if is_dead_or_leaked:
-		return
+		return 0.0
 	var dmg: float = amount
 	if damage_type != "":
 		dmg *= Balance.get_damage_multiplier(damage_type, armour_tags)
@@ -238,15 +265,23 @@ func take_damage(amount: float, damage_type: String = "") -> void:
 			Balance.TIME_POWERS["pause"]["frozen_damage_reduction_per_stack"] * float(thaw_stacks)
 		)
 		dmg *= (1.0 - reduction)
+	var dealt: float = minf(hp, dmg)
 	hp -= dmg
+	var killed: bool = false
 	if hp <= 0.0:
 		hp = 0.0
 		is_dead_or_leaked = true
+		killed = true
+		if SfxManager != null:
+			SfxManager.play("boss_kill" if (enemy_type == "juggernaut" or enemy_type == "colossus") else "kill")
 		died.emit(self)
 		queue_free()
 	else:
 		hit_flash_timer = 0.09
 		queue_redraw()
+	if source_tower != null and is_instance_valid(source_tower) and source_tower.has_method("record_damage"):
+		source_tower.record_damage(dealt, killed)
+	return dealt
 
 
 func _draw_poly_oriented(local_pts: Array, ang: float, col: Color) -> void:
@@ -275,6 +310,9 @@ func _draw() -> void:
 		"juggernaut":
 			radius = 18.0
 			fill_color = Color(0.56, 0.16, 0.74)
+		"colossus":
+			radius = 22.0
+			fill_color = Color(0.78, 0.12, 0.36)
 
 	var ang: float = last_tangent.angle()
 	var fwd: Vector2 = last_tangent.normalized()
@@ -392,6 +430,43 @@ func _draw() -> void:
 				var sa1: float = -anim_time * 2.2 + float(s_i) * TAU / 6.0
 				var sa2: float = sa1 + TAU / 6.0
 				draw_line(Vector2(cos(sa1), sin(sa1)) * 20.2, Vector2(cos(sa2), sin(sa2)) * 20.2, Color(0.55, 0.96, 1.0, 0.82), 2.0)
+
+		"colossus":
+			# Wave 16+ Tier-2 Siege Boss Titan (Armored + Reflective)
+			var c_hull := [
+				Vector2(21.0, -9.0), Vector2(21.0, 9.0), Vector2(7.0, 21.5),
+				Vector2(-15.0, 19.0), Vector2(-22.0, 0.0), Vector2(-15.0, -19.0), Vector2(7.0, -21.5)
+			]
+			_draw_poly_oriented(c_hull, ang, fill_color.darkened(0.28))
+			var c_plate := [
+				Vector2(16.0, -6.5), Vector2(16.0, 6.5), Vector2(4.0, 16.0),
+				Vector2(-12.0, 14.0), Vector2(-12.0, -14.0), Vector2(4.0, -16.0)
+			]
+			_draw_poly_oriented(c_plate, ang, Color(0.88, 0.76, 0.42))
+			draw_circle(Vector2.ZERO, 11.5, fill_color)
+			var c_core: float = 5.5 + 1.6 * sin(anim_time * 7.5)
+			draw_circle(Vector2.ZERO, c_core, Color(1.0, 0.82, 0.30))
+			draw_circle(Vector2.ZERO, 2.8, Color.WHITE)
+			# 6 heavy siege horns
+			for h_side in [-1.0, 1.0]:
+				draw_line(fwd * 14.0 + side * (11.0 * h_side), fwd * 27.0 + side * (7.0 * h_side), Color(1.0, 0.86, 0.38), 3.8)
+				draw_line(fwd * 16.0 + side * (5.0 * h_side), fwd * 24.0 + side * (2.5 * h_side), Color(0.95, 0.96, 1.0), 2.6)
+			# Dual counter-rotating prismatic shields
+			for s_i in range(8):
+				var sa1: float = anim_time * 2.0 + float(s_i) * TAU / 8.0
+				var sa2: float = sa1 + TAU / 8.0
+				draw_line(Vector2(cos(sa1), sin(sa1)) * 24.5, Vector2(cos(sa2), sin(sa2)) * 24.5, Color(0.48, 0.96, 1.0, 0.85), 2.2)
+				var sb1: float = -anim_time * 1.6 + float(s_i) * TAU / 8.0
+				var sb2: float = sb1 + TAU / 12.0
+				draw_line(Vector2(cos(sb1), sin(sb1)) * 21.5, Vector2(cos(sb2), sin(sb2)) * 21.5, Color(1.0, 0.78, 0.30, 0.75), 1.8)
+
+	if is_inspected:
+		var ip: float = 0.65 + 0.35 * sin(anim_time * 8.0)
+		draw_arc(Vector2.ZERO, radius + 7.5, 0.0, TAU, 28, Color(0.45, 0.96, 1.0, ip), 2.2)
+
+	# Armor Shred heat glow ring when debuffed
+	if armor_shred_stacks > 0:
+		draw_arc(Vector2.ZERO, radius + 2.5, 0.0, TAU, 20, Color(1.0, 0.45, 0.22, 0.75), 1.8)
 
 	# Frost crystal overlay when frozen by Pause
 	if GameState.is_enemies_frozen:

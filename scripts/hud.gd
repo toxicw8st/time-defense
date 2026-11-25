@@ -131,11 +131,24 @@ var start_play_button: Button = null
 var start_sandbox_button: Button = null
 var start_lab_button: Button = null
 var start_download_button: Button = null
+var start_diff_buttons: Dictionary = {}
 var lab_sandbox_button: Button = null
 var pause_main_menu_button: Button = null
+var pause_recipes_button: Button = null
+var pause_auto_wave_check: CheckBox = null
+var pause_sfx_mute_check: CheckBox = null
+var pause_dmg_popups_check: CheckBox = null
 var end_main_menu_button: Button = null
+var end_endless_button: Button = null
 
 var combine_button: Button = null
+var build_recipes_button: Button = null
+var recipes_overlay: PanelContainer = null
+var recipes_search_edit: LineEdit = null
+var recipes_list_box: VBoxContainer = null
+var enemy_inspector_panel: PanelContainer = null
+var enemy_inspector_label: Label = null
+var _inspected_enemy: EnemyUnit = null
 var sandbox_toggle_button: Button = null
 var sandbox_panel: PanelContainer = null
 var sandbox_body_box: VBoxContainer = null
@@ -268,6 +281,10 @@ func open_start_menu() -> void:
 	pause_overlay.visible = false
 	end_overlay.visible = false
 	between_levels_overlay.visible = false
+	if recipes_overlay != null:
+		recipes_overlay.visible = false
+	if enemy_inspector_panel != null:
+		enemy_inspector_panel.visible = false
 	get_tree().paused = false
 	if start_menu_overlay != null:
 		start_menu_overlay.visible = true
@@ -441,6 +458,35 @@ func _build_start_menu() -> void:
 	start_meta_label.add_theme_color_override("font_color", Color(0.48, 0.92, 1.0))
 	vbox.add_child(start_meta_label)
 
+	var diff_row := HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(diff_row)
+	var diff_lbl := Label.new()
+	diff_lbl.text = "DIFFICULTY:"
+	diff_lbl.add_theme_font_size_override("font_size", 11)
+	diff_lbl.add_theme_color_override("font_color", Color(0.75, 0.86, 0.96))
+	diff_row.add_child(diff_lbl)
+	start_diff_buttons.clear()
+	for dk in Balance.DIFFICULTY_ORDER:
+		var dcfg: Dictionary = Balance.DIFFICULTY_PRESETS[dk]
+		var dbtn := Button.new()
+		dbtn.name = "StartDiff_%s" % dk
+		dbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		dbtn.custom_minimum_size = Vector2(0, 30)
+		dbtn.add_theme_font_size_override("font_size", 11)
+		dbtn.text = str(dcfg["name"])
+		var cap_dk: String = dk
+		dbtn.pressed.connect(func() -> void:
+			GameState.set_difficulty(cap_dk)
+			if SfxManager != null:
+				SfxManager.play("ui")
+			_refresh_all()
+		)
+		var dcol := Color(0.32, 0.78, 0.62) if dk == "standard" else (Color(0.95, 0.68, 0.25) if dk == "hard" else Color(0.95, 0.35, 0.48))
+		UIIcons.apply_right_button_theme(dbtn, dcol)
+		diff_row.add_child(dbtn)
+		start_diff_buttons[dk] = dbtn
+
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 12)
 	vbox.add_child(action_row)
@@ -503,12 +549,75 @@ func _build_start_menu() -> void:
 
 	var end_vbox := get_node_or_null("EndOverlay/Margin/VBox") as VBoxContainer
 	if end_vbox != null:
+		end_endless_button = Button.new()
+		end_endless_button.name = "EndEndlessButton"
+		end_endless_button.text = "Continue into Endless Mode (Wave 46+)"
+		end_endless_button.visible = false
+		end_endless_button.pressed.connect(func() -> void:
+			end_overlay.visible = false
+			GameState.continue_into_endless()
+			_refresh_all()
+		)
+		UIIcons.apply_right_button_theme(end_endless_button, Color(0.78, 0.46, 1.0))
+		end_vbox.add_child(end_endless_button)
+
 		end_main_menu_button = Button.new()
 		end_main_menu_button.name = "EndMainMenuButton"
 		end_main_menu_button.text = "Return to Main Menu (Select Level 1-5)"
 		end_main_menu_button.pressed.connect(open_start_menu)
 		UIIcons.apply_right_button_theme(end_main_menu_button, Color(0.42, 0.72, 0.96))
 		end_vbox.add_child(end_main_menu_button)
+
+	# Pause Overlay settings (Auto-Wave, Mute SFX, Crit Popups, 21 Recipes)
+	var pause_vbox := get_node_or_null("PauseOverlay/Margin/VBox") as VBoxContainer
+	if pause_vbox != null:
+		var opts_row := HBoxContainer.new()
+		opts_row.name = "PauseExtraOptions"
+		opts_row.add_theme_constant_override("separation", 12)
+		pause_vbox.add_child(opts_row)
+		pause_vbox.move_child(opts_row, pause_mute_check.get_index() + 1)
+
+		pause_auto_wave_check = CheckBox.new()
+		pause_auto_wave_check.name = "PauseAutoWaveCheck"
+		pause_auto_wave_check.text = "Auto-Start Waves"
+		pause_auto_wave_check.button_pressed = GameState.auto_wave_enabled
+		pause_auto_wave_check.toggled.connect(func(on: bool) -> void:
+			GameState.auto_wave_enabled = on
+			GameState.save_meta_progress()
+		)
+		opts_row.add_child(pause_auto_wave_check)
+
+		pause_sfx_mute_check = CheckBox.new()
+		pause_sfx_mute_check.name = "PauseSfxMuteCheck"
+		pause_sfx_mute_check.text = "Mute SFX"
+		pause_sfx_mute_check.button_pressed = SfxManager.muted if SfxManager != null else false
+		pause_sfx_mute_check.toggled.connect(func(on: bool) -> void:
+			if SfxManager != null:
+				SfxManager.set_muted(on)
+			GameState.save_meta_progress()
+		)
+		opts_row.add_child(pause_sfx_mute_check)
+
+		pause_dmg_popups_check = CheckBox.new()
+		pause_dmg_popups_check.name = "PauseDmgPopupsCheck"
+		pause_dmg_popups_check.text = "Crit Popups"
+		pause_dmg_popups_check.button_pressed = GameState.show_damage_numbers
+		pause_dmg_popups_check.toggled.connect(func(on: bool) -> void:
+			GameState.show_damage_numbers = on
+			GameState.save_meta_progress()
+		)
+		opts_row.add_child(pause_dmg_popups_check)
+
+		pause_recipes_button = Button.new()
+		pause_recipes_button.name = "PauseRecipesButton"
+		pause_recipes_button.text = "21 Recipes"
+		pause_recipes_button.pressed.connect(func() -> void:
+			if pause_overlay.visible:
+				_toggle_pause_menu()
+			open_recipes_overlay()
+		)
+		UIIcons.apply_right_button_theme(pause_recipes_button, Color(0.95, 0.78, 0.30))
+		opts_row.add_child(pause_recipes_button)
 
 
 func _build_combine_and_sandbox_ui() -> void:
@@ -524,6 +633,87 @@ func _build_combine_and_sandbox_ui() -> void:
 		tower_panel_box.add_child(combine_button)
 		if sell_button != null:
 			tower_panel_box.move_child(combine_button, sell_button.get_index())
+
+	# 1b) Add 21 Combo Recipes button to BuildMenuBox
+	if build_menu_box != null and build_recipes_button == null:
+		build_recipes_button = Button.new()
+		build_recipes_button.name = "BuildRecipesButton"
+		build_recipes_button.custom_minimum_size = Vector2(0, 28)
+		build_recipes_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		build_recipes_button.add_theme_font_size_override("font_size", 11)
+		build_recipes_button.text = "21 Tower Combinations (Recipes)..."
+		build_recipes_button.pressed.connect(open_recipes_overlay)
+		build_menu_box.add_child(build_recipes_button)
+
+	# 1c) Build In-Game 21-Combination Recipe Book Modal
+	recipes_overlay = PanelContainer.new()
+	recipes_overlay.name = "RecipesOverlay"
+	recipes_overlay.visible = false
+	recipes_overlay.clip_contents = true
+	recipes_overlay.position = Vector2(150.0, 74.0)
+	recipes_overlay.size = Vector2(980.0, 560.0)
+	recipes_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.98), Color(0.95, 0.78, 0.30), 10, 10.0, 8.0))
+	add_child(recipes_overlay)
+
+	var r_vbox := VBoxContainer.new()
+	r_vbox.add_theme_constant_override("separation", 6)
+	recipes_overlay.add_child(r_vbox)
+
+	var r_top := HBoxContainer.new()
+	r_top.add_theme_constant_override("separation", 8)
+	r_vbox.add_child(r_top)
+
+	var r_title := Label.new()
+	r_title.text = "21 TOWER COMBINATIONS — DRAG A BASE TOWER ONTO ANOTHER OR TAP COMBINE"
+	r_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r_title.add_theme_font_size_override("font_size", 13)
+	r_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.38))
+	r_top.add_child(r_title)
+
+	recipes_search_edit = LineEdit.new()
+	recipes_search_edit.name = "RecipesSearchEdit"
+	recipes_search_edit.custom_minimum_size = Vector2(210, 28)
+	recipes_search_edit.placeholder_text = "Filter tower or role..."
+	recipes_search_edit.text_changed.connect(func(_txt: String) -> void: _populate_recipes_list())
+	r_top.add_child(recipes_search_edit)
+
+	var r_close := Button.new()
+	r_close.name = "RecipesCloseButton"
+	r_close.custom_minimum_size = Vector2(78, 28)
+	r_close.text = "Close"
+	r_close.pressed.connect(func() -> void: recipes_overlay.visible = false)
+	UIIcons.apply_right_button_theme(r_close, Color(0.95, 0.45, 0.45))
+	r_top.add_child(r_close)
+
+	var r_scroll := ScrollContainer.new()
+	r_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	r_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	r_vbox.add_child(r_scroll)
+
+	recipes_list_box = VBoxContainer.new()
+	recipes_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	recipes_list_box.add_theme_constant_override("separation", 5)
+	r_scroll.add_child(recipes_list_box)
+
+	# 1d) Build Floating Enemy Inspector Card (shown when tapping any active enemy on path)
+	enemy_inspector_panel = PanelContainer.new()
+	enemy_inspector_panel.name = "EnemyInspectorPanel"
+	enemy_inspector_panel.visible = false
+	enemy_inspector_panel.position = Vector2(12.0, 446.0)
+	enemy_inspector_panel.size = Vector2(310.0, 90.0)
+	enemy_inspector_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.06, 0.10, 0.17, 0.94), Color(0.38, 0.90, 1.0), 8, 8.0, 6.0))
+	add_child(enemy_inspector_panel)
+
+	var ei_vbox := VBoxContainer.new()
+	ei_vbox.add_theme_constant_override("separation", 3)
+	enemy_inspector_panel.add_child(ei_vbox)
+
+	enemy_inspector_label = Label.new()
+	enemy_inspector_label.name = "EnemyInspectorLabel"
+	enemy_inspector_label.add_theme_font_size_override("font_size", 11)
+	enemy_inspector_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
+	ei_vbox.add_child(enemy_inspector_label)
 
 	# 2) Add Launch Sandbox button inside BetweenLevelsOverlay BottomButtons
 	var lab_bottom := get_node_or_null("BetweenLevelsOverlay/Margin/VBox/BottomButtons") as HBoxContainer
@@ -670,22 +860,26 @@ func _build_combine_and_sandbox_ui() -> void:
 	var sp_row2 := HBoxContainer.new()
 	sp_row2.add_theme_constant_override("separation", 4)
 	sandbox_body_box.add_child(sp_row2)
-	for etype in ["blitzer", "juggernaut"]:
+	for etype in ["blitzer", "juggernaut", "colossus"]:
 		var eb := _make_sandbox_enemy_btn(etype)
 		sp_row2.add_child(eb)
+
+	var sp_row3 := HBoxContainer.new()
+	sp_row3.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(sp_row3)
 
 	sandbox_qty_button = Button.new()
 	sandbox_qty_button.name = "SandboxQtyButton"
 	sandbox_qty_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sandbox_qty_button.custom_minimum_size = Vector2(0, 26)
-	sandbox_qty_button.add_theme_font_size_override("font_size", 11)
-	sandbox_qty_button.text = "Qty: x1"
+	sandbox_qty_button.custom_minimum_size = Vector2(0, 24)
+	sandbox_qty_button.add_theme_font_size_override("font_size", 10)
+	sandbox_qty_button.text = "Spawn Qty: x1"
 	sandbox_qty_button.pressed.connect(func() -> void:
 		_sandbox_spawn_qty = 5 if _sandbox_spawn_qty == 1 else 1
 		_refresh_sandbox_ui()
 	)
 	UIIcons.apply_right_button_theme(sandbox_qty_button, Color(0.72, 0.56, 0.98))
-	sp_row2.add_child(sandbox_qty_button)
+	sp_row3.add_child(sandbox_qty_button)
 
 	# Utility clear/exit row
 	var util_row := HBoxContainer.new()
@@ -749,8 +943,60 @@ func _make_sandbox_enemy_btn(enemy_type: String) -> Button:
 			map_ref.sandbox_spawn_enemy(captured, _sandbox_selected_wave, _sandbox_spawn_qty)
 			_refresh_all()
 	)
-	UIIcons.apply_right_button_theme(b, Color(0.88, 0.42, 0.48) if enemy_type == "juggernaut" else Color(0.38, 0.62, 0.88))
+	UIIcons.apply_right_button_theme(b, Color(0.95, 0.28, 0.48) if (enemy_type == "juggernaut" or enemy_type == "colossus") else Color(0.38, 0.62, 0.88))
 	return b
+
+
+func open_recipes_overlay() -> void:
+	if recipes_overlay == null:
+		return
+	_populate_recipes_list()
+	recipes_overlay.visible = true
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
+
+
+func _populate_recipes_list() -> void:
+	if recipes_list_box == null:
+		return
+	for ch in recipes_list_box.get_children():
+		recipes_list_box.remove_child(ch)
+		ch.queue_free()
+	var q: String = recipes_search_edit.text.strip_edges().to_lower() if recipes_search_edit != null else ""
+	var bkeys: Array[String] = Balance.BASE_TOWER_KEYS
+	for i in range(bkeys.size()):
+		for j in range(i, bkeys.size()):
+			var ck: String = Balance.get_combo_key(bkeys[i], bkeys[j])
+			if not Balance.TOWERS.has(ck):
+				continue
+			var cfg: Dictionary = Balance.TOWERS[ck]
+			var na: String = str(Balance.TOWERS[bkeys[i]]["name"])
+			var nb: String = str(Balance.TOWERS[bkeys[j]]["name"])
+			var cname: String = str(cfg["name"])
+			var role: String = str(cfg["role"])
+			var hay: String = ("%s %s %s %s %s" % [na, nb, cname, role, str(cfg["damage_type_label"])]).to_lower()
+			if q != "" and not hay.contains(q):
+				continue
+			var row := PanelContainer.new()
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var is_same: bool = (i == j)
+			row.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.08, 0.12, 0.20, 0.96), Color(0.95, 0.78, 0.30) if is_same else Color(0.35, 0.66, 0.92), 6, 8.0, 5.0))
+			var rv := VBoxContainer.new()
+			rv.add_theme_constant_override("separation", 2)
+			row.add_child(rv)
+			var top_l := Label.new()
+			top_l.add_theme_font_size_override("font_size", 12)
+			top_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42) if is_same else Color(0.52, 0.94, 1.0))
+			top_l.text = "%s + %s  =>  %s  ($%d total | +$%d merge | Rng %.0f | %.2f/s)" % [
+				na, nb, cname, int(cfg["cost"]), Balance.get_merge_surcharge(bkeys[i], bkeys[j]), float(cfg["range"]), float(cfg["fire_rate"])
+			]
+			rv.add_child(top_l)
+			var desc_l := Label.new()
+			desc_l.add_theme_font_size_override("font_size", 10)
+			desc_l.add_theme_color_override("font_color", Color(0.86, 0.92, 0.98))
+			desc_l.text = "%s — %s" % [str(cfg["damage_type_label"]), role]
+			rv.add_child(desc_l)
+			recipes_list_box.add_child(row)
 
 
 func _build_research_buttons() -> void:
@@ -800,6 +1046,9 @@ func _setup_right_panel_buttons() -> void:
 	_init_styled_button(sell_button, _icons["sell"], Color(0.88, 0.72, 0.25))
 	if combine_button != null:
 		_init_styled_button(combine_button, _icons["target"], Color(1.0, 0.82, 0.30))
+	if build_recipes_button != null:
+		_init_styled_button(build_recipes_button, _icons["target"], Color(0.95, 0.78, 0.30))
+		_set_button_description(build_recipes_button, "Browse all 21 tower recipes, costs, and synergy roles.")
 	_init_styled_button(manip_upgrade_button, _icons["manipulator"], Color(0.68, 0.52, 0.95))
 
 	for key in RESEARCH_ORDER:
@@ -877,6 +1126,7 @@ func set_references(
 		map_ref.pad_selected.connect(_on_pad_selected)
 		map_ref.tower_selected.connect(_on_tower_selected)
 		map_ref.selection_cleared.connect(_on_selection_cleared)
+		map_ref.enemy_inspected.connect(_on_enemy_inspected)
 	if wave_manager_ref != null:
 		wave_manager_ref.wave_summary_updated.connect(_on_wave_summary_updated)
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
@@ -979,8 +1229,8 @@ func _refresh_all() -> void:
 	]
 
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
-	var sb_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else ""
-	wave_label.text = "Wave %d / %d (Lv %d)%s" % [m.wave_number, max_w, GameState.selected_mission_level, sb_tag]
+	var mode_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else (" [ENDLESS]" if GameState.is_endless_mode else "")
+	wave_label.text = "Wave %d / %d (Lv %d)%s" % [m.wave_number, max_w, GameState.selected_mission_level, mode_tag]
 	money_label.text = "Money: $INF (SANDBOX)" if GameState.is_sandbox_mode else ("Money: $%d" % m.economy["money"])
 	research_label.text = "Research: %d R (%d/%d)" % [
 		GameState.meta_research,
@@ -1008,6 +1258,7 @@ func _refresh_all() -> void:
 	_refresh_charge_button()
 	_refresh_start_wave_button()
 	_refresh_sandbox_ui()
+	_refresh_enemy_inspector()
 
 	if debug_panel.visible:
 		_refresh_debug_overlay()
@@ -1179,11 +1430,18 @@ func _refresh_preview_panel() -> void:
 
 	var counts: Dictionary = preview["counts"]
 	var unit_parts: PackedStringArray = []
-	for utype in ["juggernaut", "blitzer", "brute", "rusher", "crawler"]:
+	for utype in ["colossus", "juggernaut", "blitzer", "brute", "rusher", "crawler"]:
 		if counts.has(utype):
 			var uname: String = Balance.ENEMIES[utype]["name"]
 			unit_parts.append("%d %s (HP %d)" % [counts[utype], uname, GameState.get_enemy_wave_hp(utype, wave_num)])
-	preview_body_label.text = "Incoming: " + ", ".join(unit_parts)
+	var counter_tag: String = ""
+	if counts.has("colossus") or counts.has("juggernaut"):
+		counter_tag = " [BOSS: Piercing 180%]"
+	elif counts.has("blitzer"):
+		counter_tag = " [REFL: Avoid Laser]"
+	elif counts.has("brute"):
+		counter_tag = " [ARMORED: Piercing 150%]"
+	preview_body_label.text = "Incoming: " + ", ".join(unit_parts) + counter_tag
 
 	var muts: Array = preview["active_mutations"]
 	if muts.is_empty():
@@ -1212,17 +1470,23 @@ func _refresh_selection_panel() -> void:
 		var cfg: Dictionary = Balance.TOWERS[_selected_tower.tower_type]
 		var loc_tag: String = "Pad P%d" % (_selected_tower.pad_index + 1) if _selected_tower.pad_index >= 0 else "Tower Zone"
 		tower_header_label.text = "%s (%s)" % [cfg["name"], loc_tag]
+		var eff_dps: float = _selected_tower.get_estimated_dps()
+		var eff_dmg: float = _selected_tower.get_effective_damage()
+		var eff_rate: float = _selected_tower.get_effective_fire_rate()
+		var eff_rng: float = _selected_tower.get_effective_range()
 		if _selected_tower.spawner_creates_bubble():
-			tower_ratings_label.text = "%s | Bubble %.0fpx (%.1fs)" % [
-				cfg["damage_type_label"],
+			tower_ratings_label.text = "DPS %.1f | Bub %.0fpx (%.1fs) | Rng %.0f" % [
+				eff_dps,
 				_selected_tower.get_effective_bubble_radius(),
 				float(cfg.get("bubble_duration", 3.5)),
+				eff_rng,
 			]
 		else:
-			tower_ratings_label.text = "%s - Damage: %s, Speed: %s" % [
-				cfg["damage_type_label"],
-				cfg["damage_rating"],
-				cfg["speed_rating"],
+			tower_ratings_label.text = "DPS %.1f | %.0f @ %.2f/s | Rng %.0f" % [
+				eff_dps,
+				eff_dmg,
+				eff_rate,
+				eff_rng,
 			]
 		if _selected_tower.current_job != null:
 			var kind_txt: String = "Building" if not _selected_tower.is_built else ("Combining..." if _selected_tower.current_job.kind == "tower_combine" else ("Upgrading %s" % _selected_tower.current_job.target_key.capitalize()))
@@ -1230,7 +1494,11 @@ func _refresh_selection_panel() -> void:
 			tower_status_label.text = "%s: %.1f s left (cannot fire)%s" % [kind_txt, _selected_tower.current_job.remaining_time, wave_tag]
 			tower_status_label.modulate = Color(1.0, 0.85, 0.35)
 		else:
-			tower_status_label.text = "Status: Active%s" % (" [COMBINED]" if Balance.is_combo_tower(_selected_tower.tower_type) else "")
+			tower_status_label.text = "Active | Dmg %d | Kills %d%s" % [
+				int(round(_selected_tower.total_damage_dealt)),
+				_selected_tower.total_kills,
+				" [COMBO]" if Balance.is_combo_tower(_selected_tower.tower_type) else "",
+			]
 			tower_status_label.modulate = Color(1.0, 0.90, 0.45) if Balance.is_combo_tower(_selected_tower.tower_type) else Color(0.55, 0.95, 0.65)
 
 		var tlabel: String = str(Balance.TARGETING_LABELS.get(_selected_tower.target_mode, "First"))
@@ -1242,9 +1510,9 @@ func _refresh_selection_panel() -> void:
 			var decay_desc: String = "Decay DoT + Bubble Radius (%.0fpx)" % _selected_tower.get_effective_bubble_radius() if _selected_tower.spawner_creates_bubble() else "Flat Time Decay DoT/sec (150%% vs Refl/Jugg)"
 			_style_upgrade_button(upg_dmg_button, "Decay+Rad" if _selected_tower.spawner_creates_bubble() else "Decay DoT", "damage", _selected_tower, money, decay_desc)
 		else:
-			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+35% / +80% / +140% / +220% / +320% total damage")
+			_style_upgrade_button(upg_dmg_button, "Damage", "damage", _selected_tower, money, "+30% / +68% / +115% / +170% / +235% total damage")
 		_style_upgrade_button(upg_rng_button, "Range", "range", _selected_tower, money, "+25% / +60% / +100% / +130% / +160% total range")
-		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+20% / +45% / +75% / +110% / +150% fire speed")
+		_style_upgrade_button(upg_spd_button, "Fire Rate", "fire_rate", _selected_tower, money, "+18% / +38% / +62% / +90% / +120% fire speed")
 
 		if combine_button != null:
 			var is_already_combo: bool = Balance.is_combo_tower(_selected_tower.tower_type)
@@ -1325,10 +1593,24 @@ func _refresh_research_panel() -> void:
 			lvl_btns[idx].modulate = Color(0.45, 0.95, 1.0) if sel_map == (idx + 1) else Color.WHITE
 
 	if start_menu_overlay != null:
+		var short_zone_tags: Dictionary = {
+			1: "4 Rows | 3 Blasts",
+			2: "3 Columns | 3 Blasts",
+			3: "4 Islands | 4 Blasts",
+			4: "4 Bastions | 4 Blasts",
+			5: "5 Pillboxes | 5 Blasts",
+		}
 		for idx in range(start_level_buttons.size()):
 			var sbtn: Button = start_level_buttons[idx]
-			var is_active: bool = (sel_map == idx + 1)
+			var lid: int = idx + 1
+			var lcfg: Dictionary = Balance.LEVELS[lid]
+			var is_active: bool = (sel_map == lid)
+			var cleared_tag: String = " [★]" if bool(GameState.level_medals.get(lid, {}).get("cleared", false)) else ""
+			sbtn.text = "%s%s\n(%s)" % [lcfg["short_name"], cleared_tag, str(short_zone_tags.get(lid, lcfg["zone_type"]))]
 			sbtn.modulate = Color(0.45, 0.98, 1.0) if is_active else Color.WHITE
+		for dk in start_diff_buttons.keys():
+			var dbtn: Button = start_diff_buttons[dk]
+			dbtn.modulate = Color(0.45, 0.98, 1.0) if GameState.difficulty_key == dk else Color(0.76, 0.80, 0.86)
 		if start_level_title_label != null:
 			start_level_title_label.text = "%s  —  %s (%d Hive Destroyer Shot%s)" % [
 				str(map_cfg["name"]).to_upper(),
@@ -1337,7 +1619,10 @@ func _refresh_research_panel() -> void:
 				"s" if int(map_cfg["shots_required"]) > 1 else "",
 			]
 		if start_level_desc_label != null:
-			start_level_desc_label.text = str(map_cfg["description"])
+			var mod_txt: String = str(map_cfg.get("modifier_label", ""))
+			var diff_cfg: Dictionary = GameState.get_difficulty_cfg()
+			var extra_line: String = ("\nSector Modifier: %s  |  Difficulty: %s (%s)" % [mod_txt, str(diff_cfg["name"]), str(diff_cfg["desc"])]) if mod_txt != "" else ("\nDifficulty: %s (%s)" % [str(diff_cfg["name"]), str(diff_cfg["desc"])])
+			start_level_desc_label.text = str(map_cfg["description"]) + extra_line
 		if start_meta_label != null:
 			start_meta_label.text = "Persistent Meta-Research Available: %d R (Max %d R earned per mission)" % [res, Balance.MAX_RESEARCH_PER_MISSION]
 		if start_play_button != null:
@@ -1468,7 +1753,7 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	elif tower_type == "railgun":
 		desc += " - 140 hit + 50% slow 4s + Decay."
 	elif tower_type == "annihilator":
-		desc += " - Heavy anti-boss (117-491/hit vs Jugg)."
+		desc += " - Heavy anti-boss (101-338/hit vs Jugg)."
 	else:
 		desc += " - JUGGERNAUT COUNTER (180%)."
 	_set_button_description(btn, desc)
@@ -1490,7 +1775,7 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 		btn.modulate = Color(0.75, 0.92, 0.78)
 		_set_button_description(btn, "%s MAX (%d/%d): %s." % [title, Balance.TOWER_UPGRADE_MAX_LEVEL, Balance.TOWER_UPGRADE_MAX_LEVEL, desc_detail])
 		return
-	var cost: int = Balance.get_tower_upgrade_cost(key, lvl)
+	var cost: int = Balance.get_tower_upgrade_cost(key, lvl, tower.tower_type)
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
 	btn.text = "%s %s ($%d)" % [title, pips, cost]
@@ -1515,15 +1800,23 @@ func _refresh_start_wave_button() -> void:
 		start_wave_button.disabled = true
 		return
 	var can_start: bool = (wave_manager_ref.state == WaveManager.State.BUILD) and not GameState.mission.is_over
-	start_wave_button.disabled = not can_start
+	var can_early: bool = wave_manager_ref.can_call_next_wave_early()
+	start_wave_button.disabled = not (can_start or can_early)
 	if can_start:
 		start_wave_button.text = "START WAVE %d" % GameState.mission.wave_number
+		start_wave_button.modulate = Color.WHITE
+	elif can_early:
+		start_wave_button.text = "CALL W%d (+$%d)" % [GameState.mission.wave_number + 1, wave_manager_ref.get_early_call_bonus()]
+		start_wave_button.modulate = Color(1.0, 0.90, 0.42)
 	elif wave_manager_ref.state == WaveManager.State.SPAWNING:
 		start_wave_button.text = "SPAWNING..."
+		start_wave_button.modulate = Color.WHITE
 	elif wave_manager_ref.state == WaveManager.State.FIGHTING:
 		start_wave_button.text = "WAVE IN PROGRESS"
+		start_wave_button.modulate = Color.WHITE
 	else:
 		start_wave_button.text = "WAVE COMPLETE"
+		start_wave_button.modulate = Color.WHITE
 
 
 func _refresh_debug_overlay() -> void:
@@ -1680,8 +1973,51 @@ func _refresh_sandbox_ui() -> void:
 	if sandbox_wave_label != null:
 		sandbox_wave_label.text = "Wave: %d" % _sandbox_selected_wave
 	if sandbox_qty_button != null:
-		sandbox_qty_button.text = "Qty: x%d" % _sandbox_spawn_qty
-	sandbox_panel.size = Vector2(292.0, 38.0 if _sandbox_collapsed else 232.0)
+		sandbox_qty_button.text = "Spawn Qty: x%d" % _sandbox_spawn_qty
+	sandbox_panel.size = Vector2(292.0, 38.0 if _sandbox_collapsed else 258.0)
+
+
+func _on_enemy_inspected(enemy: EnemyUnit) -> void:
+	_inspected_enemy = enemy
+	_refresh_enemy_inspector()
+
+
+func _refresh_enemy_inspector() -> void:
+	if enemy_inspector_panel == null or enemy_inspector_label == null:
+		return
+	if _inspected_enemy == null or not is_instance_valid(_inspected_enemy) or not _inspected_enemy.is_alive():
+		_inspected_enemy = null
+		enemy_inspector_panel.visible = false
+		return
+	var cfg: Dictionary = Balance.ENEMIES.get(_inspected_enemy.enemy_type, {})
+	var ename: String = str(cfg.get("name", _inspected_enemy.enemy_type.capitalize()))
+	var armour: String = _inspected_enemy.armour_label
+	var best_tip: String = "Laser 150%"
+	if armour.contains("Armored") and armour.contains("Reflective"):
+		best_tip = "Piercing 180% | Time 150%"
+	elif armour.contains("Reflective"):
+		best_tip = "Time 150% | Avoid Laser"
+	elif armour.contains("Armored"):
+		best_tip = "Piercing 150%"
+	var statuses: PackedStringArray = []
+	if _inspected_enemy.slow_remaining > 0.0 and _inspected_enemy.slow_pct > 0.0:
+		statuses.append("Slow %d%%" % int(round(_inspected_enemy.slow_pct * 100.0)))
+	if _inspected_enemy.decay_ticks_remaining > 0 and _inspected_enemy.decay_base_pct > 0.0:
+		statuses.append("Decay %.0f/s" % _inspected_enemy.decay_base_pct)
+	if _inspected_enemy.armor_shred_timer > 0.0 and _inspected_enemy.armor_shred_stacks > 0:
+		statuses.append("Shred +%d%%" % (_inspected_enemy.armor_shred_stacks * 10))
+	var status_str: String = ", ".join(statuses) if not statuses.is_empty() else "None"
+	var cur_spd: float = _inspected_enemy.get_current_move_speed()
+	enemy_inspector_label.text = "%s [%s]\nHP: %d / %d  |  Spd: %.0f px/s\nCounter: %s\nStatus: %s" % [
+		ename,
+		armour,
+		int(ceil(_inspected_enemy.hp)),
+		int(round(_inspected_enemy.max_hp)),
+		cur_spd,
+		best_tip,
+		status_str,
+	]
+	enemy_inspector_panel.visible = true
 
 
 func _on_pad_selected(pad_idx: int) -> void:
@@ -1830,9 +2166,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(between_levels_overlay, Vector2(220.0, 86.0), Vector2(840.0, 444.0))
 		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
 		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 68.0), Vector2(920.0, 560.0))
+		_place_overlay_exact(recipes_overlay, Vector2(150.0, 74.0), Vector2(980.0, 560.0))
 		debug_panel.position = Vector2(16.0, 74.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(12.0, 70.0)
+		if enemy_inspector_panel != null:
+			enemy_inspector_panel.position = Vector2(12.0, bottom_bar.position.y - 98.0)
 		return
 
 	# 2) Pixel 11 Pro 20:9 Widescreen Landscape (e.g. 1600x720 / 1603x720)
@@ -1876,9 +2215,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_center_overlay(between_levels_overlay, vp_size, Vector2(900.0, 480.0))
 		_center_overlay(end_overlay, vp_size, Vector2(640.0, 400.0))
 		_center_overlay(start_menu_overlay, vp_size, Vector2(1060.0, 560.0))
+		_center_overlay(recipes_overlay, vp_size, Vector2(1020.0, 560.0))
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		if sandbox_panel != null:
 			sandbox_panel.position = Vector2(safe_x + 12.0, top_h + 8.0)
+		if enemy_inspector_panel != null:
+			enemy_inspector_panel.position = Vector2(safe_x + 12.0, bottom_bar.position.y - 98.0)
 		return
 
 	# 3) Pixel 11 Pro 9:20 Tall Portrait Fallback (e.g. 1280x2844 when Auto-Rotate is OFF)
@@ -1920,9 +2262,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	_center_overlay(between_levels_overlay, vp_size, Vector2(1080.0, 620.0))
 	_center_overlay(end_overlay, vp_size, Vector2(820.0, 480.0))
 	_center_overlay(start_menu_overlay, vp_size, Vector2(1160.0, 780.0))
+	_center_overlay(recipes_overlay, vp_size, Vector2(1140.0, 760.0))
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 	if sandbox_panel != null:
 		sandbox_panel.position = Vector2(16.0, safe_top + p_top_h + 8.0)
+	if enemy_inspector_panel != null:
+		enemy_inspector_panel.position = Vector2(16.0, bottom_bar.position.y - 98.0)
 
 
 func _on_selection_cleared() -> void:
@@ -2027,6 +2372,8 @@ func _on_pause_restart_pressed() -> void:
 
 func _on_mission_ended(outcome: String, reason: String) -> void:
 	end_overlay.visible = true
+	if end_endless_button != null:
+		end_endless_button.visible = (outcome == "won" and not GameState.is_sandbox_mode)
 	_reapply_overlay_bounds()
 	call_deferred("_reapply_overlay_bounds")
 	if outcome == "won":
@@ -2067,17 +2414,30 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 
 func _on_mission_reset() -> void:
 	end_overlay.visible = false
+	if end_endless_button != null:
+		end_endless_button.visible = false
 	surge_banner.visible = false
 	prompt_banner.visible = false
 	pause_overlay.visible = false
+	if recipes_overlay != null:
+		recipes_overlay.visible = false
+	if enemy_inspector_panel != null:
+		enemy_inspector_panel.visible = false
 	get_tree().paused = false
 	_banner_timer = 0.0
 	_last_summary_text = ""
 	_selected_pad_idx = -1
 	_selected_tower = null
+	_inspected_enemy = null
 	_hovered_button = null
 	_tapped_info_button = null
 	_sell_confirm_armed = false
+	if pause_auto_wave_check != null:
+		pause_auto_wave_check.button_pressed = GameState.auto_wave_enabled
+	if pause_sfx_mute_check != null and SfxManager != null:
+		pause_sfx_mute_check.button_pressed = SfxManager.muted
+	if pause_dmg_popups_check != null:
+		pause_dmg_popups_check.button_pressed = GameState.show_damage_numbers
 	_event_feed.clear()
 	event_feed_label.text = "Events: (none yet)"
 	_check_teaching_prompt()
@@ -2085,6 +2445,10 @@ func _on_mission_reset() -> void:
 
 
 func _on_start_wave_pressed() -> void:
+	if wave_manager_ref != null and wave_manager_ref.can_call_next_wave_early():
+		wave_manager_ref.call_next_wave_early()
+		_refresh_all()
+		return
 	start_wave_requested.emit()
 
 

@@ -125,6 +125,8 @@ func _trigger_surge(current_wave: int = -1) -> void:
 	surge_banner_triggered.emit(msg)
 	GameState.event_logged.emit(msg)
 	GameState.surge_triggered.emit(m.surge_count)
+	if SfxManager != null:
+		SfxManager.play("surge")
 
 
 func _on_time_power_used(_power_name: String) -> void:
