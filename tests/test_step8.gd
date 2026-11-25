@@ -196,6 +196,22 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	await _send_left_click(map, Vector2(430.0, 64.0 + 322.0))
 	assert(map.pad_occupancy[10] != null and map.pad_occupancy[10].tower_type == "laser")
 
+	# Verify generous 36px tower selection hitbox (+30px off-center thumb tap still selects tower!)
+	var found_p1_off: TowerUnit = map._find_tower_at(map.pad_occupancy[0].position + Vector2(30.0, 0.0))
+	assert(found_p1_off == map.pad_occupancy[0], "Generous 36px tower hitbox must select tower at +30px thumb offset")
+
+	# Verify 2-tap Early-Call safety guard on StartWaveButton (prevents accidental early wave leaks!)
+	wm.state = WaveManager.State.FIGHTING
+	GameState.is_wave_active = true
+	var ec_guard_e: EnemyUnit = map.spawn_enemy("crawler", 1)
+	var w_before_guard: int = GameState.mission.wave_number
+	hud._on_start_wave_pressed()
+	assert(GameState.mission.wave_number == w_before_guard and hud.start_wave_button.text.contains("CONFIRM EARLY"), "1st tap on Early-Wave must arm confirmation instead of firing immediately")
+	hud._early_call_armed_timer = 0.0
+	map.clear_all_enemies()
+	wm.state = WaveManager.State.BUILD
+	GameState.is_wave_active = false
+
 	# Check How Time Works <= 9 lines & names all 3 mutations + Surge
 	var htw: String = hud.how_time_works_label.text
 	var lines: PackedStringArray = htw.split("\n", false)
@@ -228,12 +244,27 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	hud.speed_2x_button.pressed.emit()
 	assert(is_equal_approx(GameState.game_speed, 3.0) and GameState.get_relative_speed_label() == "1x")
 
+	# Verify 1280x720 TOUCH Phone Landscape activates big touch buttons instead of tiny desktop buttons!
+	hud.force_touch_ui = true
+	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.size.y, 76.0), "Touch 1280x720 must use tall 76px TopBar fitting 1280px, got %s" % str(hud.top_bar.size))
+	assert(hud.speed_1x_button.custom_minimum_size.x >= 54.0 and hud.speed_1x_button.custom_minimum_size.y >= 36.0, "Touch speed buttons must be fat thumb targets (>=54x36)")
+	assert(hud.tower_buttons_grid.columns == 2, "Touch 1280x720 must use 2-col upgrades")
+	assert(hud.upg_dmg_button.get_index() == 0 and hud.target_mode_button.get_index() > hud.upg_rng_button.get_index(), "Upgrades must sit above TargetMode so thumbs never fat-finger TargetMode")
+	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
+		var ctrl: Control = hud.get_node(ctrl_name)
+		var r := Rect2(ctrl.position, ctrl.size)
+		for i in range(GameMap.BUILD_PAD_POSITIONS.size()):
+			var pad_screen: Vector2 = GameMap.BUILD_PAD_POSITIONS[i] * map.scale + map.position
+			assert(not r.has_point(pad_screen), "Touch 1280x720 %s overlaps Pad P%d!" % [ctrl_name, i + 1])
+	hud.force_touch_ui = false
+
 	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait Phone (1280x2844)
 	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
 	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
-	assert(hud.right_panel.position == Vector2(1220.0, 70.0) and hud.right_panel.size.x == 380.0)
+	assert(hud.right_panel.position == Vector2(1220.0, 76.0) and hud.right_panel.size.x == 380.0)
 	assert(hud.tower_buttons_grid.columns == 2, "Phone Landscape must use 2-col tower upgrades to eliminate vertical scrolling")
-	assert(hud.build_blaster_button.custom_minimum_size.y >= 36.0, "Phone landscape shop buttons must be bigger (>=36px)")
+	assert(hud.build_blaster_button.custom_minimum_size.y >= 38.0, "Phone landscape shop buttons must be bigger (>=38px)")
 	assert(map.scale.x >= 0.95)
 	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
@@ -1007,6 +1038,8 @@ func _test_g_combos_bubble_and_sandbox() -> void:
 	a_t.current_job = null
 	a_t.is_built = true
 	a_t.levels["damage"] = 2
+	var found_partner_off: TowerUnit = map._find_combinable_partner_at(a_t.position + Vector2(40.0, 0.0), m_t, 46.0)
+	assert(found_partner_off == a_t, "Generous 46px Combine hitbox must find built partner at +40px thumb offset")
 	var merged: TowerUnit = map.combine_two_towers(m_t, a_t)
 	assert(merged == m_t and merged.tower_type == "mortar+annihilator", "Two-tower combine must form mortar+annihilator")
 	assert(int(merged.levels["damage"]) == 2, "Merged tower must inherit higher upgrade rank")

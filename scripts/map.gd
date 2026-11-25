@@ -363,7 +363,7 @@ func clamp_point_to_zone(local_pos: Vector2, zone_idx: int) -> Vector2:
 func evaluate_drop_position(local_pos: Vector2, incoming_tower_type: String = "") -> Dictionary:
 	var eff_in_type: String = incoming_tower_type if incoming_tower_type != "" else (drag_tower_type if drag_tower_type != "" else pending_build_type)
 	if eff_in_type != "" and Balance.BASE_TOWER_KEYS.has(eff_in_type):
-		var target_t: TowerUnit = _find_tower_at(local_pos)
+		var target_t: TowerUnit = _find_tower_at(local_pos, 40.0)
 		if target_t != null and target_t.can_combine():
 			var combo_key: String = Balance.get_combo_key(target_t.tower_type, eff_in_type)
 			if Balance.TOWERS.has(combo_key):
@@ -715,10 +715,23 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-func _find_tower_at(local_pos: Vector2) -> TowerUnit:
+func _find_tower_at(local_pos: Vector2, search_radius: float = 36.0) -> TowerUnit:
 	var best_t: TowerUnit = null
-	var best_d2: float = 24.0 * 24.0
+	var best_d2: float = search_radius * search_radius
 	for t in get_all_towers():
+		var d2: float = local_pos.distance_squared_to(t.position)
+		if d2 <= best_d2:
+			best_d2 = d2
+			best_t = t
+	return best_t
+
+
+func _find_combinable_partner_at(local_pos: Vector2, source_tower: TowerUnit, search_radius: float = 46.0) -> TowerUnit:
+	var best_t: TowerUnit = null
+	var best_d2: float = search_radius * search_radius
+	for t in get_all_towers():
+		if t == source_tower or not t.can_combine():
+			continue
 		var d2: float = local_pos.distance_squared_to(t.position)
 		if d2 <= best_d2:
 			best_d2 = d2
@@ -728,7 +741,7 @@ func _find_tower_at(local_pos: Vector2) -> TowerUnit:
 
 func _find_enemy_at(local_pos: Vector2) -> EnemyUnit:
 	var best_e: EnemyUnit = null
-	var best_d2: float = 24.0 * 24.0
+	var best_d2: float = 32.0 * 32.0
 	for e in get_active_enemies():
 		var d2: float = local_pos.distance_squared_to(e.position)
 		if d2 <= best_d2:
@@ -775,16 +788,25 @@ func _on_map_gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if not in_map:
 			return
-		# 0) If combining two placed towers, clicking a valid partner merges them
+		# 0) If combining two placed towers, use a generous 46px partner search so slight thumb misses don't cancel Combine!
 		if combine_source_tower != null and is_instance_valid(combine_source_tower):
-			var partner: TowerUnit = _find_tower_at(local_pos)
-			if partner != null and partner != combine_source_tower and partner.can_combine():
+			var partner: TowerUnit = _find_combinable_partner_at(local_pos, combine_source_tower, 46.0)
+			if partner != null:
 				combine_two_towers(combine_source_tower, partner)
 				map_click_area.accept_event()
 				return
-			cancel_combine_partner_pick()
-			if partner != null:
-				select_tower_unit(partner)
+			# Tapping directly on the source tower cancels cleanly; tapping a busy/building tower explains why; empty space warns without losing Combine arm
+			if local_pos.distance_to(combine_source_tower.position) <= 32.0:
+				cancel_combine_partner_pick()
+				select_tower_unit(combine_source_tower)
+			else:
+				var near_t: TowerUnit = _find_tower_at(local_pos, 46.0)
+				if near_t != null and near_t != combine_source_tower and not near_t.is_built:
+					spawn_floater(local_pos, "Wait for tower to finish building!", Color(1.0, 0.72, 0.35))
+				elif near_t != null and near_t != combine_source_tower and Balance.is_combo_tower(near_t.tower_type):
+					spawn_floater(local_pos, "Already a combo tower — pick a base tower!", Color(1.0, 0.72, 0.35))
+				else:
+					spawn_floater(local_pos, "Tap a glowing base tower (or Cancel)", Color(1.0, 0.88, 0.42))
 			map_click_area.accept_event()
 			return
 

@@ -202,6 +202,9 @@ var _last_scroll_log_sec: float = -10.0
 var _current_layout_mode: String = "desktop"
 var _drag_started_in_right_panel: bool = false
 var _drag_is_touch: bool = false
+var _seen_touch_input: bool = false
+var force_touch_ui: bool = false
+var _early_call_armed_timer: float = 0.0
 
 const RESEARCH_ORDER: Array[String] = [
 	"rapid_cycling",
@@ -1530,10 +1533,11 @@ func _setup_responsive_grids() -> void:
 		tower_buttons_grid.add_theme_constant_override("v_separation", 4)
 		tower_panel_box.add_child(tower_buttons_grid)
 		var t_btns: Array[Button] = [
-			target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button,
+			upg_dmg_button, upg_spd_button, upg_rng_button,
 		]
 		if combine_button != null:
 			t_btns.append(combine_button)
+		t_btns.append(target_mode_button)
 		t_btns.append(sell_button)
 		for b in t_btns:
 			if b != null and b.get_parent() != null:
@@ -1778,6 +1782,10 @@ func drag_and_drop_tower(tower_type: String, target_screen_pos: Vector2) -> Towe
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and event.pressed and not _seen_touch_input:
+		_seen_touch_input = true
+		if _current_layout_mode == "desktop":
+			call_deferred("_reapply_overlay_bounds")
 	if event is InputEventKey and event.pressed and not event.echo:
 		if guide_panel != null and guide_panel.visible and (event.keycode == KEY_SPACE or event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER):
 			_on_guide_ack_pressed()
@@ -1830,6 +1838,8 @@ func _process(delta: float) -> void:
 			_banner_timer = maxf(0.0, _banner_timer - delta)
 			if _banner_timer <= 0.0:
 				surge_banner.visible = false
+	if _early_call_armed_timer > 0.0:
+		_early_call_armed_timer = maxf(0.0, _early_call_armed_timer - delta)
 	_refresh_all()
 
 
@@ -2426,11 +2436,15 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 
 func _style_upgrade_button(btn: Button, title: String, key: String, tower: TowerUnit, money: int, desc_detail: String) -> void:
 	var lvl: int = int(tower.levels.get(key, 0))
+	var compact_lbl: bool = (_current_layout_mode == "landscape_wide")
 	var pips: String = ""
-	for i in range(Balance.TOWER_UPGRADE_MAX_LEVEL):
-		pips += "[*]" if i < lvl else "[ ]"
+	if compact_lbl:
+		pips = "L%d/5" % lvl
+	else:
+		for i in range(Balance.TOWER_UPGRADE_MAX_LEVEL):
+			pips += "[*]" if i < lvl else "[ ]"
 	if lvl >= Balance.TOWER_UPGRADE_MAX_LEVEL:
-		btn.text = "%s %s MAX" % [title, pips]
+		btn.text = "%s MAX" % title if compact_lbl else ("%s %s MAX" % [title, pips])
 		btn.disabled = true
 		btn.modulate = Color(0.75, 0.92, 0.78)
 		_set_button_description(btn, "%s MAX (%d/%d): %s." % [title, Balance.TOWER_UPGRADE_MAX_LEVEL, Balance.TOWER_UPGRADE_MAX_LEVEL, desc_detail])
@@ -2463,11 +2477,16 @@ func _refresh_start_wave_button() -> void:
 	var can_early: bool = wave_manager_ref.can_call_next_wave_early()
 	start_wave_button.disabled = not (can_start or can_early)
 	if can_start:
+		_early_call_armed_timer = 0.0
 		start_wave_button.text = "START WAVE %d" % GameState.mission.wave_number
 		start_wave_button.modulate = Color.WHITE
 	elif can_early:
-		start_wave_button.text = "CALL W%d (+$%d)" % [GameState.mission.wave_number + 1, wave_manager_ref.get_early_call_bonus()]
-		start_wave_button.modulate = Color(1.0, 0.90, 0.42)
+		if _early_call_armed_timer > 0.0:
+			start_wave_button.text = "CONFIRM EARLY W%d?\n(+$%d)" % [GameState.mission.wave_number + 1, wave_manager_ref.get_early_call_bonus()]
+			start_wave_button.modulate = Color(1.0, 0.62, 0.25)
+		else:
+			start_wave_button.text = "EARLY W%d (+$%d)\n(Tap 2x)" % [GameState.mission.wave_number + 1, wave_manager_ref.get_early_call_bonus()]
+			start_wave_button.modulate = Color(1.0, 0.90, 0.42)
 	elif wave_manager_ref.state == WaveManager.State.SPAWNING:
 		start_wave_button.text = "SPAWNING..."
 		start_wave_button.modulate = Color.WHITE
@@ -2813,11 +2832,14 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 	var is_port: bool = (mode == "portrait")
 	var is_wide: bool = (mode == "landscape_wide")
 
-	# TopBar font, row split (3 rows in Portrait, 2 rows in Landscape/Desktop) & button sizing
-	var top_lbl_fs: int = 20 if is_port else (13 if is_wide else 12)
+	# TopBar font, row split (3 rows in Portrait, 2 rows in Landscape/Desktop) & generous touch spacing
+	var top_lbl_fs: int = 20 if is_port else (12 if is_wide else 12)
 	var base_lbl_fs: int = 18 if is_port else (12 if is_wide else 11)
-	var top_btn_h: float = 52.0 if is_port else (30.0 if is_wide else 26.0)
-	var top_btn_fs: int = 17 if is_port else (11 if is_wide else 10)
+	var top_btn_h: float = 52.0 if is_port else (36.0 if is_wide else 26.0)
+	var top_btn_fs: int = 17 if is_port else (12 if is_wide else 10)
+	var speed_box_hbox := speed_pause_button.get_parent() as HBoxContainer if speed_pause_button != null else null
+	if speed_box_hbox != null:
+		speed_box_hbox.add_theme_constant_override("separation", 8 if is_port else (6 if is_wide else 3))
 	for lbl in [top_status_label, wave_label, money_label, research_label, refineries_label, clock_label]:
 		if lbl != null:
 			lbl.add_theme_font_size_override("font_size", top_lbl_fs)
@@ -2870,17 +2892,17 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 		if sandbox_toggle_button != null:
 			sandbox_toggle_button.custom_minimum_size.x = 0.0
 	else:
-		speed_pause_button.custom_minimum_size.x = 34.0 if is_wide else 30.0
-		speed_1x_button.custom_minimum_size.x = 40.0 if is_wide else 34.0
-		speed_2x_button.custom_minimum_size.x = 34.0 if is_wide else 28.0
-		speed_3x_button.custom_minimum_size.x = 40.0 if is_wide else 34.0
+		speed_pause_button.custom_minimum_size.x = 44.0 if is_wide else 30.0
+		speed_1x_button.custom_minimum_size.x = 54.0 if is_wide else 34.0
+		speed_2x_button.custom_minimum_size.x = 44.0 if is_wide else 28.0
+		speed_3x_button.custom_minimum_size.x = 54.0 if is_wide else 34.0
 		if auto_wave_button != null:
-			auto_wave_button.custom_minimum_size.x = 66.0 if is_wide else 56.0
-		level_picker_button.custom_minimum_size.x = 92.0 if is_wide else 80.0
-		menu_button.custom_minimum_size.x = 54.0 if is_wide else 46.0
-		debug_button.custom_minimum_size.x = 44.0 if is_wide else 36.0
-		fullscreen_button.custom_minimum_size.x = 44.0 if is_wide else 36.0
-		download_button.custom_minimum_size.x = 68.0 if is_wide else 58.0
+			auto_wave_button.custom_minimum_size.x = 64.0 if is_wide else 56.0
+		level_picker_button.custom_minimum_size.x = 86.0 if is_wide else 80.0
+		menu_button.custom_minimum_size.x = 52.0 if is_wide else 46.0
+		debug_button.custom_minimum_size.x = 42.0 if is_wide else 36.0
+		fullscreen_button.custom_minimum_size.x = 42.0 if is_wide else 36.0
+		download_button.custom_minimum_size.x = 64.0 if is_wide else 58.0
 		if sandbox_toggle_button != null:
 			sandbox_toggle_button.custom_minimum_size.x = 84.0
 
@@ -2921,7 +2943,7 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 		bottom_actions_grid.add_theme_constant_override("h_separation", 12 if is_port else 8)
 		bottom_actions_grid.add_theme_constant_override("v_separation", 10 if is_port else 8)
 
-	var shop_btn_h: float = 88.0 if is_port else (36.0 if is_wide else 28.0)
+	var shop_btn_h: float = 88.0 if is_port else (38.0 if is_wide else 28.0)
 	var shop_btn_fs: int = 22 if is_port else (13 if is_wide else 11)
 	var shop_lbl_fs: int = 21 if is_port else (12 if is_wide else 11)
 	for sb in [build_blaster_button, build_mortar_button, build_laser_button, build_slow_button, build_railgun_button, build_annihilator_button, build_recipes_button, target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button, combine_button, sell_button, manip_upgrade_button]:
@@ -3046,8 +3068,9 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		bg.position = Vector2.ZERO
 		bg.size = vp_size
 
-	# 1) Desktop / Standard 16:9 (1280x720) — preserve exact desktop coordinates & RightPanel (340x480)
-	if vp_size.x <= 1285.0 and vp_size.y <= 725.0:
+	var use_touch_landscape: bool = (force_touch_ui or _seen_touch_input or DisplayServer.is_touchscreen_available())
+	# 1) Non-touch Desktop 16:9 (1280x720) — preserve exact desktop coordinates & RightPanel (340x480)
+	if vp_size.x <= 1285.0 and vp_size.y <= 725.0 and not use_touch_landscape:
 		_apply_responsive_ergonomics("desktop")
 		_apply_bar_safe_margins(top_bar, -2.0)
 		_apply_bar_safe_margins(bottom_bar, 2.0)
@@ -3082,12 +3105,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			enemy_inspector_panel.position = Vector2(12.0, bottom_bar.position.y - 98.0)
 		return
 
-	# 2) Widescreen Landscape / Phone Landscape (e.g. Pixel 11 Pro 20:9 1600x720)
+	# 2) Phone / Touch Landscape & Widescreen (1280x720 Touch AND Pixel 11 Pro 20:9 1600x720)
 	if vp_size.x >= vp_size.y:
 		_apply_responsive_ergonomics("landscape_wide")
-		var top_h: float = 70.0
-		var bot_h: float = 182.0
-		var rp_w: float = 380.0
+		var top_h: float = 76.0
+		var bot_h: float = 180.0
+		var rp_w: float = 380.0 if vp_size.x >= 1380.0 else 356.0
 		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.08, 0.0, 28.0)
 		_apply_bar_safe_margins(top_bar, safe_x)
 		_apply_bar_safe_margins(bottom_bar, safe_x)
@@ -3099,12 +3122,12 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.22), 62.0, 12, false)
 		bottom_bar.size = Vector2(vp_size.x, bot_h)
 
-		var middle_h: float = maxf(468.0, vp_size.y - top_h - bot_h)
+		var middle_h: float = maxf(460.0, vp_size.y - top_h - bot_h)
 		right_panel.custom_minimum_size = Vector2(rp_w, middle_h)
 		right_panel.position = Vector2(vp_size.x - rp_w, top_h)
 		right_panel.size = Vector2(rp_w, middle_h)
 
-		var avail_w: float = maxf(GameMap.MAP_WIDTH, vp_size.x - rp_w)
+		var avail_w: float = maxf(300.0, vp_size.x - rp_w)
 		var avail_h: float = middle_h
 		var map_scale: float = minf(avail_w / GameMap.MAP_WIDTH, avail_h / GameMap.MAP_HEIGHT)
 		var extra_w: float = maxf(0.0, (avail_w / map_scale) - GameMap.MAP_WIDTH)
@@ -3493,9 +3516,15 @@ func _on_mission_reset() -> void:
 
 func _on_start_wave_pressed() -> void:
 	if wave_manager_ref != null and wave_manager_ref.can_call_next_wave_early():
+		if _early_call_armed_timer <= 0.0:
+			_early_call_armed_timer = 3.0
+			_refresh_all()
+			return
+		_early_call_armed_timer = 0.0
 		wave_manager_ref.call_next_wave_early()
 		_refresh_all()
 		return
+	_early_call_armed_timer = 0.0
 	start_wave_requested.emit()
 
 
