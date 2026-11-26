@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v1.5-touch-precision"
+const BALANCE_VERSION: String = "v2.0-btd5-evolution"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
@@ -82,8 +82,9 @@ const TARGETING_SHORT_TAGS: Dictionary = {
 
 # --- Towers ($ costs, 4 Damage Types: Piercing, Normal, Laser, Time) ---
 const BASE_TOWER_KEYS: Array[String] = ["blaster", "mortar", "laser", "slow", "railgun", "annihilator"]
-const MERGE_SURCHARGE_RATIO: float = 0.30
+const MERGE_SURCHARGE_RATIO: float = 0.35
 const MERGE_BUILD_TIME_RATIO: float = 0.65
+const COMBINE_MIN_TOTAL_RANKS: int = 3 # BTD5-style earned merge: requires 3+ total upgrade ranks across base towers (Sandbox exempt)
 
 const TOWERS: Dictionary = {
 	"blaster": {
@@ -211,7 +212,7 @@ const TOWERS: Dictionary = {
 		"name": "Twin-Linked Vulcan Battery",
 		"is_combo": true,
 		"recipe": ["blaster", "blaster"],
-		"merge_fee": 65,
+		"merge_fee": 150,
 		"role": "Quad-barrel Piercing rotary cannon; every 4th hit triggers +25% Armor-Crack",
 		"cost": 245,
 		"build_time": 5.0,
@@ -234,7 +235,7 @@ const TOWERS: Dictionary = {
 		"name": "MIRV Siege Howitzer",
 		"is_combo": true,
 		"recipe": ["mortar", "mortar"],
-		"merge_fee": 65,
+		"merge_fee": 160,
 		"role": "Triple-shell MIRV canister splitting into 3 overlapping 80px Normal explosions",
 		"cost": 285,
 		"build_time": 9.0,
@@ -258,7 +259,7 @@ const TOWERS: Dictionary = {
 		"name": "Prismatic Focus Obelisk",
 		"is_combo": true,
 		"recipe": ["laser", "laser"],
-		"merge_fee": 65,
+		"merge_fee": 160,
 		"role": "Thermal beam ramps up to +84% locked-on heat + refracts 35% arc to 1 nearby target",
 		"cost": 265,
 		"build_time": 6.5,
@@ -284,7 +285,7 @@ const TOWERS: Dictionary = {
 		"name": "Stasis Singularity Pylon",
 		"is_combo": true,
 		"recipe": ["slow", "slow"],
-		"merge_fee": 60,
+		"merge_fee": 150,
 		"role": "Massive 40% AoE Slow Status Bubble (Jugg 20%) + boosted flat Time Decay; upg grows radius",
 		"cost": 260,
 		"build_time": 6.5,
@@ -313,7 +314,7 @@ const TOWERS: Dictionary = {
 		"name": "Chrono-Breach Supercollider",
 		"is_combo": true,
 		"recipe": ["railgun", "railgun"],
-		"merge_fee": 235,
+		"merge_fee": 480,
 		"role": "380px line-piercing rail punching up to 3 enemies; 55% slow + heavy Time Decay",
 		"cost": 985,
 		"build_time": 10.5,
@@ -339,7 +340,7 @@ const TOWERS: Dictionary = {
 		"name": "Hyper-Velocity MAC Cannon",
 		"is_combo": true,
 		"recipe": ["annihilator", "annihilator"],
-		"merge_fee": 160,
+		"merge_fee": 360,
 		"role": "Boss assassin: 88 Piercing (158 vs Jugg) +15% opener strike vs healthy targets",
 		"cost": 640,
 		"build_time": 8.5,
@@ -361,7 +362,7 @@ const TOWERS: Dictionary = {
 		"name": "Flak Barrage Battery",
 		"is_combo": true,
 		"recipe": ["blaster", "mortar"],
-		"merge_fee": 60,
+		"merge_fee": 150,
 		"role": "Airburst flak shells (no blind spot): 15 Piercing center hit + 11 Normal 55px shrapnel splash",
 		"cost": 260,
 		"build_time": 7.0,
@@ -385,7 +386,7 @@ const TOWERS: Dictionary = {
 		"name": "Pulse-Plasma Carbine",
 		"is_combo": true,
 		"recipe": ["blaster", "laser"],
-		"merge_fee": 65,
+		"merge_fee": 160,
 		"role": "Smart Matrix weapon: hits Standard at 150% Laser & Armored/Refl at 150%/120% Piercing",
 		"cost": 255,
 		"build_time": 6.0,
@@ -407,7 +408,7 @@ const TOWERS: Dictionary = {
 		"name": "Chrono-Kinetic Suppressor",
 		"is_combo": true,
 		"recipe": ["blaster", "slow"],
-		"merge_fee": 55,
+		"merge_fee": 145,
 		"role": "Piercing bursts spawn a Stasis Bubble (30% slow + flat Time Decay; grows w/ Dmg)",
 		"cost": 245,
 		"build_time": 6.0,
@@ -436,7 +437,7 @@ const TOWERS: Dictionary = {
 		"name": "Hyper-Cycle Rail Rifle",
 		"is_combo": true,
 		"recipe": ["blaster", "railgun"],
-		"merge_fee": 140,
+		"merge_fee": 310,
 		"role": "2.1x faster Time Rail Rifle (260px): 78 Time + 18 Piercing + 45% slow + Decay",
 		"cost": 605,
 		"build_time": 8.0,
@@ -463,7 +464,7 @@ const TOWERS: Dictionary = {
 		"name": "Autocannon Siege Shredder",
 		"is_combo": true,
 		"recipe": ["blaster", "annihilator"],
-		"merge_fee": 100,
+		"merge_fee": 240,
 		"role": "Rapid heavy Piercing boss shredder (42 dmg @ 1.05/s, 180% vs Juggernaut)",
 		"cost": 430,
 		"build_time": 7.0,
@@ -484,7 +485,7 @@ const TOWERS: Dictionary = {
 		"name": "Solar Plasma Artillery",
 		"is_combo": true,
 		"recipe": ["mortar", "laser"],
-		"merge_fee": 65,
+		"merge_fee": 160,
 		"role": "Searing plasma shells: 20 Normal + 16 Laser blast (68px AoE) melts Standard hordes",
 		"cost": 275,
 		"build_time": 8.0,
@@ -508,7 +509,7 @@ const TOWERS: Dictionary = {
 		"name": "Cryo-Cluster Bombard",
 		"is_combo": true,
 		"recipe": ["mortar", "slow"],
-		"merge_fee": 65,
+		"merge_fee": 155,
 		"role": "Lobs shells exploding for 20 Normal splash + leaving a large 34% Slow Status Bubble",
 		"cost": 275,
 		"build_time": 8.0,
@@ -538,7 +539,7 @@ const TOWERS: Dictionary = {
 		"name": "Orbital Temporal Howitzer",
 		"is_combo": true,
 		"recipe": ["mortar", "railgun"],
-		"merge_fee": 145,
+		"merge_fee": 330,
 		"role": "285px cross-map howitzer: 110 Time center + 38 Normal splash (75px) + 50% slow + Decay",
 		"cost": 630,
 		"build_time": 10.0,
@@ -567,7 +568,7 @@ const TOWERS: Dictionary = {
 		"name": "Armor-Cracker Siege Cannon",
 		"is_combo": true,
 		"recipe": ["mortar", "annihilator"],
-		"merge_fee": 105,
+		"merge_fee": 250,
 		"role": "Bunker-buster shell: 62 Piercing center (112 vs Jugg) + 24 Normal 65px splash",
 		"cost": 455,
 		"build_time": 9.0,
@@ -592,7 +593,7 @@ const TOWERS: Dictionary = {
 		"name": "Stasis Bubble Projector",
 		"is_combo": true,
 		"recipe": ["laser", "slow"],
-		"merge_fee": 60,
+		"merge_fee": 155,
 		"role": "Fires ionized Laser pulse spawning an AoE Slow Status Bubble w/ burning thermal ticks",
 		"cost": 260,
 		"build_time": 6.5,
@@ -622,7 +623,7 @@ const TOWERS: Dictionary = {
 		"name": "Chrono-Lance Thermal Beam",
 		"is_combo": true,
 		"recipe": ["laser", "railgun"],
-		"merge_fee": 145,
+		"merge_fee": 320,
 		"role": "290px lance every 2.2s: 50 Time + 28 Laser dmg + 45% slow + flat Time Decay",
 		"cost": 620,
 		"build_time": 8.5,
@@ -649,7 +650,7 @@ const TOWERS: Dictionary = {
 		"name": "Thermal Melter Rail-Spire",
 		"is_combo": true,
 		"recipe": ["laser", "annihilator"],
-		"merge_fee": 100,
+		"merge_fee": 250,
 		"role": "Gauss slugs superheat armor: +10% dmg taken per stack (max +30% vs Boss)",
 		"cost": 440,
 		"build_time": 7.5,
@@ -674,7 +675,7 @@ const TOWERS: Dictionary = {
 		"name": "Absolute Zero Chrono-Cannon",
 		"is_combo": true,
 		"recipe": ["slow", "railgun"],
-		"merge_fee": 145,
+		"merge_fee": 330,
 		"role": "330px Temporal Rail creates a massive 55% Slow Status Bubble (Jugg 27.5%) + Decay",
 		"cost": 620,
 		"build_time": 8.5,
@@ -703,7 +704,7 @@ const TOWERS: Dictionary = {
 		"name": "Temporal Lock Rail-Breaker",
 		"is_combo": true,
 		"recipe": ["slow", "annihilator"],
-		"merge_fee": 100,
+		"merge_fee": 240,
 		"role": "Heavy 48 Piercing shots drop a Stasis Lock Bubble (30% slow, Jugg 15%) pinning bosses",
 		"cost": 440,
 		"build_time": 7.5,
@@ -732,7 +733,7 @@ const TOWERS: Dictionary = {
 		"name": "Omega Singularity Gauss-Rail",
 		"is_combo": true,
 		"recipe": ["railgun", "annihilator"],
-		"merge_fee": 205,
+		"merge_fee": 450,
 		"role": "275px apex boss killer: 85 Piercing + 34 Time impact + 50% slow 4s + Decay",
 		"cost": 820,
 		"build_time": 9.5,
@@ -770,6 +771,350 @@ const TOWER_RANGE_PER_LEVEL: float = 0.25 # Legacy fallback constant
 const TOWER_FIRE_RATE_TOTAL_BONUSES: Array[float] = [0.0, 0.18, 0.38, 0.62, 0.90, 1.20] # Up to 2.20x fire rate at Lv5
 const TOWER_FIRE_RATE_PER_LEVEL: float = 0.15
 const TOWER_SELL_REFUND_RATIO: float = 0.5 # LOCKED 50% refund
+
+# =========================================================================
+# === BTD5-STYLE TIER-4 MILESTONE PERKS & TIER-5 APEX OVERDRIVE (ALL 21) ==
+# =========================================================================
+# Unlocked directly on any Combined Tower (apex_tier 0 -> 1 -> 2).
+# Massive aspirational save-up targets that transform combat mechanics & visuals!
+const COMBO_EVOLUTIONS: Dictionary = {
+	"blaster+blaster": {
+		"t4": {
+			"name": "Hyper-Rotary Shred",
+			"cost": 1250,
+			"build_time": 5.0,
+			"desc": "+30% fire rate, +25% dmg & rounds ricochet to 1 nearby target (55% dmg).",
+			"mods": {"rate_mult": 1.30, "dmg_mult": 1.25, "ricochet_count": 1, "ricochet_ratio": 0.55},
+		},
+		"t5": {
+			"name": "Storm-Wall Gatling",
+			"cost": 3800,
+			"build_time": 7.5,
+			"desc": "APEX: +65% fire rate, +70% dmg, 2 ricochets (70% dmg), Armor-Crack +55% & pierces Shield Auras.",
+			"mods": {"rate_mult": 1.65, "dmg_mult": 1.70, "ricochet_count": 2, "ricochet_ratio": 0.70, "armor_crack_mult_add": 0.30, "strip_shield_aura": true},
+		},
+	},
+	"mortar+mortar": {
+		"t4": {
+			"name": "Cluster Saturation",
+			"cost": 1400,
+			"build_time": 5.5,
+			"desc": "5 MIRV sub-shells, +20% blast radius, +35% dmg & 0.45s concussive stun.",
+			"mods": {"dmg_mult": 1.35, "bonus_mirv_subshells": 2, "splash_mult": 1.20, "stun_duration": 0.45},
+		},
+		"t5": {
+			"name": "Carpet-Bomb Citadel",
+			"cost": 4200,
+			"build_time": 8.0,
+			"desc": "APEX: 7 MIRV sub-shells, +35% splash, +95% dmg, +30% fire rate & 0.85s shockwave stun.",
+			"mods": {"dmg_mult": 1.95, "rate_mult": 1.30, "bonus_mirv_subshells": 4, "splash_mult": 1.35, "stun_duration": 0.85},
+		},
+	},
+	"laser+laser": {
+		"t4": {
+			"name": "Tri-Prism Refraction",
+			"cost": 1350,
+			"build_time": 5.0,
+			"desc": "Beam chains to 3 nearby targets (50% arc), +30% dmg, ramps to 10 stacks & reveals Cloaked.",
+			"mods": {"dmg_mult": 1.30, "bonus_refract_targets": 2, "refract_radius_add": 28.0, "refract_ratio_add": 0.15, "ramp_max_add": 3, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Solaris Hyper-Prism",
+			"cost": 4100,
+			"build_time": 7.5,
+			"desc": "APEX: Chains to 5 targets (70% arc), +95% dmg, +30% speed, 12 ramp stacks & Slag Nova burst on kill.",
+			"mods": {"dmg_mult": 1.95, "rate_mult": 1.30, "bonus_refract_targets": 4, "refract_radius_add": 48.0, "refract_ratio_add": 0.35, "ramp_max_add": 5, "reveals_cloaked": true, "slag_nova_dmg": 120.0},
+		},
+	},
+	"slow+slow": {
+		"t4": {
+			"name": "Event-Horizon Field",
+			"cost": 1300,
+			"build_time": 5.0,
+			"desc": "Bubbles +25% wider, +1.5s longer, +10% slow, +50% Decay & completely strip Bio-Mender regen.",
+			"mods": {"bubble_radius_mult": 1.25, "bubble_duration_add": 1.5, "bubble_slow_add": 0.10, "decay_mult": 1.50, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Temporal Vortex Engine",
+			"cost": 4000,
+			"build_time": 7.5,
+			"desc": "APEX: Massive +40% Vortex Bubbles pull enemies BACKWARD along the path, +18% slow & 2.4x Decay!",
+			"mods": {"bubble_radius_mult": 1.40, "bubble_duration_add": 2.6, "bubble_slow_add": 0.18, "decay_mult": 2.40, "bubble_pull_px_per_sec": 13.0, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+	},
+	"railgun+railgun": {
+		"t4": {
+			"name": "Sub-Atomic Accelerator",
+			"cost": 2400,
+			"build_time": 6.0,
+			"desc": "Pierces 5 lined-up enemies, +40% dmg, +45% Decay, +12% range & ignores Conduit Shield Auras.",
+			"mods": {"dmg_mult": 1.40, "decay_mult": 1.45, "range_mult": 1.12, "bonus_pierce": 2, "strip_shield_aura": true},
+		},
+		"t5": {
+			"name": "Rift-Tear Supercollider",
+			"cost": 7400,
+			"build_time": 8.5,
+			"desc": "APEX: Pierces 8 enemies across map, +120% dmg, +45% fire rate, 2.2x Decay & 0.6s temporal stun.",
+			"mods": {"dmg_mult": 2.20, "rate_mult": 1.45, "decay_mult": 2.20, "range_mult": 1.22, "bonus_pierce": 5, "stun_duration": 0.60, "strip_shield_aura": true},
+		},
+	},
+	"annihilator+annihilator": {
+		"t4": {
+			"name": "Tungsten Hyper-Sabot",
+			"cost": 2100,
+			"build_time": 5.5,
+			"desc": "+40% dmg, +35% opener crit (+50% total), +15% fire rate & bypasses Conduit Shield Auras.",
+			"mods": {"dmg_mult": 1.40, "rate_mult": 1.15, "opener_bonus_add": 0.35, "strip_shield_aura": true},
+		},
+		"t5": {
+			"name": "Dreadnought Obliterator",
+			"cost": 6600,
+			"build_time": 8.0,
+			"desc": "APEX: +125% dmg, +35% fire rate, +60% opener, pierces 2 bosses & executes targets <8% HP.",
+			"mods": {"dmg_mult": 2.25, "rate_mult": 1.35, "opener_bonus_add": 0.60, "bonus_pierce": 1, "execute_hp_pct": 0.08, "strip_shield_aura": true},
+		},
+	},
+	"blaster+mortar": {
+		"t4": {
+			"name": "Proximity Shrapnel Storm",
+			"cost": 1300,
+			"build_time": 5.0,
+			"desc": "+35% dmg, +25% splash radius, +20% fire rate & shrapnel reveals Cloaked Stalkers.",
+			"mods": {"dmg_mult": 1.35, "rate_mult": 1.20, "splash_mult": 1.25, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Sky-Shredder Flak Fortress",
+			"cost": 3900,
+			"build_time": 7.5,
+			"desc": "APEX: +100% dmg, +50% speed, +40% splash, 3 bonus flak sub-bursts & 0.55s stun.",
+			"mods": {"dmg_mult": 2.00, "rate_mult": 1.50, "splash_mult": 1.40, "bonus_mirv_subshells": 3, "stun_duration": 0.55, "reveals_cloaked": true},
+		},
+	},
+	"blaster+laser": {
+		"t4": {
+			"name": "Phase-Adaptive Repeater",
+			"cost": 1350,
+			"build_time": 5.0,
+			"desc": "+35% dmg, +22% speed, smart plasma bounces to 1 extra foe (60%) & detects Cloaked.",
+			"mods": {"dmg_mult": 1.35, "rate_mult": 1.22, "ricochet_count": 1, "ricochet_ratio": 0.60, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Omni-Matrix Annihilator",
+			"cost": 4300,
+			"build_time": 7.5,
+			"desc": "APEX: +105% dmg, +55% speed, 3 smart-matrix ricochets (75%) & ignores Conduit Shield Auras.",
+			"mods": {"dmg_mult": 2.05, "rate_mult": 1.55, "ricochet_count": 3, "ricochet_ratio": 0.75, "reveals_cloaked": true, "strip_shield_aura": true},
+		},
+	},
+	"blaster+slow": {
+		"t4": {
+			"name": "Cryo-Lock Interceptor",
+			"cost": 1250,
+			"build_time": 5.0,
+			"desc": "+35% dmg, +20% wider Stasis Bubbles, +8% slow, strips Bio-Mender regen & reveals Cloaked.",
+			"mods": {"dmg_mult": 1.35, "bubble_radius_mult": 1.20, "bubble_slow_add": 0.08, "decay_mult": 1.40, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Zero-Vector Lockdown",
+			"cost": 3800,
+			"build_time": 7.5,
+			"desc": "APEX: +100% dmg, +45% fire rate, 2 kinetic ricochets + Vortex pull bubbles suppressing regen!",
+			"mods": {"dmg_mult": 2.00, "rate_mult": 1.45, "ricochet_count": 2, "ricochet_ratio": 0.65, "bubble_radius_mult": 1.35, "bubble_slow_add": 0.14, "bubble_pull_px_per_sec": 7.5, "decay_mult": 2.10, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+	},
+	"blaster+railgun": {
+		"t4": {
+			"name": "Overclocked Rail Carbine",
+			"cost": 1850,
+			"build_time": 5.5,
+			"desc": "+35% fire rate, +30% dmg, pierces 2 targets & strips Shield Auras.",
+			"mods": {"dmg_mult": 1.30, "rate_mult": 1.35, "bonus_pierce": 1, "decay_mult": 1.35, "strip_shield_aura": true},
+		},
+		"t5": {
+			"name": "Chrono-Valkyrie Autocannon",
+			"cost": 5800,
+			"build_time": 8.0,
+			"desc": "APEX: +85% fire rate, +95% dmg, pierces 4 targets, 2.0x Decay & +20% range!",
+			"mods": {"dmg_mult": 1.95, "rate_mult": 1.85, "range_mult": 1.20, "bonus_pierce": 3, "decay_mult": 2.00, "strip_shield_aura": true},
+		},
+	},
+	"blaster+annihilator": {
+		"t4": {
+			"name": "Depleted-Core Vulcan",
+			"cost": 1700,
+			"build_time": 5.5,
+			"desc": "+40% dmg, +25% fire rate & every shot ricochets heavy sabot shrapnel to 1 foe (55%).",
+			"mods": {"dmg_mult": 1.40, "rate_mult": 1.25, "ricochet_count": 1, "ricochet_ratio": 0.55},
+		},
+		"t5": {
+			"name": "Titan-Reaper Autocannon",
+			"cost": 5400,
+			"build_time": 8.0,
+			"desc": "APEX: +115% dmg, +55% fire rate, 2 heavy ricochets (70%), pierces Shield Auras & shreds armor!",
+			"mods": {"dmg_mult": 2.15, "rate_mult": 1.55, "ricochet_count": 2, "ricochet_ratio": 0.70, "bonus_shred_stacks": 2, "strip_shield_aura": true},
+		},
+	},
+	"mortar+laser": {
+		"t4": {
+			"name": "Supernova Shelling",
+			"cost": 1400,
+			"build_time": 5.0,
+			"desc": "+40% plasma blast dmg, +22% radius, suppresses Bio-Mender regen & reveals Cloaked.",
+			"mods": {"dmg_mult": 1.40, "splash_mult": 1.22, "reveals_cloaked": true, "bubble_anti_regen": true},
+		},
+		"t5": {
+			"name": "Helios Orbital Barrage",
+			"cost": 4300,
+			"build_time": 7.5,
+			"desc": "APEX: +110% dmg, +45% fire rate, +35% splash, 3 solar sub-shells & 160-dmg Slag Nova on kill!",
+			"mods": {"dmg_mult": 2.10, "rate_mult": 1.45, "splash_mult": 1.35, "bonus_mirv_subshells": 3, "slag_nova_dmg": 160.0, "reveals_cloaked": true},
+		},
+	},
+	"mortar+slow": {
+		"t4": {
+			"name": "Glacial Quake Shells",
+			"cost": 1350,
+			"build_time": 5.0,
+			"desc": "+35% dmg, +25% larger Cryo Bubbles, 0.5s freeze-stun & strips Bio-Mender regen.",
+			"mods": {"dmg_mult": 1.35, "bubble_radius_mult": 1.25, "bubble_duration_add": 1.2, "bubble_slow_add": 0.08, "stun_duration": 0.50, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Permafrost Cataclysm",
+			"cost": 4200,
+			"build_time": 7.5,
+			"desc": "APEX: +105% dmg, +40% Bubble radius, 1.0s quake stun, backward Vortex pull & 2.2x Decay!",
+			"mods": {"dmg_mult": 2.05, "rate_mult": 1.30, "bubble_radius_mult": 1.40, "bubble_duration_add": 2.5, "bubble_slow_add": 0.16, "bubble_pull_px_per_sec": 9.5, "decay_mult": 2.20, "stun_duration": 1.00, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+	},
+	"mortar+railgun": {
+		"t4": {
+			"name": "Stratospheric Gravity Bomb",
+			"cost": 1950,
+			"build_time": 6.0,
+			"desc": "+40% dmg, +25% splash, +40% Decay & 0.65s gravity shockwave stun.",
+			"mods": {"dmg_mult": 1.40, "splash_mult": 1.25, "decay_mult": 1.40, "stun_duration": 0.65, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Orbital Singularity Strike",
+			"cost": 6200,
+			"build_time": 8.0,
+			"desc": "APEX: +120% dmg, +40% speed, +40% splash, 4 MIRV grav-bombs, 1.1s stun & ignores Shield Auras!",
+			"mods": {"dmg_mult": 2.20, "rate_mult": 1.40, "splash_mult": 1.40, "bonus_mirv_subshells": 4, "decay_mult": 2.10, "stun_duration": 1.10, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+	"mortar+annihilator": {
+		"t4": {
+			"name": "Bunker-Buster Tandem Warhead",
+			"cost": 1750,
+			"build_time": 5.5,
+			"desc": "+45% direct & splash dmg, +25% splash radius, 0.5s concussive stun & shreds armor.",
+			"mods": {"dmg_mult": 1.45, "splash_mult": 1.25, "stun_duration": 0.50, "bonus_shred_stacks": 2, "strip_shield_aura": true},
+		},
+		"t5": {
+			"name": "Siegebreaker Doomsday Cannon",
+			"cost": 5600,
+			"build_time": 8.0,
+			"desc": "APEX: +125% dmg, +40% speed, +40% splash, 3 AP sub-shells, 0.9s stun & 220-dmg Slag Nova!",
+			"mods": {"dmg_mult": 2.25, "rate_mult": 1.40, "splash_mult": 1.40, "bonus_mirv_subshells": 3, "stun_duration": 0.90, "bonus_shred_stacks": 3, "slag_nova_dmg": 220.0, "strip_shield_aura": true},
+		},
+	},
+	"laser+slow": {
+		"t4": {
+			"name": "Ionized Inferno Dome",
+			"cost": 1350,
+			"build_time": 5.0,
+			"desc": "2.2x Bubble thermal burn, +25% radius, strips Bio-Mender regen & reveals Cloaked.",
+			"mods": {"dmg_mult": 1.35, "bubble_burn_mult": 2.20, "bubble_radius_mult": 1.25, "bubble_duration_add": 1.4, "decay_mult": 1.40, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Chromatic Nova Projector",
+			"cost": 4100,
+			"build_time": 7.5,
+			"desc": "APEX: 4.0x Bubble burn, +40% radius, Vortex pull, 2x beam chain & 160-dmg Slag Nova on kill!",
+			"mods": {"dmg_mult": 1.95, "rate_mult": 1.35, "bubble_burn_mult": 4.00, "bubble_radius_mult": 1.40, "bubble_duration_add": 2.4, "bubble_pull_px_per_sec": 7.0, "decay_mult": 2.20, "bonus_refract_targets": 2, "refract_radius_add": 80.0, "refract_ratio_add": 0.55, "slag_nova_dmg": 160.0, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+	},
+	"laser+railgun": {
+		"t4": {
+			"name": "Focused Ion Rail-Lance",
+			"cost": 1900,
+			"build_time": 5.5,
+			"desc": "Pierces 3 enemies along 325px lance, +40% dmg, +45% Decay & reveals Cloaked.",
+			"mods": {"dmg_mult": 1.40, "range_mult": 1.12, "bonus_pierce": 2, "decay_mult": 1.45, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Starfire Chrono-Lance",
+			"cost": 6000,
+			"build_time": 8.0,
+			"desc": "APEX: Pierces 5 enemies, +115% dmg, +50% speed, chains 2 prism arcs & ignores Shield Auras!",
+			"mods": {"dmg_mult": 2.15, "rate_mult": 1.50, "range_mult": 1.22, "bonus_pierce": 4, "decay_mult": 2.15, "bonus_refract_targets": 2, "refract_radius_add": 85.0, "refract_ratio_add": 0.60, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+	"laser+annihilator": {
+		"t4": {
+			"name": "Core-Meltdown Shredder",
+			"cost": 1750,
+			"build_time": 5.5,
+			"desc": "Armor Shred caps at 5 stacks (+50% team dmg taken!), +35% dmg & suppresses Bio-Mender regen.",
+			"mods": {"dmg_mult": 1.35, "rate_mult": 1.18, "bonus_shred_stacks": 2, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Slag-Nova Crucible",
+			"cost": 5600,
+			"build_time": 8.0,
+			"desc": "APEX: 7 Shred stacks (+70% team dmg!), +105% dmg, +40% speed & shredded kills detonate 340-dmg Slag Nova!",
+			"mods": {"dmg_mult": 2.05, "rate_mult": 1.40, "bonus_shred_stacks": 4, "slag_nova_dmg": 340.0, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+	"slow+railgun": {
+		"t4": {
+			"name": "Deep-Freeze Chrono Sniper",
+			"cost": 1950,
+			"build_time": 6.0,
+			"desc": "+40% dmg, +25% Absolute Bubble radius, +10% slow, pierces 2 foes & strips regen.",
+			"mods": {"dmg_mult": 1.40, "bubble_radius_mult": 1.25, "bubble_duration_add": 1.6, "bubble_slow_add": 0.10, "decay_mult": 1.45, "bonus_pierce": 1, "bubble_anti_regen": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Zero-Kelvin Singularity Rail",
+			"cost": 6300,
+			"build_time": 8.0,
+			"desc": "APEX: +115% dmg, +45% speed, pierces 3 foes, giant Vortex Pull Bubbles & 0.8s freeze-stun!",
+			"mods": {"dmg_mult": 2.15, "rate_mult": 1.45, "bubble_radius_mult": 1.42, "bubble_duration_add": 2.8, "bubble_slow_add": 0.18, "bubble_pull_px_per_sec": 12.0, "decay_mult": 2.25, "bonus_pierce": 2, "stun_duration": 0.80, "bubble_anti_regen": true, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+	"slow+annihilator": {
+		"t4": {
+			"name": "Graviton Anchor Breaker",
+			"cost": 1700,
+			"build_time": 5.5,
+			"desc": "+40% boss dmg, +25% Lock Bubble radius, +10% slow, strips regen & bypasses Shield Auras.",
+			"mods": {"dmg_mult": 1.40, "rate_mult": 1.18, "bubble_radius_mult": 1.25, "bubble_slow_add": 0.10, "decay_mult": 1.45, "bubble_anti_regen": true, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Chrono-Guillotine Rail",
+			"cost": 5500,
+			"build_time": 8.0,
+			"desc": "APEX: +115% dmg, +45% speed, Vortex Pull Bubbles, 0.7s boss stun & executes foes <10% HP!",
+			"mods": {"dmg_mult": 2.15, "rate_mult": 1.45, "bubble_radius_mult": 1.38, "bubble_duration_add": 2.0, "bubble_slow_add": 0.16, "bubble_pull_px_per_sec": 8.5, "decay_mult": 2.10, "stun_duration": 0.70, "execute_hp_pct": 0.10, "bubble_anti_regen": true, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+	"railgun+annihilator": {
+		"t4": {
+			"name": "Event-Horizon Boss Lance",
+			"cost": 2500,
+			"build_time": 6.0,
+			"desc": "Pierces 2 bosses, +45% dmg, +45% Decay & ignores Conduit Shield Auras.",
+			"mods": {"dmg_mult": 1.45, "rate_mult": 1.20, "bonus_pierce": 1, "decay_mult": 1.45, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+		"t5": {
+			"name": "Omega Singularity Sovereign",
+			"cost": 8200,
+			"build_time": 8.5,
+			"desc": "APEX: Pierces 3 bosses, +135% dmg, +50% speed, 2.3x Decay & EXECUTES any target <12% HP!",
+			"mods": {"dmg_mult": 2.35, "rate_mult": 1.50, "range_mult": 1.18, "bonus_pierce": 2, "decay_mult": 2.30, "execute_hp_pct": 0.12, "strip_shield_aura": true, "reveals_cloaked": true},
+		},
+	},
+}
 
 # --- Enemies (Fixed HP — NEVER scaled by wave number; separate s$ and b$) ---
 const ENEMIES: Dictionary = {
@@ -857,6 +1202,68 @@ const ENEMIES: Dictionary = {
 		"leak_cost": 8,
 		"first_wave": 16,
 	},
+	# --- v2.0 BTD5-Inspired Mechanic Enemies (Waves 11+ ONLY; Waves 1-10 remain 100% locked!) ---
+	"stalker": {
+		"name": "Phase Stalker",
+		"spawn_cost_s": 14, # s$14
+		"bounty_b": 22,     # b$22
+		"base_hp": 420.0,
+		"speed_mult": 1.75,
+		"speed": BASE_UNIT_SPEED_PX * 1.75,
+		"armour_label": "Reflective + Cloaked",
+		"armour_tags": ["Reflective"],
+		"is_cloaked": true,
+		"money_on_kill": 22,
+		"research_on_kill": 2,
+		"leak_cost": 2,
+		"first_wave": 11,
+	},
+	"mender": {
+		"name": "Bio-Mender",
+		"spawn_cost_s": 16, # s$16
+		"bounty_b": 26,     # b$26
+		"base_hp": 1100.0,
+		"speed_mult": 1.05,
+		"speed": BASE_UNIT_SPEED_PX * 1.05,
+		"armour_label": "Standard + Regen",
+		"armour_tags": ["Standard"],
+		"regen_pct_per_sec": 0.06, # Heals 6% max HP/sec unless suppressed by Decay/Burn/Shred
+		"money_on_kill": 26,
+		"research_on_kill": 2,
+		"leak_cost": 2,
+		"first_wave": 13,
+	},
+	"carrier": {
+		"name": "Brood Carrier",
+		"spawn_cost_s": 55, # s$55
+		"bounty_b": 58,     # b$58
+		"base_hp": 3400.0,
+		"speed_mult": 0.88,
+		"speed": BASE_UNIT_SPEED_PX * 0.88,
+		"armour_label": "Armored + Splitter",
+		"armour_tags": ["Armored"],
+		"split_children": ["blitzer", "blitzer", "rusher", "rusher", "rusher", "rusher"],
+		"money_on_kill": 58,
+		"research_on_kill": 4,
+		"leak_cost": 4,
+		"first_wave": 15,
+	},
+	"conduit": {
+		"name": "Aegis Conduit",
+		"spawn_cost_s": 48, # s$48
+		"bounty_b": 52,     # b$52
+		"base_hp": 2600.0,
+		"speed_mult": 1.00,
+		"speed": BASE_UNIT_SPEED_PX * 1.00,
+		"armour_label": "Reflective + Shield Aura",
+		"armour_tags": ["Reflective"],
+		"shield_aura_radius": 95.0,
+		"shield_aura_reduction": 0.35, # Nearby allies take -35% dmg until Conduit is sniped!
+		"money_on_kill": 52,
+		"research_on_kill": 4,
+		"leak_cost": 3,
+		"first_wave": 22,
+	},
 }
 
 const DIFFICULTY_ORDER: Array[String] = ["standard", "hard", "nightmare"]
@@ -895,8 +1302,59 @@ const REFINERY_COST_GROWTH: float = 1.80
 const REFINERY_COST_ROUND_TO: int = 5
 const REFINERY_BUILD_TIME: float = 8.0
 
-const WAVE_CLEAR_BONUS_BASE: int = 0
+## BTD5 Banana Farm / Bank Tech Ladder (Tier 1 default preserves exact W1-10 tests!)
+const REFINERY_MAX_TIER: int = 4
+const REFINERY_TIERS: Dictionary = {
+	1: {
+		"name": "Rift Extractor",
+		"cost": 0,
+		"build_time": 0.0,
+		"income_per_tick": 1,   # $0.25/s per refinery (exact baseline)
+		"rate_per_sec": 0.25,
+		"clean_wave_bonus_pct": 0.0,
+		"bank_interest_pct": 0.0,
+		"bank_interest_cap": 0,
+		"desc": "Base extraction: +$0.25/s per Refinery.",
+	},
+	2: {
+		"name": "Chrono-Plant",
+		"cost": 550,
+		"build_time": 8.0,
+		"income_per_tick": 3,   # $0.75/s per refinery (3x!)
+		"rate_per_sec": 0.75,
+		"clean_wave_bonus_pct": 0.10,
+		"bank_interest_pct": 0.0,
+		"bank_interest_cap": 0,
+		"desc": "3x Refinery income ($0.75/s each) + 10% clean-wave bonus.",
+	},
+	3: {
+		"name": "Temporal Bank",
+		"cost": 1450,
+		"build_time": 11.0,
+		"income_per_tick": 6,   # $1.50/s per refinery (6x!)
+		"rate_per_sec": 1.50,
+		"clean_wave_bonus_pct": 0.12,
+		"bank_interest_pct": 0.10,
+		"bank_interest_cap": 650,
+		"desc": "6x Refinery income ($1.50/s) + 10% wave-end Bank interest (max +$650/w).",
+	},
+	4: {
+		"name": "Singularity Mint",
+		"cost": 3600,
+		"build_time": 14.0,
+		"income_per_tick": 13,  # $3.25/s per refinery (13x!)
+		"rate_per_sec": 3.25,
+		"clean_wave_bonus_pct": 0.15,
+		"bank_interest_pct": 0.15,
+		"bank_interest_cap": 1800,
+		"desc": "13x Refinery income ($3.25/s) + 15% Bank interest (max +$1,800/w) to fund Apex T5!",
+	},
+}
+
+const WAVE_CLEAR_BONUS_BASE: int = 0 # W1-10 remain $0 to preserve locked W1-10 algorithm
 const WAVE_CLEAR_BONUS_PER_WAVE: int = 0
+const POST_W10_WAVE_STIPEND_BASE: int = 40 # First-clear stipend for Waves 11+: $40 + wave * $6
+const POST_W10_WAVE_STIPEND_PER_WAVE: int = 6
 
 ## Rogue-like meta-progression: spent ONLY on Between-Levels / Level Picker screen, persists across missions.
 ## Doubling+ rank costs: 100, 250, 600, 1400, 3200 Research.
@@ -1197,3 +1655,16 @@ static func get_merge_build_time(type_a: String, type_b: String) -> float:
 	if ck != "":
 		return float(TOWERS[ck]["build_time"])
 	return roundf((float(TOWERS[type_a]["build_time"]) + float(TOWERS[type_b]["build_time"])) * MERGE_BUILD_TIME_RATIO * 2.0) * 0.5
+
+
+static func get_combo_evolution_cfg(combo_type: String, target_apex_tier: int) -> Dictionary:
+	if not COMBO_EVOLUTIONS.has(combo_type):
+		return {}
+	var key: String = "t4" if target_apex_tier == 1 else ("t5" if target_apex_tier == 2 else "")
+	if key == "":
+		return {}
+	return COMBO_EVOLUTIONS[combo_type].get(key, {})
+
+
+static func get_refinery_tier_cfg(tier: int) -> Dictionary:
+	return REFINERY_TIERS.get(clampi(tier, 1, REFINERY_MAX_TIER), REFINERY_TIERS[1])

@@ -22,6 +22,7 @@ var levels: Dictionary = {
 	"range": 0,
 	"fire_rate": 0,
 }
+var apex_tier: int = 0 # 0 = Standard/Combo, 1 = Tier-4 Milestone Perk, 2 = Tier-5 APEX OVERDRIVE
 
 var current_job: ConstructionJob = null
 var is_built: bool = false
@@ -50,16 +51,114 @@ func record_damage(amount: float, killed: bool = false) -> void:
 		AnalyticsManager.record_tower_combat(tower_type, amount, killed)
 
 
+func get_total_upgrade_ranks() -> int:
+	return int(levels.get("damage", 0)) + int(levels.get("range", 0)) + int(levels.get("fire_rate", 0))
+
+
+func get_apex_mods() -> Dictionary:
+	if apex_tier <= 0 or not Balance.is_combo_tower(tower_type):
+		return {}
+	return Balance.get_combo_evolution_cfg(tower_type, apex_tier).get("mods", {})
+
+
+func get_apex_mod_float(key: String, default_val: float = 0.0) -> float:
+	var mods: Dictionary = get_apex_mods()
+	return float(mods.get(key, default_val))
+
+
+func get_apex_mod_int(key: String, default_val: int = 0) -> int:
+	var mods: Dictionary = get_apex_mods()
+	return int(mods.get(key, default_val))
+
+
+func has_apex_mod(key: String) -> bool:
+	var mods: Dictionary = get_apex_mods()
+	return bool(mods.get(key, false))
+
+
+func get_apex_execute_pct() -> float:
+	return get_apex_mod_float("execute_hp_pct", 0.0)
+
+
+func get_next_apex_cfg() -> Dictionary:
+	if not Balance.is_combo_tower(tower_type) or apex_tier >= 2:
+		return {}
+	return Balance.get_combo_evolution_cfg(tower_type, apex_tier + 1)
+
+
+func can_evolve_apex() -> bool:
+	if not is_built or current_job != null or GameState.mission.is_over:
+		return false
+	if not Balance.is_combo_tower(tower_type) or apex_tier >= 2:
+		return false
+	var next_cfg: Dictionary = get_next_apex_cfg()
+	if next_cfg.is_empty():
+		return false
+	var cost: int = int(next_cfg["cost"])
+	return GameState.is_sandbox_mode or GameState.mission.economy["money"] >= cost
+
+
+func start_apex_evolution() -> bool:
+	if not can_evolve_apex():
+		return false
+	var next_tier: int = apex_tier + 1
+	var next_cfg: Dictionary = get_next_apex_cfg()
+	var cost: int = int(next_cfg["cost"])
+	var btime: float = float(next_cfg.get("build_time", 6.0))
+	if GameState.is_sandbox_mode and GameState.sandbox_instant_build:
+		total_spent += cost
+		apex_tier = next_tier
+		if AnalyticsManager != null:
+			AnalyticsManager.record_tower_upgrade(tower_type, "apex", apex_tier, cost)
+		_celebrate_apex_unlock(next_cfg)
+		construction_completed.emit(self)
+		queue_redraw()
+		return true
+	if not GameState.spend_money(cost, true):
+		return false
+	total_spent += cost
+	if AnalyticsManager != null:
+		AnalyticsManager.record_tower_upgrade(tower_type, "apex", next_tier, cost)
+	current_job = ConstructionJob.new("tower_apex", btime, str(next_tier))
+	queue_redraw()
+	return true
+
+
+func _celebrate_apex_unlock(evo_cfg: Dictionary) -> void:
+	var evo_name: String = str(evo_cfg.get("name", "Evolution"))
+	var prefix: String = "★ APEX T5" if apex_tier >= 2 else "TIER 4 EVOLVED"
+	if SfxManager != null:
+		SfxManager.play("combine")
+	GameState.event_logged.emit("%s: %s (%s)!" % [prefix, evo_name, Balance.TOWERS[tower_type]["name"]])
+	if map_ref != null:
+		var sw_col := Color(0.45, 0.96, 1.0) if apex_tier >= 2 else Color(1.0, 0.86, 0.34)
+		map_ref.spawn_apex_shockwave(position, sw_col, 130.0 if apex_tier >= 2 else 95.0, 0.72 if apex_tier >= 2 else 0.52)
+		if apex_tier >= 2:
+			map_ref.trigger_screen_shake(0.28, 3.6)
+		map_ref.spawn_floater(position + Vector2(-56.0, -34.0), "%s: %s!" % [prefix, evo_name], sw_col)
+
+
+func can_detect_cloaked() -> bool:
+	if int(levels.get("range", 0)) >= 2:
+		return true
+	if apex_tier >= 1 or has_apex_mod("reveals_cloaked"):
+		return true
+	if spawner_creates_bubble():
+		return true
+	var dt: String = get_damage_type()
+	return dt == "Time" or dt == "Laser"
+
+
 func get_estimated_dps() -> float:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var rate: float = get_effective_fire_rate()
 	var dmg: float = get_effective_damage()
 	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
-	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier()
+	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("dmg_mult", 1.0)
 	var sec: float = float(cfg.get("secondary_damage", 0.0)) * dmg_scale
 	var direct: float = (dmg + sec) * rate
 	var decay: float = get_decay_flat_damage()
-	var burn: float = float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale
+	var burn: float = float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale * get_apex_mod_float("bubble_burn_mult", 1.0)
 	return direct + decay + burn
 
 
@@ -73,6 +172,7 @@ func setup(p_id: int, p_type: String, p_pad_index: int, p_pos: Vector2, p_map: G
 	total_spent = int(cfg["cost"])
 	target_mode = str(cfg.get("targeting", "first"))
 	levels = {"damage": 0, "range": 0, "fire_rate": 0}
+	apex_tier = 0
 	is_built = false
 	fire_cooldown = 0.0
 	_shot_counter = 0
@@ -108,6 +208,7 @@ func transform_to_combo(
 		"range": clampi(int(merged_levels.get("range", 0)), 0, Balance.TOWER_UPGRADE_MAX_LEVEL),
 		"fire_rate": clampi(int(merged_levels.get("fire_rate", 0)), 0, Balance.TOWER_UPGRADE_MAX_LEVEL),
 	}
+	apex_tier = 0
 	fire_cooldown = 0.0
 	_shot_counter = 0
 	_ramp_target_id = -1
@@ -148,11 +249,14 @@ func spawner_creates_bubble() -> bool:
 func get_effective_bubble_radius() -> float:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var r_ladder: Array = cfg.get("bubble_radius_by_level", [])
+	var r_val: float
 	if not r_ladder.is_empty():
 		var lvl: int = clampi(int(levels["damage"]), 0, r_ladder.size() - 1)
-		return float(r_ladder[lvl])
-	var base_r: float = float(cfg.get("bubble_radius", cfg.get("splash_radius", 42.0)))
-	return base_r + float(int(levels["damage"])) * 6.0
+		r_val = float(r_ladder[lvl])
+	else:
+		var base_r: float = float(cfg.get("bubble_radius", cfg.get("splash_radius", 42.0)))
+		r_val = base_r + float(int(levels["damage"])) * 6.0
+	return r_val * get_apex_mod_float("bubble_radius_mult", 1.0)
 
 
 func get_decay_flat_damage() -> float:
@@ -160,7 +264,7 @@ func get_decay_flat_damage() -> float:
 		return 0.0
 	var ladder: Array = Balance.TOWERS[tower_type].get("decay_flat_by_level", [0.0, 5.0, 11.0, 18.0, 27.0, 38.0])
 	var lvl: int = clampi(int(levels["damage"]), 0, ladder.size() - 1)
-	return float(ladder[lvl]) * GameState.get_tower_damage_research_multiplier()
+	return float(ladder[lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("decay_mult", 1.0)
 
 
 func get_decay_tick_pct() -> float:
@@ -171,14 +275,14 @@ func get_effective_damage() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["damage"])
 	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
 	var upg_mult: float = 1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]
-	return base * upg_mult * GameState.get_tower_damage_research_multiplier()
+	return base * upg_mult * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("dmg_mult", 1.0)
 
 
 func get_effective_fire_rate() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["fire_rate"])
 	var spd_lvl: int = clampi(int(levels["fire_rate"]), 0, Balance.TOWER_FIRE_RATE_TOTAL_BONUSES.size() - 1)
 	var upg_mult: float = 1.0 + Balance.TOWER_FIRE_RATE_TOTAL_BONUSES[spd_lvl]
-	return base * upg_mult * GameState.get_tower_attack_speed_multiplier()
+	return base * upg_mult * GameState.get_tower_attack_speed_multiplier() * get_apex_mod_float("rate_mult", 1.0)
 
 
 ## Total range progression per level: Lv0 = 1.0x, Lv1 = +25% (1.25x), Lv2 = +60% (1.60x), Lv3 = +100% (2.00x).
@@ -186,7 +290,7 @@ func get_effective_range() -> float:
 	var base: float = float(Balance.TOWERS[tower_type]["range"])
 	var rng_lvl: int = clampi(int(levels["range"]), 0, Balance.TOWER_RANGE_TOTAL_BONUSES.size() - 1)
 	var upg_mult: float = 1.0 + Balance.TOWER_RANGE_TOTAL_BONUSES[rng_lvl]
-	return base * upg_mult * GameState.get_tower_range_research_multiplier() * GameState.get_level_tower_range_multiplier()
+	return base * upg_mult * GameState.get_tower_range_research_multiplier() * GameState.get_level_tower_range_multiplier() * get_apex_mod_float("range_mult", 1.0)
 
 
 func get_min_range() -> float:
@@ -282,6 +386,10 @@ func advance_tower(delta: float) -> void:
 				if SfxManager != null:
 					SfxManager.play("combine")
 				GameState.event_logged.emit("Combined into %s!" % Balance.TOWERS[tower_type]["name"])
+			elif completed_job.kind == "tower_apex":
+				apex_tier = clampi(int(completed_job.target_key), 1, 2)
+				var evo_cfg: Dictionary = Balance.get_combo_evolution_cfg(tower_type, apex_tier)
+				_celebrate_apex_unlock(evo_cfg)
 			elif completed_job.kind == "tower_upgrade":
 				var key: String = completed_job.target_key
 				levels[key] = int(levels.get(key, 0)) + 1
@@ -315,8 +423,11 @@ func _pick_target() -> EnemyUnit:
 		return null
 	var eff_range: float = get_effective_range()
 	var min_r: float = get_min_range()
+	var can_see_cloak: bool = can_detect_cloaked()
 	var in_range: Array[EnemyUnit] = []
 	for enemy in map_ref.get_active_enemies():
+		if enemy.is_effectively_cloaked() and not can_see_cloak:
+			continue
 		var d: float = position.distance_to(enemy.position)
 		if d <= eff_range and d >= min_r:
 			in_range.append(enemy)
@@ -368,7 +479,7 @@ func _fire_at(target: EnemyUnit) -> void:
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var dmg: float = get_effective_damage()
 	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
-	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier()
+	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("dmg_mult", 1.0)
 	var dtype: String = get_damage_type()
 	var accent_col: Color = Visuals.get_accent_color(tower_type)
 
@@ -385,7 +496,7 @@ func _fire_at(target: EnemyUnit) -> void:
 
 	# Ramp bonus on locked target (e.g. laser+laser) — Haste doubles ramp speed!
 	if bool(cfg.get("ramps_damage", false)):
-		var max_r: int = int(cfg.get("ramp_max_stacks", 7))
+		var max_r: int = int(cfg.get("ramp_max_stacks", 7)) + get_apex_mod_int("ramp_max_add", 0)
 		var per_r: float = float(cfg.get("ramp_per_stack", 0.12))
 		var step_r: int = 2 if GameState.is_haste_active else 1
 		if _ramp_target_id == target.enemy_id:
@@ -398,7 +509,7 @@ func _fire_at(target: EnemyUnit) -> void:
 		_ramp_stacks = 0
 
 	# First-shot opener bonus (e.g. annihilator+annihilator)
-	var opener_bonus: float = float(cfg.get("opener_bonus_pct", 0.0))
+	var opener_bonus: float = float(cfg.get("opener_bonus_pct", 0.0)) + get_apex_mod_float("opener_bonus_add", 0.0)
 	var triggered_opener: bool = false
 	if opener_bonus > 0.0 and not _opened_enemy_ids.has(target.enemy_id):
 		if _opened_enemy_ids.size() > 128:
@@ -407,35 +518,48 @@ func _fire_at(target: EnemyUnit) -> void:
 		dmg *= (1.0 + opener_bonus)
 		triggered_opener = true
 
-	# Every-Nth-shot armor crack burst (exact +25% multiplier per spec, NO unintended global shred)
+	# Every-Nth-shot armor crack burst (exact +25% multiplier per spec, boosted by Apex T5)
 	var crack_every: int = int(cfg.get("armor_crack_every", 0))
 	var is_crack_shot: bool = crack_every > 0 and (_shot_counter % crack_every == 0)
 	if is_crack_shot:
-		dmg *= float(cfg.get("armor_crack_mult", 1.25))
+		dmg *= (float(cfg.get("armor_crack_mult", 1.25)) + get_apex_mod_float("armor_crack_mult_add", 0.0))
 
 	var sec_dmg: float = float(cfg.get("secondary_damage", 0.0)) * dmg_scale
 	var sec_type: String = String(cfg.get("secondary_damage_type", "Laser" if tower_type.contains("laser") else "Time"))
-	var slow_pct: float = float(cfg.get("slow_pct", 0.0))
+	var slow_pct: float = minf(0.75, float(cfg.get("slow_pct", 0.0)) + get_apex_mod_float("bubble_slow_add", 0.0))
 	var slow_dur: float = float(cfg.get("slow_duration", 3.5))
 	var decay_flat: float = get_decay_flat_damage()
 	var decay_ticks: int = int(cfg.get("decay_ticks", 2))
 	var creates_bubble: bool = spawner_creates_bubble()
+	var apex_stun: float = get_apex_mod_float("stun_duration", 0.0)
+	var apex_slag_nova: float = get_apex_mod_float("slag_nova_dmg", 0.0)
+	var apex_anti_regen: bool = has_apex_mod("bubble_anti_regen")
+	var apex_reveals: bool = has_apex_mod("reveals_cloaked")
+	var apex_vortex_pull: float = get_apex_mod_float("bubble_pull_px_per_sec", 0.0)
+	var shred_bonus: int = get_apex_mod_int("bonus_shred_stacks", 0)
+	var shred_pct: float = float(cfg.get("armor_shred_pct", 0.0))
+	var shred_max: int = int(cfg.get("armor_shred_max_stacks", 3)) + shred_bonus
+	if shred_pct <= 0.0 and shred_bonus > 0:
+		shred_pct = 0.10
+		shred_max = shred_bonus
 
 	var bubble_cfg: Dictionary = {}
 	if creates_bubble:
 		bubble_cfg = {
-			"duration": float(cfg.get("bubble_duration", 3.5)),
+			"duration": float(cfg.get("bubble_duration", 3.5)) + get_apex_mod_float("bubble_duration_add", 0.0),
 			"radius": get_effective_bubble_radius(),
 			"slow_pct": slow_pct if slow_pct > 0.0 else 0.30,
 			"decay_flat": decay_flat,
 			"decay_ticks": decay_ticks,
-			"burn_dps": float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale,
+			"burn_dps": float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale * get_apex_mod_float("bubble_burn_mult", 1.0),
 			"burn_type": String(cfg.get("bubble_burn_type", "Laser" if tower_type.contains("laser") else "Time")),
 			"color": accent_col,
 			"slow_linger": float(cfg.get("bubble_slow_linger", 0.45)),
+			"pull_px_per_sec": apex_vortex_pull,
+			"anti_regen": apex_anti_regen,
 		}
 
-	var splash_r: float = float(cfg.get("splash_radius", 0.0))
+	var splash_r: float = float(cfg.get("splash_radius", 0.0)) * get_apex_mod_float("splash_mult", 1.0)
 	if splash_r > 0.0:
 		# Mortar & mortar-hybrid shell delivery
 		if SfxManager != null:
@@ -457,7 +581,7 @@ func _fire_at(target: EnemyUnit) -> void:
 				accent_col,
 				sec_dmg,
 				sec_type,
-				int(cfg.get("mirv_subshells", 0)),
+				int(cfg.get("mirv_subshells", 0)) + get_apex_mod_int("bonus_mirv_subshells", 0),
 				slow_pct if not creates_bubble else 0.0,
 				slow_dur,
 				decay_flat,
@@ -465,6 +589,13 @@ func _fire_at(target: EnemyUnit) -> void:
 				bool(cfg.get("direct_primary_only", false)),
 				float(cfg.get("mirv_damage_ratio", 0.36)),
 				self
+			)
+			shell.configure_apex_mortar_extras(
+				apex_stun,
+				apex_slag_nova,
+				shred_max if shred_pct > 0.0 else 0,
+				apex_reveals,
+				apex_anti_regen
 			)
 		return
 
@@ -479,7 +610,7 @@ func _fire_at(target: EnemyUnit) -> void:
 		else:
 			SfxManager.play("blaster")
 
-	var pierce_cnt: int = maxi(1, int(cfg.get("pierce_count", 1)))
+	var pierce_cnt: int = maxi(1, int(cfg.get("pierce_count", 1)) + get_apex_mod_int("bonus_pierce", 0))
 	var hit_targets: Array[EnemyUnit] = [target]
 	var beam_end: Vector2 = target.position
 
@@ -497,7 +628,7 @@ func _fire_at(target: EnemyUnit) -> void:
 			if proj <= 0.0 or proj > max_ray_len:
 				continue
 			var perp_dist: float = absf(rel.x * (-dir.y) + rel.y * dir.x)
-			if perp_dist <= 24.0:
+			if perp_dist <= 26.0:
 				candidates.append({"enemy": cand, "proj": proj})
 		candidates.sort_custom(func(a, b): return float(a["proj"]) < float(b["proj"]))
 		for c_entry in candidates:
@@ -521,6 +652,8 @@ func _fire_at(target: EnemyUnit) -> void:
 			beam_dur = 0.20
 		elif bool(cfg.get("ramps_damage", false)):
 			beam_width = 2.6 + float(_ramp_stacks) * 0.25
+		if apex_tier >= 1:
+			beam_width += 0.9 * float(apex_tier)
 		if is_crack_shot:
 			beam_width += 1.4
 		var t_col: Color = Color(0.45, 0.9, 1.0) if tower_type == "blaster" else (
@@ -530,6 +663,8 @@ func _fire_at(target: EnemyUnit) -> void:
 			Color(1.0, 0.78, 0.26) if tower_type == "annihilator" else accent_col))))
 		if is_crack_shot:
 			t_col = Color(1.0, 0.92, 0.42)
+		elif apex_tier >= 2:
+			t_col = t_col.lerp(Color(0.62, 0.98, 1.0), 0.35)
 		tracer.setup_tracer(position, beam_end, t_col, beam_width, beam_dur)
 
 		if creates_bubble:
@@ -549,15 +684,16 @@ func _fire_at(target: EnemyUnit) -> void:
 				float(bubble_cfg["slow_linger"]),
 				self
 			)
+			bubble.configure_apex_bubble_extras(apex_vortex_pull, apex_anti_regen)
 
-	var shred_pct: float = float(cfg.get("armor_shred_pct", 0.0))
-	var shred_max: int = int(cfg.get("armor_shred_max_stacks", 3))
 	for i in range(hit_targets.size()):
 		var h_target: EnemyUnit = hit_targets[i]
 		if not is_instance_valid(h_target) or not h_target.is_alive():
 			continue
 		var t_pos_snap: Vector2 = h_target.position
 		var falloff_mult: float = 1.0 if i == 0 else 0.78
+		if apex_slag_nova > 0.0:
+			h_target.mark_slag_nova(apex_slag_nova, self)
 		var dealt_total: float = 0.0
 		if dmg > 0.0:
 			dealt_total += h_target.take_damage(dmg * falloff_mult, dtype, self)
@@ -568,29 +704,77 @@ func _fire_at(target: EnemyUnit) -> void:
 			map_ref.spawn_damage_popup(t_pos_snap, int(round(dealt_total)), pop_col, is_crack_shot or triggered_opener)
 		if is_instance_valid(h_target) and h_target.is_alive():
 			if shred_pct > 0.0:
-				h_target.apply_armor_shred(shred_max, 3.5)
+				h_target.apply_armor_shred(shred_max, 3.8)
 			if slow_pct > 0.0 and not creates_bubble:
 				h_target.apply_time_hit(slow_pct, slow_dur, decay_flat, decay_ticks, self)
+			if apex_stun > 0.0:
+				h_target.apply_stun(apex_stun)
+			if apex_reveals:
+				h_target.reveal_cloak(4.5)
+			if apex_anti_regen:
+				h_target.suppress_regen(2.8)
 
-	# Secondary Prism Chain Refraction (laser+laser: 35% beam arc to 1 nearby target!)
-	var refract_r: float = float(cfg.get("refract_radius", 0.0))
-	var refract_ratio: float = float(cfg.get("refract_ratio", 0.0))
-	if refract_r > 0.0 and refract_ratio > 0.0 and map_ref != null:
-		var best_chain: EnemyUnit = null
-		var best_cd: float = refract_r
+	# Secondary Prism Chain Refraction (laser+laser native 1 target, boosted to 3/5 targets + added on Apex combos!)
+	var base_refract_r: float = float(cfg.get("refract_radius", 0.0))
+	var base_refract_ratio: float = float(cfg.get("refract_ratio", 0.0))
+	var bonus_refract_cnt: int = get_apex_mod_int("bonus_refract_targets", 0)
+	var total_refract_cnt: int = (1 if (base_refract_r > 0.0 and base_refract_ratio > 0.0) else 0) + bonus_refract_cnt
+	var eff_refract_r: float = base_refract_r + get_apex_mod_float("refract_radius_add", 0.0)
+	var eff_refract_ratio: float = base_refract_ratio + get_apex_mod_float("refract_ratio_add", 0.0)
+	if total_refract_cnt > 0 and eff_refract_r > 0.0 and eff_refract_ratio > 0.0 and map_ref != null:
 		var origin_p: Vector2 = beam_end
+		var chain_cands: Array = []
 		for cand in map_ref.get_active_enemies():
-			if cand == target or not is_instance_valid(cand) or not cand.is_alive():
+			if cand == target or hit_targets.has(cand) or not is_instance_valid(cand) or not cand.is_alive():
 				continue
 			var cd: float = origin_p.distance_to(cand.position)
-			if cd <= best_cd:
-				best_cd = cd
-				best_chain = cand
-		if best_chain != null:
+			if cd <= eff_refract_r:
+				chain_cands.append({"enemy": cand, "d": cd})
+		chain_cands.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
+		var chained_n: int = mini(total_refract_cnt, chain_cands.size())
+		for ci in range(chained_n):
+			var chain_e: EnemyUnit = chain_cands[ci]["enemy"]
+			if not is_instance_valid(chain_e) or not chain_e.is_alive():
+				continue
+			if apex_slag_nova > 0.0:
+				chain_e.mark_slag_nova(apex_slag_nova, self)
 			var arc: ProjectileEffect = projectile_scene.instantiate()
 			map_ref.projectiles_container.add_child(arc)
-			arc.setup_tracer(origin_p, best_chain.position, Color(0.55, 0.96, 1.0), 1.9, 0.11)
-			best_chain.take_damage(dmg * refract_ratio, "Laser", self)
+			arc.setup_tracer(origin_p, chain_e.position, Color(0.55, 0.96, 1.0), 2.1 if apex_tier >= 1 else 1.9, 0.12)
+			chain_e.take_damage(dmg * eff_refract_ratio, "Laser", self)
+
+	# Apex Kinetic / Smart-Matrix Ricochet Rounds (Vulcan, Carbine, Shredder, Zero-Vector)
+	var rico_cnt: int = get_apex_mod_int("ricochet_count", 0)
+	var rico_ratio: float = get_apex_mod_float("ricochet_ratio", 0.0)
+	if rico_cnt > 0 and rico_ratio > 0.0 and map_ref != null:
+		var r_origin: Vector2 = beam_end
+		var r_cands: Array = []
+		for cand in map_ref.get_active_enemies():
+			if cand == target or hit_targets.has(cand) or not is_instance_valid(cand) or not cand.is_alive():
+				continue
+			var rd: float = r_origin.distance_to(cand.position)
+			if rd <= 105.0:
+				r_cands.append({"enemy": cand, "d": rd})
+		r_cands.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
+		var bounced: int = mini(rico_cnt, r_cands.size())
+		for ri in range(bounced):
+			var re: EnemyUnit = r_cands[ri]["enemy"]
+			if not is_instance_valid(re) or not re.is_alive():
+				continue
+			var r_dtype: String = dtype
+			if bool(cfg.get("smart_matrix", false)):
+				var best_m: float = Balance.get_damage_multiplier(r_dtype, re.armour_tags)
+				for cand_dt in ["Piercing", "Laser", "Normal"]:
+					var cm: float = Balance.get_damage_multiplier(cand_dt, re.armour_tags)
+					if cm > best_m:
+						best_m = cm
+						r_dtype = cand_dt
+			var r_tracer: ProjectileEffect = projectile_scene.instantiate()
+			map_ref.projectiles_container.add_child(r_tracer)
+			r_tracer.setup_tracer(r_origin, re.position, Color(1.0, 0.88, 0.42), 2.0, 0.10)
+			re.take_damage(dmg * rico_ratio, r_dtype, self)
+			if shred_pct > 0.0 and is_instance_valid(re) and re.is_alive():
+				re.apply_armor_shred(shred_max, 3.2)
 
 
 func _make_octagon(r: float) -> PackedVector2Array:
@@ -679,7 +863,24 @@ func _draw() -> void:
 	draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 24, accent_col.darkened(0.25), 1.2)
 
 	if Balance.is_combo_tower(tower_type):
-		draw_arc(Vector2.ZERO, 18.2, 0.0, TAU, 8, Color(1.0, 0.86, 0.36, 0.45), 1.2)
+		if apex_tier >= 2:
+			# Tier-5 APEX OVERDRIVE: radiant prismatic counter-rotating star halo + 6 orbiting shards!
+			var ap_pulse: float = 0.65 + 0.35 * sin(anim_time * 7.0)
+			draw_circle(Vector2.ZERO, 22.0, Color(0.42, 0.95, 1.0, 0.12 * ap_pulse))
+			draw_arc(Vector2.ZERO, 21.8, anim_time * 2.2, anim_time * 2.2 + PI * 1.4, 28, Color(0.45, 0.98, 1.0, 0.95), 2.4)
+			draw_arc(Vector2.ZERO, 19.2, -anim_time * 2.8, -anim_time * 2.8 + PI * 1.4, 28, Color(1.0, 0.88, 0.32, 0.95), 2.2)
+			for sh_i in range(6):
+				var sha: float = anim_time * 2.4 + float(sh_i) * TAU / 6.0
+				var sp: Vector2 = Vector2(cos(sha), sin(sha)) * 22.5
+				draw_circle(sp, 2.3, Color(1.0, 0.92, 0.45) if sh_i % 2 == 0 else Color(0.48, 0.98, 1.0))
+		elif apex_tier == 1:
+			# Tier-4 Evolved: glowing golden orbital ring + 4 energy chevrons
+			draw_arc(Vector2.ZERO, 19.6, anim_time * 1.6, anim_time * 1.6 + TAU, 24, Color(1.0, 0.86, 0.32, 0.86), 2.0)
+			for sh_i in range(4):
+				var sha: float = -anim_time * 2.0 + float(sh_i) * PI * 0.5
+				draw_circle(Vector2(cos(sha), sin(sha)) * 20.5, 2.0, Color(1.0, 0.92, 0.45))
+		else:
+			draw_arc(Vector2.ZERO, 18.2, 0.0, TAU, 8, Color(1.0, 0.86, 0.36, 0.45), 1.2)
 
 	var recoil: float = (muzzle_flash_timer / 0.14) * 3.2
 	Visuals.draw_turret(self, tower_type, aim_angle, recoil, anim_time, muzzle_flash_timer, levels)
@@ -690,14 +891,21 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2(-13, 8), Vector2(26, 11)), accent_col.darkened(0.2), false, 1.0)
 	draw_string(font, Vector2(-10, 17), tgt_tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.98, 0.95, 0.68))
 
-	# Individual color-coded upgrade pips (Damage=Red/Violet, Range=Cyan, FireRate=Gold) + total level badge (up to Lv5 each)
+	# Individual color-coded upgrade pips (Damage=Red/Violet, Range=Cyan, FireRate=Gold) + total level / Apex badge
 	var d_lvl: int = int(levels["damage"])
 	var r_lvl: int = int(levels["range"])
 	var s_lvl: int = int(levels["fire_rate"])
 	var total_lvl: int = d_lvl + r_lvl + s_lvl
-	if total_lvl > 0:
+	if apex_tier >= 1:
+		var badge_txt: String = "★T5" if apex_tier >= 2 else "T4"
+		var badge_col := Color(0.45, 0.98, 1.0) if apex_tier >= 2 else Color(1.0, 0.88, 0.34)
+		draw_rect(Rect2(Vector2(-18, -26), Vector2(26, 12)), Color(0.05, 0.08, 0.14, 0.94))
+		draw_rect(Rect2(Vector2(-18, -26), Vector2(26, 12)), badge_col, false, 1.2)
+		draw_string(font, Vector2(-16, -16), badge_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, badge_col)
+	elif total_lvl > 0:
 		draw_rect(Rect2(Vector2(-15, -24), Vector2(22, 11)), Color(0.06, 0.09, 0.14, 0.9))
 		draw_string(font, Vector2(-13, -15), "+%d" % total_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.90, 0.38))
+	if total_lvl > 0:
 		for i in range(d_lvl):
 			draw_circle(Vector2(10.0, -13.0 + float(i) * 3.8), 1.6, Color(1.0, 0.45, 0.38))
 		for i in range(r_lvl):

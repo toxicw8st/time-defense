@@ -31,6 +31,11 @@ var shell_slow_pct: float = 0.0
 var shell_slow_dur: float = 0.0
 var shell_decay_flat: float = 0.0
 var shell_spawn_bubble: Dictionary = {}
+var shell_stun_duration: float = 0.0
+var shell_slag_nova_dmg: float = 0.0
+var shell_shred_max: int = 0
+var shell_reveals_cloaked: bool = false
+var shell_anti_regen: bool = false
 var source_tower_ref: WeakRef = null
 
 # Chrono status bubble fields
@@ -42,6 +47,8 @@ var bubble_decay_ticks: int = 2
 var bubble_burn_dps: float = 0.0
 var bubble_burn_type: String = "Laser"
 var bubble_color: Color = Color(0.64, 0.48, 1.0)
+var bubble_pull_px_per_sec: float = 0.0
+var bubble_anti_regen: bool = false
 var _bubble_pulse_accum: float = 0.0
 
 
@@ -107,6 +114,25 @@ func configure_mortar_extras(
 	shell_decay_flat = p_decay_flat
 	shell_spawn_bubble = p_spawn_bubble.duplicate()
 	source_tower_ref = weakref(p_source_tower) if p_source_tower != null else null
+
+
+func configure_apex_mortar_extras(
+	p_stun_dur: float = 0.0,
+	p_slag_nova: float = 0.0,
+	p_shred_max: int = 0,
+	p_reveals_cloaked: bool = false,
+	p_anti_regen: bool = false
+) -> void:
+	shell_stun_duration = p_stun_dur
+	shell_slag_nova_dmg = p_slag_nova
+	shell_shred_max = p_shred_max
+	shell_reveals_cloaked = p_reveals_cloaked
+	shell_anti_regen = p_anti_regen
+
+
+func configure_apex_bubble_extras(p_pull_px_per_sec: float = 0.0, p_anti_regen: bool = false) -> void:
+	bubble_pull_px_per_sec = p_pull_px_per_sec
+	bubble_anti_regen = p_anti_regen
 
 
 func setup_chrono_bubble(
@@ -208,7 +234,12 @@ func _apply_bubble_pulse(pulse_dt: float) -> void:
 			continue
 		if enemy.position.distance_to(position) <= eff_radius:
 			enemy.apply_bubble_aura(bubble_slow_pct, bubble_slow_linger, bubble_decay_flat, bubble_decay_ticks, src_t)
+			if bubble_anti_regen:
+				enemy.suppress_regen(1.6)
+			if bubble_pull_px_per_sec > 0.0 and pulse_dt > 0.0 and not GameState.is_enemies_frozen:
+				enemy.apply_vortex_pull(bubble_pull_px_per_sec * pulse_dt)
 			if bubble_burn_dps > 0.0 and pulse_dt > 0.0:
+				enemy.suppress_regen(1.6)
 				enemy.take_damage(bubble_burn_dps * pulse_dt, bubble_burn_type, src_t)
 
 
@@ -233,6 +264,8 @@ func _detonate() -> void:
 			var d: float = enemy.position.distance_to(target_pos)
 			if d <= splash_radius:
 				var falloff: float = lerpf(1.0, splash_edge_ratio, d / maxf(1.0, splash_radius))
+				if shell_slag_nova_dmg > 0.0:
+					enemy.mark_slag_nova(shell_slag_nova_dmg, src_t)
 				if damage > 0.0:
 					if direct_primary_only:
 						if enemy == center_target:
@@ -241,8 +274,17 @@ func _detonate() -> void:
 						enemy.take_damage(damage * falloff, damage_type, src_t)
 				if secondary_damage > 0.0 and enemy.is_alive():
 					enemy.take_damage(secondary_damage * falloff, secondary_damage_type, src_t)
-				if shell_slow_pct > 0.0 and enemy.is_alive():
-					enemy.apply_time_hit(shell_slow_pct, shell_slow_dur, shell_decay_flat, 2, src_t)
+				if enemy.is_alive():
+					if shell_slow_pct > 0.0:
+						enemy.apply_time_hit(shell_slow_pct, shell_slow_dur, shell_decay_flat, 2, src_t)
+					if shell_stun_duration > 0.0:
+						enemy.apply_stun(shell_stun_duration)
+					if shell_shred_max > 0:
+						enemy.apply_armor_shred(shell_shred_max, 3.8)
+					if shell_reveals_cloaked:
+						enemy.reveal_cloak(4.5)
+					if shell_anti_regen:
+						enemy.suppress_regen(2.8)
 		if mirv_subshells > 0:
 			for i in range(mirv_subshells):
 				var angle: float = (TAU / float(mirv_subshells)) * float(i) + 0.35
@@ -275,6 +317,10 @@ func _detonate() -> void:
 				float(shell_spawn_bubble.get("slow_linger", 0.45)),
 				src_t
 			)
+			bubble_proj.configure_apex_bubble_extras(
+				float(shell_spawn_bubble.get("pull_px_per_sec", 0.0)),
+				bool(shell_spawn_bubble.get("anti_regen", false))
+			)
 	queue_redraw()
 
 
@@ -303,10 +349,14 @@ func _draw() -> void:
 		for i in range(6):
 			var a: float = rot * 0.6 + (TAU / 6.0) * float(i)
 			draw_circle(Vector2.from_angle(a) * r, 2.2, rim_col)
-		# Optional thermal/void inner distortion if combo bubble also burns
+		# Optional thermal/void inner distortion if combo bubble also burns or pulls backward (Temporal Vortex!)
 		if bubble_burn_dps > 0.0:
 			var burn_col := Color(1.0, 0.52, 0.20, 0.45 * alpha) if bubble_burn_type == "Laser" else Color(0.95, 0.35, 1.0, 0.45 * alpha)
 			draw_arc(Vector2.ZERO, r * 0.48, -rot * 1.5, -rot * 1.5 + PI * 1.4, 22, burn_col, 2.0)
+		if bubble_pull_px_per_sec > 0.0:
+			var pull_t: float = fmod(elapsed * 1.5, 1.0)
+			draw_arc(Vector2.ZERO, lerpf(r * 0.90, r * 0.16, pull_t), -rot * 2.4, -rot * 2.4 + PI * 1.5, 24, Color(0.55, 0.98, 1.0, pull_t * 0.72 * alpha), 2.2)
+			draw_arc(Vector2.ZERO, r * 0.30, rot * 2.6, rot * 2.6 + PI * 1.3, 18, Color(1.0, 0.88, 0.36, 0.65 * alpha), 1.8)
 		return
 
 	if is_tracer:

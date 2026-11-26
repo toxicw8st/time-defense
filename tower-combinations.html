@@ -407,7 +407,7 @@
         <span class="badge-count" id="visible-count-badge">21 / 21 Combinations</span>
       </div>
       <p class="subtitle">
-        Design blueprint covering all <strong>21 unique 2-tower combinations</strong> (6 same-type merges + 15 cross-type hybrids) built directly on TimeDefense's exact stats, <strong>4&times;3 Damage Matrix</strong>, and zone-slot economy (<code>$</code>, <code>s$</code>, <code>b$</code>).
+        v2.0 BTD5-Evolution Codex covering all <strong>21 unique 2-tower combinations</strong>, <strong>Tier-4 Milestone Perks</strong>, <strong>Tier-5 APEX OVERDRIVE</strong> transformations, <strong>4-Tier Refinery Tech Banks</strong>, and <strong>4 Counter-Play Aliens</strong>.
       </p>
     </div>
   </header>
@@ -418,12 +418,12 @@
       <h2>1. Merge Rules, Economy &amp; Damage Matrix</h2>
       <div class="rule-grid">
         <div class="panel">
-          <h3>Merge Cost, Scaling Upgrades &amp; Build Formula</h3>
+          <h3>v2.0 Earned Merges, Tier-4 Perks &amp; Tier-5 APEX OVERDRIVE</h3>
           <ul>
-            <li><strong>How to Merge:</strong> Drag any tower onto another built tower inside a Placement Zone (or tap Upgrade &rarr; Combine).</li>
-            <li><strong>Total Asset Cost (<code>$</code>):</strong> <code>Base A ($A) + Base B ($B) + ~30&ndash;35% Merge Surcharge</code> (plus upgrade-transfer fee if transferring cheap Lv1&ndash;5 ranks onto an expensive hybrid).</li>
-            <li><strong>Tower-Cost-Scaled Upgrades:</strong> Lv 1&ndash;5 Damage (<code>+30%&ndash;+235%</code>) &amp; Fire Rate (<code>+18%&ndash;+120%</code>) scale cleanly with base/combo tower cost so <code>$90</code> Blasters stay affordable while <code>$640</code> MAC Cannons pay fair endgame costs.</li>
-            <li><strong>50% Sell Rule Preserved:</strong> Selling a combined tower refunds <code>50%</code> of total <code>$</code> invested (both base towers + merge surcharge + transfer fees + Lv 1&ndash;5 upgrades).</li>
+            <li><strong>Earned Combines (3+ Ranks):</strong> Upgrade your base towers first! Fusing requires <strong>3+ combined upgrade ranks</strong> (e.g. Lv2+1 or Lv3+0; Sandbox exempt) plus a BTD5-tier merge fee (<code>$145&ndash;$480</code>).</li>
+            <li><strong>Tier-4 Milestone Perks (<code>$1,250&ndash;$2,500</code>):</strong> Every single one of the 21 combos unlocks a unique Tier-4 mechanical perk right in the tower panel (ricochets, multi-chains, extra MIRV shells, shield-aura pierce, cloak reveal).</li>
+            <li><strong>Tier-5 APEX OVERDRIVE (<code>$3,800&ndash;$8,200</code>):</strong> Aspirational late-game super-towers with prismatic halos, Vortex backward path pull, Slag Nova death blasts, and Boss Executes — funded by upgrading your <strong>Refinery Annex</strong> (Chrono-Plant &rarr; Temporal Bank &rarr; Singularity Mint)!</li>
+            <li><strong>50% Sell Rule Preserved:</strong> Selling refunds <code>50%</code> of total <code>$</code> invested (base towers + merge + upgrades + Tier-4/5 evolutions).</li>
           </ul>
         </div>
 
@@ -841,6 +841,43 @@
       }
     ];
 
+    const COMBO_EVOLUTIONS = {
+      "blaster+blaster": { t4: "Hyper-Rotary Shred ($1,250): +30% speed, +25% dmg & 1 ricochet (55%).", t5: "Storm-Wall Gatling ($3,800): +65% speed, +70% dmg, 2 ricochets (70%), +55% Armor-Crack & ignores Shield Auras." },
+      "mortar+mortar": { t4: "Cluster Saturation ($1,400): 5 MIRV sub-shells, +20% splash, +35% dmg & 0.45s stun.", t5: "Carpet-Bomb Citadel ($4,200): 7 MIRV sub-shells, +35% splash, +95% dmg, +30% speed & 0.85s stun." },
+      "laser+laser": { t4: "Tri-Prism Refraction ($1,350): Chains 3 targets (50% arc), 10 ramp stacks & reveals Cloaked.", t5: "Solaris Hyper-Prism ($4,100): Chains 5 targets (70% arc), +95% dmg, 12 ramp stacks & 120-dmg Slag Nova." },
+      "slow+slow": { t4: "Event-Horizon Field ($1,300): +25% Bubble radius, +10% slow, +50% Decay & blocks Bio-Mender regen.", t5: "Temporal Vortex Engine ($4,000): +40% Vortex Bubbles pull aliens BACKWARD along path + 2.4x Decay!" },
+      "railgun+railgun": { t4: "Sub-Atomic Accelerator ($2,400): Pierces 5 foes, +40% dmg, +45% Decay & ignores Shield Auras.", t5: "Rift-Tear Supercollider ($7,400): Pierces 8 foes, +120% dmg, +45% speed, 2.2x Decay & 0.6s stun." },
+      "annihilator+annihilator": { t4: "Tungsten Hyper-Sabot ($2,100): +40% dmg, +50% opener crit & ignores Shield Auras.", t5: "Dreadnought Obliterator ($6,600): +125% dmg, +35% speed, pierces 2 bosses & executes <8% HP!" },
+      "blaster+mortar": { t4: "Proximity Shrapnel Storm ($1,300): +35% dmg, +25% splash & reveals Cloaked Stalkers.", t5: "Sky-Shredder Flak Fortress ($3,900): +100% dmg, +50% speed, 3 flak sub-bursts & 0.55s stun." },
+      "blaster+laser": { t4: "Phase-Adaptive Repeater ($1,350): +35% dmg, +22% speed, 1 smart ricochet & detects Cloaked.", t5: "Omni-Matrix Annihilator ($4,300): +105% dmg, +55% speed, 3 smart ricochets & ignores Shield Auras." },
+      "blaster+slow": { t4: "Cryo-Lock Interceptor ($1,250): +35% dmg, +20% Bubble radius, strips regen & reveals Cloaked.", t5: "Zero-Vector Lockdown ($3,800): +100% dmg, +45% speed, 2 ricochets & Vortex Pull Bubbles!" },
+      "blaster+railgun": { t4: "Overclocked Rail Carbine ($1,850): +35% speed, +30% dmg, pierces 2 & ignores Shield Auras.", t5: "Chrono-Valkyrie Autocannon ($5,800): +85% speed, +95% dmg, pierces 4 foes & 2.0x Decay." },
+      "blaster+annihilator": { t4: "Depleted-Core Vulcan ($1,700): +40% dmg, +25% speed & 1 heavy sabot ricochet (55%).", t5: "Titan-Reaper Autocannon ($5,400): +115% dmg, +55% speed, 2 ricochets, Armor Shred & Shield pierce." },
+      "mortar+laser": { t4: "Supernova Shelling ($1,400): +40% plasma dmg, +22% splash, blocks regen & reveals Cloaked.", t5: "Helios Orbital Barrage ($4,300): +110% dmg, +45% speed, 3 solar sub-shells & 160-dmg Slag Nova." },
+      "mortar+slow": { t4: "Glacial Quake Shells ($1,350): +35% dmg, +25% Bubble radius, 0.5s freeze-stun & anti-regen.", t5: "Permafrost Cataclysm ($4,200): +105% dmg, +40% Bubble radius, 1.0s stun & Vortex backward pull!" },
+      "mortar+railgun": { t4: "Stratospheric Gravity Bomb ($1,950): +40% dmg, +25% splash, +40% Decay & 0.65s stun.", t5: "Orbital Singularity Strike ($6,200): +120% dmg, 4 MIRV grav-bombs, 1.1s stun & Shield pierce." },
+      "mortar+annihilator": { t4: "Bunker-Buster Tandem ($1,750): +45% dmg, +25% splash, 0.5s stun, Armor Shred & Shield pierce.", t5: "Siegebreaker Doomsday ($5,600): +125% dmg, 3 AP sub-shells, 0.9s stun & 220-dmg Slag Nova." },
+      "laser+slow": { t4: "Ionized Inferno Dome ($1,350): 2.2x Bubble burn, +25% radius, anti-regen & reveals Cloaked.", t5: "Chromatic Nova Projector ($4,100): 4.0x Bubble burn, Vortex pull, 2 prism arcs & 160-dmg Slag Nova." },
+      "laser+railgun": { t4: "Focused Ion Rail-Lance ($1,900): Pierces 3 foes across 325px, +40% dmg & reveals Cloaked.", t5: "Starfire Chrono-Lance ($6,000): Pierces 5 foes, +115% dmg, +50% speed, 2 prism arcs & Shield pierce." },
+      "laser+annihilator": { t4: "Core-Meltdown Shredder ($1,750): Armor Shred stacks to 5 (+50% team dmg!) & anti-regen.", t5: "Slag-Nova Crucible ($5,600): 7 Shred stacks (+70% team dmg!) & 340-dmg Slag Nova death blast!" },
+      "slow+railgun": { t4: "Deep-Freeze Sniper ($1,950): +40% dmg, +25% Super-Bubble, pierces 2 foes & anti-regen.", t5: "Zero-Kelvin Singularity Rail ($6,300): +115% dmg, pierces 3, Vortex Pull Bubbles & 0.8s freeze-stun!" },
+      "slow+annihilator": { t4: "Graviton Anchor Breaker ($1,700): +40% boss dmg, +25% Bubble, anti-regen & Shield pierce.", t5: "Chrono-Guillotine Rail ($5,500): +115% dmg, Vortex Pull, 0.7s boss stun & executes <10% HP!" },
+      "railgun+annihilator": { t4: "Event-Horizon Boss Lance ($2,500): Pierces 2 bosses, +45% dmg, +45% Decay & Shield pierce.", t5: "Omega Singularity Sovereign ($8,200): Pierces 3 bosses, +135% dmg, +50% speed & EXECUTES <12% HP!" }
+    };
+
+    const MERGE_FEE_V2 = {
+      "blaster+blaster": 150, "mortar+mortar": 160, "laser+laser": 160, "slow+slow": 150,
+      "railgun+railgun": 480, "annihilator+annihilator": 360, "blaster+mortar": 150,
+      "blaster+laser": 160, "blaster+slow": 145, "blaster+railgun": 310, "blaster+annihilator": 240,
+      "mortar+laser": 160, "mortar+slow": 155, "mortar+railgun": 330, "mortar+annihilator": 250,
+      "laser+slow": 155, "laser+railgun": 320, "laser+annihilator": 250, "slow+railgun": 330,
+      "slow+annihilator": 240, "railgun+annihilator": 450
+    };
+    COMBINATIONS.forEach((c) => {
+      if (MERGE_FEE_V2[c.id]) c.mergeCost = MERGE_FEE_V2[c.id];
+      c.evo = COMBO_EVOLUTIONS[c.id] || null;
+    });
+
     function buildComboSVG(aKey, bKey, same) {
       const aCol = BASE_TOWERS[aKey].color;
       const bCol = BASE_TOWERS[bKey].color;
@@ -1154,6 +1191,10 @@
 
           <div class="detail-block"><strong>Look:</strong> ${c.look}</div>
           <div class="detail-block"><strong>Effect:</strong> ${c.does}</div>
+          ${c.evo ? `<div class="detail-block" style="background:#0f1826;border:1px solid #3c5478;border-radius:7px;padding:7px 9px;margin-top:2px;">
+            <div><strong style="color:#ffcf56;">Tier 4 Perk:</strong> ${c.evo.t4}</div>
+            <div style="margin-top:3px;"><strong style="color:#5ae8ff;">&#9733; Tier 5 APEX:</strong> ${c.evo.t5}</div>
+          </div>` : ""}
 
           <div class="matrix-mini">
             <div class="m-chip"><b>Standard</b>${c.matrix.std}</div>

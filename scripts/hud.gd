@@ -147,6 +147,7 @@ var end_endless_button: Button = null
 var end_analytics_button: Button = null
 
 var combine_button: Button = null
+var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
 var recipes_search_edit: LineEdit = null
@@ -755,9 +756,21 @@ func _build_combine_and_sandbox_ui() -> void:
 		build_recipes_button.custom_minimum_size = Vector2(0, 28)
 		build_recipes_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		build_recipes_button.add_theme_font_size_override("font_size", 11)
-		build_recipes_button.text = "21 Tower Combinations (Recipes)..."
+		build_recipes_button.text = "21 Combos & Apex Overdrives..."
 		build_recipes_button.pressed.connect(open_recipes_overlay)
 		build_menu_box.add_child(build_recipes_button)
+
+	# 1b2) Add Refinery Tech Tier Upgrade button inside ManipulatorBox (BTD5 Banana Farm / Bank ladder!)
+	var manip_box := get_node_or_null("RightPanel/Margin/VBox/Scroll/ContentVBox/ManipulatorBox") as VBoxContainer
+	if manip_box != null and refinery_tech_button == null:
+		refinery_tech_button = Button.new()
+		refinery_tech_button.name = "RefineryTechButton"
+		refinery_tech_button.custom_minimum_size = Vector2(0, 28)
+		refinery_tech_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		refinery_tech_button.add_theme_font_size_override("font_size", 11)
+		refinery_tech_button.text = "Refinery T2: Chrono-Plant ($550)"
+		refinery_tech_button.pressed.connect(_on_refinery_tech_pressed)
+		manip_box.add_child(refinery_tech_button)
 
 	# 1c) Build In-Game 21-Combination Recipe Book Modal
 	recipes_overlay = PanelContainer.new()
@@ -778,7 +791,7 @@ func _build_combine_and_sandbox_ui() -> void:
 	r_vbox.add_child(r_top)
 
 	var r_title := Label.new()
-	r_title.text = "21 TOWER COMBINATIONS — DRAG A BASE TOWER ONTO ANOTHER OR TAP COMBINE"
+	r_title.text = "21 COMBINATIONS + TIER-4 PERKS & TIER-5 APEX OVERDRIVE (NEED 3+ UPGRADE RANKS TO FUSE)"
 	r_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	r_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	r_title.add_theme_font_size_override("font_size", 13)
@@ -1141,6 +1154,13 @@ func _build_combine_and_sandbox_ui() -> void:
 		var eb := _make_sandbox_enemy_btn(etype)
 		sp_row2.add_child(eb)
 
+	var sp_row2b := HBoxContainer.new()
+	sp_row2b.add_theme_constant_override("separation", 4)
+	sandbox_body_box.add_child(sp_row2b)
+	for etype in ["stalker", "mender", "carrier", "conduit"]:
+		var eb := _make_sandbox_enemy_btn(etype)
+		sp_row2b.add_child(eb)
+
 	var sp_row3 := HBoxContainer.new()
 	sp_row3.add_theme_constant_override("separation", 4)
 	sandbox_body_box.add_child(sp_row3)
@@ -1213,7 +1233,7 @@ func _make_sandbox_enemy_btn(enemy_type: String) -> Button:
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.custom_minimum_size = Vector2(0, 26)
 	b.add_theme_font_size_override("font_size", 10)
-	b.text = str(Balance.ENEMIES[enemy_type]["name"])
+	b.text = str(Balance.ENEMIES[enemy_type]["name"]).replace("Phase ", "").replace("Bio-", "").replace("Brood ", "").replace("Aegis ", "")
 	var captured: String = enemy_type
 	b.pressed.connect(func() -> void:
 		if map_ref != null:
@@ -1359,7 +1379,11 @@ func _populate_recipes_list() -> void:
 			var nb: String = str(Balance.TOWERS[bkeys[j]]["name"])
 			var cname: String = str(cfg["name"])
 			var role: String = str(cfg["role"])
-			var hay: String = ("%s %s %s %s %s" % [na, nb, cname, role, str(cfg["damage_type_label"])]).to_lower()
+			var t4_cfg: Dictionary = Balance.get_combo_evolution_cfg(ck, 1)
+			var t5_cfg: Dictionary = Balance.get_combo_evolution_cfg(ck, 2)
+			var t4_txt: String = "T4 %s ($%d): %s" % [str(t4_cfg.get("name", "")), int(t4_cfg.get("cost", 0)), str(t4_cfg.get("desc", ""))]
+			var t5_txt: String = "★ APEX T5 %s ($%d): %s" % [str(t5_cfg.get("name", "")), int(t5_cfg.get("cost", 0)), str(t5_cfg.get("desc", ""))]
+			var hay: String = ("%s %s %s %s %s %s %s" % [na, nb, cname, role, str(cfg["damage_type_label"]), t4_txt, t5_txt]).to_lower()
 			if q != "" and not hay.contains(q):
 				continue
 			var row := PanelContainer.new()
@@ -1375,8 +1399,8 @@ func _populate_recipes_list() -> void:
 			top_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			top_l.add_theme_font_size_override("font_size", 12)
 			top_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42) if is_same else Color(0.52, 0.94, 1.0))
-			top_l.text = "%s + %s  =>  %s  ($%d total | +$%d merge | Rng %.0f | %.2f/s)" % [
-				na, nb, cname, int(cfg["cost"]), Balance.get_merge_surcharge(bkeys[i], bkeys[j]), float(cfg["range"]), float(cfg["fire_rate"])
+			top_l.text = "%s + %s  =>  %s  (+$%d merge | Rng %.0f | %.2f/s)" % [
+				na, nb, cname, Balance.get_merge_surcharge(bkeys[i], bkeys[j]), float(cfg["range"]), float(cfg["fire_rate"])
 			]
 			rv.add_child(top_l)
 			var desc_l := Label.new()
@@ -1386,6 +1410,14 @@ func _populate_recipes_list() -> void:
 			desc_l.add_theme_color_override("font_color", Color(0.86, 0.92, 0.98))
 			desc_l.text = "%s — %s" % [str(cfg["damage_type_label"]), role]
 			rv.add_child(desc_l)
+			if not t4_cfg.is_empty() and not t5_cfg.is_empty():
+				var evo_l := Label.new()
+				evo_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				evo_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				evo_l.add_theme_font_size_override("font_size", 10)
+				evo_l.add_theme_color_override("font_color", Color(1.0, 0.88, 0.46))
+				evo_l.text = "%s\n%s" % [t4_txt, t5_txt]
+				rv.add_child(evo_l)
 			recipes_list_box.add_child(row)
 	if _current_layout_mode == "portrait":
 		_scale_overlay_typography(recipes_list_box, true)
@@ -1661,6 +1693,8 @@ func _setup_right_panel_buttons() -> void:
 		_init_styled_button(build_recipes_button, _icons["target"], Color(0.95, 0.78, 0.30))
 		_set_button_description(build_recipes_button, "Browse all 21 tower recipes, costs, and synergy roles.")
 	_init_styled_button(manip_upgrade_button, _icons["manipulator"], Color(0.68, 0.52, 0.95))
+	if refinery_tech_button != null:
+		_init_styled_button(refinery_tech_button, _icons["sell"], Color(0.35, 0.88, 0.65))
 
 	for key in RESEARCH_ORDER:
 		var btn: Button = _research_buttons[key]
@@ -1879,10 +1913,19 @@ func _refresh_all() -> void:
 		int(m.stats["research_earned"]),
 		Balance.MAX_RESEARCH_PER_MISSION,
 	]
-	refineries_label.text = "Ref: %d (+$%.2f/s)" % [
-		m.economy["refineries_owned"],
-		float(m.economy["refineries_owned"]) * Balance.REFINERY_RATE_PER_SEC,
-	]
+	var r_tier: int = GameState.get_refinery_tier()
+	var r_rate: float = GameState.get_refinery_rate_per_sec()
+	if r_tier > 1:
+		refineries_label.text = "Ref: %d [T%d] (+$%.2f/s)" % [
+			m.economy["refineries_owned"],
+			r_tier,
+			float(m.economy["refineries_owned"]) * r_rate,
+		]
+	else:
+		refineries_label.text = "Ref: %d (+$%.2f/s)" % [
+			m.economy["refineries_owned"],
+			float(m.economy["refineries_owned"]) * r_rate,
+		]
 
 	_refresh_speed_buttons()
 	_refresh_auto_wave_button()
@@ -1894,6 +1937,7 @@ func _refresh_all() -> void:
 	_refresh_preview_panel()
 	_refresh_selection_panel()
 	_refresh_manipulator_panel()
+	_refresh_refinery_tech_button()
 	_refresh_research_panel()
 	_refresh_surge_bar()
 	_refresh_power_buttons()
@@ -2079,33 +2123,85 @@ func _refresh_manipulator_panel() -> void:
 	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.65, 0.65)
 
 
+func _refresh_refinery_tech_button() -> void:
+	if refinery_tech_button == null or economy_ref == null:
+		return
+	var cur_tier: int = GameState.get_refinery_tier()
+	if economy_ref.refinery_tech_job != null:
+		var phase_tag: String = "" if GameState.is_wave_active else " [in wave]"
+		refinery_tech_button.text = "Refinery Tech T%d (%.1fs)%s" % [cur_tier + 1, economy_ref.refinery_tech_job.remaining_time, phase_tag]
+		refinery_tech_button.disabled = true
+		refinery_tech_button.modulate = Color(1.0, 0.88, 0.40)
+		_set_button_description(refinery_tech_button, "Upgrading Refinery Annex tech tier (accelerated by Haste).")
+		return
+	if cur_tier >= Balance.REFINERY_MAX_TIER:
+		refinery_tech_button.text = "Refinery T4: Singularity Mint MAX"
+		refinery_tech_button.disabled = true
+		refinery_tech_button.modulate = Color(0.55, 0.98, 0.85)
+		_set_button_description(refinery_tech_button, "MAX Tier 4: $3.25/s per Refinery + 15% Bank interest (up to $1,800/wave).")
+		return
+	var next_t: int = cur_tier + 1
+	var tcfg: Dictionary = Balance.get_refinery_tier_cfg(next_t)
+	var cost: int = int(tcfg["cost"])
+	var owned: int = int(GameState.mission.economy.get("refineries_owned", 0))
+	var can_upg: bool = economy_ref.can_upgrade_refinery_tier()
+	if owned < 1 and not GameState.is_sandbox_mode:
+		refinery_tech_button.text = "Ref Tech T%d ($%d) [Need 1 Ref]" % [next_t, cost]
+	else:
+		refinery_tech_button.text = "Ref T%d: %s ($%d)" % [next_t, str(tcfg["name"]), cost]
+	refinery_tech_button.disabled = not can_upg
+	refinery_tech_button.modulate = Color.WHITE if can_upg else Color(1.0, 0.65, 0.65)
+	_set_button_description(refinery_tech_button, "T%d %s ($%d): %s" % [next_t, str(tcfg["name"]), cost, str(tcfg["desc"])])
+
+
 func _refresh_preview_panel() -> void:
 	if wave_manager_ref == null:
 		return
 	var preview: Dictionary = wave_manager_ref.get_preview_data()
 	var wave_num: int = preview["wave_number"]
 	var max_w: int = wave_manager_ref.max_waves_limit
-	preview_title_label.text = "WAVE %d / %d (s$%d, b$%d, DPS req %d)" % [
-		wave_num,
-		max_w,
-		int(preview.get("s_dollars", 0)),
-		int(preview.get("b_dollars", 0)),
-		int(preview.get("dps_needed", 0)),
-	]
+	var exam_title: String = str(preview.get("exam_title", ""))
+	if exam_title != "":
+		preview_title_label.text = "★ W%d %s (s$%d, b$%d)" % [
+			wave_num,
+			exam_title,
+			int(preview.get("s_dollars", 0)),
+			int(preview.get("b_dollars", 0)),
+		]
+		preview_title_label.modulate = Color(1.0, 0.72, 0.32)
+	else:
+		preview_title_label.text = "WAVE %d / %d (s$%d, b$%d, DPS req %d)" % [
+			wave_num,
+			max_w,
+			int(preview.get("s_dollars", 0)),
+			int(preview.get("b_dollars", 0)),
+			int(preview.get("dps_needed", 0)),
+		]
+		preview_title_label.modulate = Color.WHITE
 
 	var counts: Dictionary = preview["counts"]
 	var unit_parts: PackedStringArray = []
-	for utype in ["colossus", "juggernaut", "blitzer", "brute", "rusher", "crawler"]:
+	for utype in ["colossus", "juggernaut", "conduit", "carrier", "mender", "stalker", "blitzer", "brute", "rusher", "crawler"]:
 		if counts.has(utype):
 			var uname: String = Balance.ENEMIES[utype]["name"]
 			unit_parts.append("%d %s (HP %d)" % [counts[utype], uname, GameState.get_enemy_wave_hp(utype, wave_num)])
-	var counter_tag: String = ""
-	if counts.has("colossus") or counts.has("juggernaut"):
-		counter_tag = " [BOSS: Piercing 180%]"
-	elif counts.has("blitzer"):
-		counter_tag = " [REFL: Avoid Laser]"
-	elif counts.has("brute"):
-		counter_tag = " [ARMORED: Piercing 150%]"
+	var counter_tags: PackedStringArray = []
+	if counts.has("conduit"):
+		counter_tags.append("SHIELD AURA: Snipe Conduit!")
+	if counts.has("carrier"):
+		counter_tags.append("SPLIT: AoE!")
+	if counts.has("stalker"):
+		counter_tags.append("CLOAK: Time/Laser/Rng2+")
+	if counts.has("mender"):
+		counter_tags.append("REGEN: Decay/Shred")
+	if counter_tags.is_empty():
+		if counts.has("colossus") or counts.has("juggernaut"):
+			counter_tags.append("BOSS: Piercing 180%")
+		elif counts.has("blitzer"):
+			counter_tags.append("REFL: Avoid Laser")
+		elif counts.has("brute"):
+			counter_tags.append("ARMORED: Piercing 150%")
+	var counter_tag: String = (" [" + " | ".join(counter_tags) + "]") if not counter_tags.is_empty() else ""
 	preview_body_label.text = "Incoming: " + ", ".join(unit_parts) + counter_tag
 
 	var muts: Array = preview["active_mutations"]
@@ -2137,7 +2233,8 @@ func _refresh_selection_panel() -> void:
 
 		var cfg: Dictionary = Balance.TOWERS[_selected_tower.tower_type]
 		var loc_tag: String = "Pad P%d" % (_selected_tower.pad_index + 1) if _selected_tower.pad_index >= 0 else "Tower Zone"
-		tower_header_label.text = "%s (%s)" % [cfg["name"], loc_tag]
+		var apex_hdr_tag: String = " [★T5]" if _selected_tower.apex_tier >= 2 else (" [T4]" if _selected_tower.apex_tier == 1 else "")
+		tower_header_label.text = "%s%s (%s)" % [cfg["name"], apex_hdr_tag, loc_tag]
 		var eff_dps: float = _selected_tower.get_estimated_dps()
 		var eff_dmg: float = _selected_tower.get_effective_damage()
 		var eff_rate: float = _selected_tower.get_effective_fire_rate()
@@ -2146,7 +2243,7 @@ func _refresh_selection_panel() -> void:
 			tower_ratings_label.text = "DPS %.1f | Bub %.0fpx (%.1fs) | Rng %.0f" % [
 				eff_dps,
 				_selected_tower.get_effective_bubble_radius(),
-				float(cfg.get("bubble_duration", 3.5)),
+				float(cfg.get("bubble_duration", 3.5)) + _selected_tower.get_apex_mod_float("bubble_duration_add", 0.0),
 				eff_rng,
 			]
 		else:
@@ -2157,17 +2254,20 @@ func _refresh_selection_panel() -> void:
 				eff_rng,
 			]
 		if _selected_tower.current_job != null:
-			var kind_txt: String = "Building" if not _selected_tower.is_built else ("Combining..." if _selected_tower.current_job.kind == "tower_combine" else ("Upgrading %s" % _selected_tower.current_job.target_key.capitalize()))
+			var kind_txt: String = "Building" if not _selected_tower.is_built else ("Combining..." if _selected_tower.current_job.kind == "tower_combine" else ("Evolving T%s..." % _selected_tower.current_job.target_key if _selected_tower.current_job.kind == "tower_apex" else ("Upgrading %s" % _selected_tower.current_job.target_key.capitalize())))
 			var wave_tag: String = "" if (GameState.is_wave_active or GameState.is_sandbox_mode) else " [starts in wave]"
 			tower_status_label.text = "%s: %.1f s left (cannot fire)%s" % [kind_txt, _selected_tower.current_job.remaining_time, wave_tag]
 			tower_status_label.modulate = Color(1.0, 0.85, 0.35)
 		else:
-			tower_status_label.text = "Active | Dmg %d | Kills %d%s" % [
+			var status_badge: String = " [★APEX]" if _selected_tower.apex_tier >= 2 else (" [T4]" if _selected_tower.apex_tier == 1 else (" [COMBO]" if Balance.is_combo_tower(_selected_tower.tower_type) else ""))
+			var camo_badge: String = " [CAMO]" if _selected_tower.can_detect_cloaked() else ""
+			tower_status_label.text = "Active | Dmg %d | Kills %d%s%s" % [
 				int(round(_selected_tower.total_damage_dealt)),
 				_selected_tower.total_kills,
-				" [COMBO]" if Balance.is_combo_tower(_selected_tower.tower_type) else "",
+				status_badge,
+				camo_badge,
 			]
-			tower_status_label.modulate = Color(1.0, 0.90, 0.45) if Balance.is_combo_tower(_selected_tower.tower_type) else Color(0.55, 0.95, 0.65)
+			tower_status_label.modulate = Color(0.45, 0.98, 1.0) if _selected_tower.apex_tier >= 2 else (Color(1.0, 0.90, 0.45) if Balance.is_combo_tower(_selected_tower.tower_type) else Color(0.55, 0.95, 0.65))
 
 		var compact_2col: bool = (_current_layout_mode == "landscape_wide")
 		var tlabel: String = str(Balance.TARGETING_LABELS.get(_selected_tower.target_mode, "First"))
@@ -2181,24 +2281,50 @@ func _refresh_selection_panel() -> void:
 			_style_upgrade_button(upg_dmg_button, decay_lbl, "damage", _selected_tower, money, decay_desc)
 		else:
 			_style_upgrade_button(upg_dmg_button, "Dmg" if compact_2col else "Damage", "damage", _selected_tower, money, "+30% / +68% / +115% / +170% / +235% total damage")
-		_style_upgrade_button(upg_rng_button, "Rng" if compact_2col else "Range", "range", _selected_tower, money, "+25% / +60% / +100% / +130% / +160% total range")
+		_style_upgrade_button(upg_rng_button, "Rng" if compact_2col else "Range", "range", _selected_tower, money, "+25%..+160% range (Lv2+ detects Cloaked!)")
 		_style_upgrade_button(upg_spd_button, "Spd" if compact_2col else "Fire Rate", "fire_rate", _selected_tower, money, "+18% / +38% / +62% / +90% / +120% fire speed")
 
 		if combine_button != null:
 			var is_already_combo: bool = Balance.is_combo_tower(_selected_tower.tower_type)
-			combine_button.visible = not is_already_combo
+			combine_button.visible = true
 			if not is_already_combo:
 				var is_picking: bool = (map_ref != null and map_ref.combine_source_tower == _selected_tower)
+				var rks: int = _selected_tower.get_total_upgrade_ranks()
 				if is_picking:
 					combine_button.text = "Cancel Merge" if compact_2col else "Click Partner Tower (Tap Cancel)"
 					combine_button.disabled = false
 					combine_button.modulate = Color(1.0, 0.90, 0.35)
-					_set_button_description(combine_button, "Click another base tower on map to combine, or tap to cancel.")
+					_set_button_description(combine_button, "Tap a glowing base tower (3+ combined ranks) to fuse, or tap Cancel.")
 				else:
-					combine_button.text = "Combine..." if compact_2col else "Combine w/ Another Tower..."
+					if not GameState.is_sandbox_mode and rks < Balance.COMBINE_MIN_TOTAL_RANKS:
+						combine_button.text = ("Fuse (%d/3 rk)" % rks) if compact_2col else ("Combine (Ranks %d/3)..." % rks)
+					else:
+						combine_button.text = "Combine..." if compact_2col else "Combine w/ Another Tower..."
 					combine_button.disabled = not _selected_tower.can_combine()
 					combine_button.modulate = Color.WHITE
-					_set_button_description(combine_button, "Merge 2 base towers (or drag a shop tower onto it) for 21 combos.")
+					_set_button_description(combine_button, "Fuse 2 base towers with 3+ combined upgrade ranks (or drag from shop).")
+			else:
+				# Tier-4 Milestone Perk -> Tier-5 APEX OVERDRIVE slot!
+				if _selected_tower.apex_tier >= 2:
+					var t5_done: Dictionary = Balance.get_combo_evolution_cfg(_selected_tower.tower_type, 2)
+					combine_button.text = "★ APEX T5 MAX"
+					combine_button.disabled = true
+					combine_button.modulate = Color(0.45, 0.98, 1.0)
+					_set_button_description(combine_button, "★ %s: %s" % [str(t5_done.get("name", "APEX")), str(t5_done.get("desc", ""))])
+				else:
+					var next_tier: int = _selected_tower.apex_tier + 1
+					var next_evo: Dictionary = _selected_tower.get_next_apex_cfg()
+					var evo_name: String = str(next_evo.get("name", "Evolve"))
+					var evo_cost: int = int(next_evo.get("cost", 1500))
+					var can_evo: bool = _selected_tower.can_evolve_apex()
+					if next_tier == 1:
+						combine_button.text = ("T4 %s ($%d)" % [evo_name, evo_cost]) if compact_2col else ("Evolve T4: %s ($%d)" % [evo_name, evo_cost])
+						combine_button.modulate = Color(1.0, 0.92, 0.42) if can_evo else Color(1.0, 0.65, 0.65)
+					else:
+						combine_button.text = ("★T5 %s ($%d)" % [evo_name, evo_cost]) if compact_2col else ("★ APEX T5: %s ($%d)" % [evo_name, evo_cost])
+						combine_button.modulate = Color(0.48, 0.98, 1.0) if can_evo else Color(1.0, 0.65, 0.65)
+					combine_button.disabled = not can_evo
+					_set_button_description(combine_button, "%s ($%d): %s" % [evo_name, evo_cost, str(next_evo.get("desc", ""))])
 
 		var refund: int = _selected_tower.get_sell_refund()
 		sell_button.disabled = GameState.mission.is_over
@@ -2382,7 +2508,10 @@ func _refresh_refinery_button() -> void:
 		refinery_button.modulate = Color(0.7, 0.7, 0.7)
 		return
 	var affordable: bool = GameState.mission.economy["money"] >= cost and not GameState.mission.is_over
-	refinery_button.text = "Build Refinery ($%d, %.0fs)\n+$%.2f/sec" % [cost, Balance.REFINERY_BUILD_TIME, Balance.REFINERY_RATE_PER_SEC]
+	var r_tier: int = GameState.get_refinery_tier()
+	var r_rate: float = GameState.get_refinery_rate_per_sec()
+	var t_tag: String = (" [T%d]" % r_tier) if r_tier > 1 else ""
+	refinery_button.text = "Build Refinery ($%d, %.0fs)\n+$%.2f/sec%s" % [cost, Balance.REFINERY_BUILD_TIME, r_rate, t_tag]
 	refinery_button.disabled = not affordable
 	refinery_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
 
@@ -2557,6 +2686,12 @@ func _on_refinery_button_pressed() -> void:
 		_refresh_all()
 
 
+func _on_refinery_tech_pressed() -> void:
+	if economy_ref != null:
+		economy_ref.start_upgrade_refinery_tier()
+		_refresh_all()
+
+
 func _build_tower(tower_type: String) -> void:
 	if map_ref == null:
 		return
@@ -2601,13 +2736,21 @@ func _on_sell_pressed() -> void:
 func _on_combine_button_pressed() -> void:
 	if _selected_tower == null or not is_instance_valid(_selected_tower) or map_ref == null:
 		return
+	if Balance.is_combo_tower(_selected_tower.tower_type):
+		if _selected_tower.start_apex_evolution():
+			_refresh_all()
+		return
 	if map_ref.combine_source_tower == _selected_tower:
 		map_ref.cancel_combine_partner_pick()
 		_refresh_selection_panel()
 		return
 	var partner_count: int = map_ref.start_combine_partner_pick(_selected_tower)
 	if partner_count == 0:
-		GameState.event_logged.emit("Drag any shop tower onto this tower OR build another base tower to combine!")
+		var rks: int = _selected_tower.get_total_upgrade_ranks()
+		if not GameState.is_sandbox_mode and rks < Balance.COMBINE_MIN_TOTAL_RANKS:
+			GameState.event_logged.emit("Upgrade base towers to 3+ combined ranks (%d/3) before fusing!" % rks)
+		else:
+			GameState.event_logged.emit("Drag any shop tower onto this tower OR build another base tower to combine!")
 	else:
 		GameState.event_logged.emit("Click a highlighted base tower on the map to combine (%d valid)." % partner_count)
 	_refresh_selection_panel()
@@ -2655,7 +2798,7 @@ func _refresh_sandbox_ui() -> void:
 		sandbox_wave_label.text = "Wave: %d" % _sandbox_selected_wave
 	if sandbox_qty_button != null:
 		sandbox_qty_button.text = "Spawn Qty: x%d" % _sandbox_spawn_qty
-	sandbox_panel.size = Vector2(292.0, 38.0 if _sandbox_collapsed else 258.0)
+	sandbox_panel.size = Vector2(304.0, 38.0 if _sandbox_collapsed else 290.0)
 
 
 func _on_enemy_inspected(enemy: EnemyUnit) -> void:
@@ -2676,13 +2819,34 @@ func _refresh_enemy_inspector() -> void:
 	var ename: String = str(cfg.get("name", _inspected_enemy.enemy_type.capitalize()))
 	var armour: String = _inspected_enemy.armour_label
 	var best_tip: String = "Laser 150%"
-	if armour.contains("Armored") and armour.contains("Reflective"):
+	if _inspected_enemy.enemy_type == "stalker":
+		best_tip = "Time/Laser/Rng Lv2+ reveals Cloak!"
+	elif _inspected_enemy.enemy_type == "mender":
+		best_tip = "Decay/Burn/Shred stops 6%/s Regen!"
+	elif _inspected_enemy.enemy_type == "carrier":
+		best_tip = "Piercing 150% + AoE for 6-unit Split!"
+	elif _inspected_enemy.enemy_type == "conduit":
+		best_tip = "SNIPE FIRST! Shields allies -35% dmg"
+	elif armour.contains("Armored") and armour.contains("Reflective"):
 		best_tip = "Piercing 180% | Time 150%"
 	elif armour.contains("Reflective"):
 		best_tip = "Time 150% | Avoid Laser"
 	elif armour.contains("Armored"):
 		best_tip = "Piercing 150%"
 	var statuses: PackedStringArray = []
+	if _inspected_enemy.is_effectively_cloaked():
+		statuses.append("CLOAKED")
+	elif _inspected_enemy.is_cloaked_type:
+		statuses.append("Revealed")
+	if _inspected_enemy.regen_pct_per_sec > 0.0:
+		if _inspected_enemy.regen_suppressed_timer > 0.0 or _inspected_enemy.decay_ticks_remaining > 0 or _inspected_enemy.armor_shred_stacks > 0:
+			statuses.append("Regen Blocked")
+		else:
+			statuses.append("Regen +6%/s")
+	if _inspected_enemy.is_shielded_by_conduit():
+		statuses.append("Aegis -35% Dmg")
+	if _inspected_enemy.stun_remaining > 0.0:
+		statuses.append("STUNNED")
 	if _inspected_enemy.slow_remaining > 0.0 and _inspected_enemy.slow_pct > 0.0:
 		statuses.append("Slow %d%%" % int(round(_inspected_enemy.slow_pct * 100.0)))
 	if _inspected_enemy.decay_ticks_remaining > 0 and _inspected_enemy.decay_base_pct > 0.0:
@@ -2946,7 +3110,7 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 	var shop_btn_h: float = 88.0 if is_port else (38.0 if is_wide else 28.0)
 	var shop_btn_fs: int = 22 if is_port else (13 if is_wide else 11)
 	var shop_lbl_fs: int = 21 if is_port else (12 if is_wide else 11)
-	for sb in [build_blaster_button, build_mortar_button, build_laser_button, build_slow_button, build_railgun_button, build_annihilator_button, build_recipes_button, target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button, combine_button, sell_button, manip_upgrade_button]:
+	for sb in [build_blaster_button, build_mortar_button, build_laser_button, build_slow_button, build_railgun_button, build_annihilator_button, build_recipes_button, target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button, combine_button, sell_button, manip_upgrade_button, refinery_tech_button]:
 		if sb != null:
 			sb.custom_minimum_size.y = shop_btn_h
 			sb.add_theme_font_size_override("font_size", shop_btn_fs)
@@ -3334,8 +3498,8 @@ func _check_teaching_prompt() -> void:
 		mood = "smirk"
 	elif w == 2 and st == WaveManager.State.BUILD:
 		beat_id = "w2_build"
-		title_txt = "VEX (3/8)  —  COMBINE & UPGRADE"
-		body_txt = "Nice work! Pro move: drag a second tower RIGHT ON TOP of an existing tower (or tap a tower -> Combine) to fuse any 2 base towers into 21 wild hybrids. Or upgrade Damage, Speed, and Range!"
+		title_txt = "VEX (3/8)  —  UPGRADE, FUSE & APEX!"
+		body_txt = "Nice work! Upgrade your base towers first — once 2 towers share 3+ upgrade ranks, FUSE them into 1 of 21 powerhouse Combos, then save up for game-changing Tier-4 Perks & Tier-5 APEX OVERDRIVE!"
 		mood = "excited"
 	elif w == 2 and st == WaveManager.State.SPAWNING:
 		beat_id = "w2_combat"
@@ -3354,8 +3518,8 @@ func _check_teaching_prompt() -> void:
 		mood = "smirk"
 	elif w == 5 and st == WaveManager.State.BUILD:
 		beat_id = "w5_build"
-		title_txt = "VEX (7/8)  —  MONEY & META LAB"
-		body_txt = "Feeling rich? Refineries ($250) print passive cash during waves, and Meta-Research earned from kills persists FOREVER — spend it in Levels / Lab between missions!"
+		title_txt = "VEX (7/8)  —  REFINERY TECH & META LAB"
+		body_txt = "Want to afford those $4k–$8k Apex Overdrives? Build a Refinery ($250), then upgrade Refinery Tech in the right panel: Chrono-Plant -> Temporal Bank (10% wave interest!) -> Singularity Mint!"
 		mood = "proud"
 	elif w == 6 and st == WaveManager.State.BUILD:
 		beat_id = "w6_build"

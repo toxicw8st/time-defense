@@ -103,6 +103,7 @@ var pending_build_type: String = ""
 var pad_occupancy: Array[TowerUnit] = []
 var placed_towers: Array[TowerUnit] = []
 var floating_texts: Array[Dictionary] = []
+var apex_shockwaves: Array[Dictionary] = []
 var economy_ref: Node = null
 var extra_left_margin: float = 0.0
 var extra_right_margin: float = 0.0
@@ -367,11 +368,18 @@ func evaluate_drop_position(local_pos: Vector2, incoming_tower_type: String = ""
 		if target_t != null and target_t.can_combine():
 			var combo_key: String = Balance.get_combo_key(target_t.tower_type, eff_in_type)
 			if Balance.TOWERS.has(combo_key):
+				var cur_ranks: int = target_t.get_total_upgrade_ranks()
+				var meets_ranks: bool = GameState.is_sandbox_mode or cur_ranks >= Balance.COMBINE_MIN_TOTAL_RANKS
 				var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(target_t.tower_type, target_t.levels, eff_in_type, {}, combo_key)
 				var total_cost: int = int(Balance.TOWERS[eff_in_type]["cost"]) + Balance.get_merge_surcharge(target_t.tower_type, eff_in_type) + upg_xfer
 				var can_pay: bool = GameState.is_sandbox_mode or GameState.mission.economy["money"] >= total_cost
+				var rsn: String = "COMBINE -> %s ($%d)" % [str(Balance.TOWERS[combo_key]["name"]), total_cost]
+				if not meets_ranks:
+					rsn = "NEED %d+ UPGRADE RANKS (%d/%d)" % [Balance.COMBINE_MIN_TOTAL_RANKS, cur_ranks, Balance.COMBINE_MIN_TOTAL_RANKS]
+				elif not can_pay:
+					rsn = "NEED $%d TO COMBINE" % total_cost
 				return {
-					"valid": can_pay,
+					"valid": meets_ranks and can_pay,
 					"mode": "combine",
 					"pos": target_t.position,
 					"zone_idx": find_zone_for_point(target_t.position, ZONE_SNAP_MARGIN),
@@ -380,7 +388,7 @@ func evaluate_drop_position(local_pos: Vector2, incoming_tower_type: String = ""
 					"merge_target": target_t,
 					"combo_type": combo_key,
 					"merge_cost": total_cost,
-					"reason": ("COMBINE -> %s ($%d)" % [str(Balance.TOWERS[combo_key]["name"]), total_cost]) if can_pay else ("NEED $%d TO COMBINE" % total_cost),
+					"reason": rsn,
 				}
 
 	var z_idx: int = find_zone_for_point(local_pos, ZONE_SNAP_MARGIN)
@@ -537,14 +545,25 @@ func set_pending_build_type(tower_type: String) -> void:
 	queue_redraw()
 
 
-func show_refinery_tick_floaters(owned_count: int) -> void:
+func show_refinery_tick_floaters(owned_count: int, per_tick: int = Balance.REFINERY_INCOME_PER_TICK) -> void:
 	for i in range(owned_count):
 		var col: int = i % 2
 		var row: int = i / 2
 		var rx: float = REFINERY_ANNEX_RECT.position.x + 24.0 + float(col) * 56.0
 		var ry: float = REFINERY_ANNEX_RECT.position.y + 32.0 + float(row) * 44.0
 		if ry <= REFINERY_ANNEX_RECT.end.y:
-			spawn_floater(Vector2(rx, ry), "+%d$" % Balance.REFINERY_INCOME_PER_TICK, Color(0.55, 0.95, 0.65))
+			spawn_floater(Vector2(rx, ry), "+%d$" % per_tick, Color(0.55, 0.95, 0.65))
+
+
+func spawn_apex_shockwave(local_pos: Vector2, col: Color, max_rad: float = 92.0, duration: float = 0.55) -> void:
+	apex_shockwaves.append({
+		"pos": local_pos,
+		"color": col,
+		"max_rad": max_rad,
+		"timer": duration,
+		"max_timer": duration,
+	})
+	queue_redraw()
 
 
 func trigger_screen_shake(duration: float = 0.25, intensity: float = 3.5) -> void:
@@ -711,6 +730,12 @@ func _process(delta: float) -> void:
 			floating_texts[i]["pos"] += Vector2(0.0, -24.0 * delta)
 			if floating_texts[i]["timer"] <= 0.0:
 				floating_texts.remove_at(i)
+
+	if not apex_shockwaves.is_empty():
+		for i in range(apex_shockwaves.size() - 1, -1, -1):
+			apex_shockwaves[i]["timer"] -= delta
+			if apex_shockwaves[i]["timer"] <= 0.0:
+				apex_shockwaves.remove_at(i)
 
 	queue_redraw()
 
@@ -1003,11 +1028,14 @@ func start_combine_partner_pick(source_tower: TowerUnit) -> int:
 	combine_source_tower = source_tower
 	pending_build_type = ""
 	var count: int = 0
+	var src_ranks: int = source_tower.get_total_upgrade_ranks()
 	for t in get_all_towers():
 		if t != source_tower and t.can_combine():
-			t.is_combine_highlighted = true
-			t.queue_redraw()
-			count += 1
+			var ok_ranks: bool = GameState.is_sandbox_mode or (src_ranks + t.get_total_upgrade_ranks() >= Balance.COMBINE_MIN_TOTAL_RANKS)
+			if ok_ranks:
+				t.is_combine_highlighted = true
+				t.queue_redraw()
+				count += 1
 	queue_redraw()
 	return count
 
@@ -1022,6 +1050,10 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	if target_tower == null or not is_instance_valid(target_tower) or not target_tower.can_combine():
 		return null
 	if not Balance.BASE_TOWER_KEYS.has(shop_type):
+		return null
+	var cur_ranks: int = target_tower.get_total_upgrade_ranks()
+	if not GameState.is_sandbox_mode and cur_ranks < Balance.COMBINE_MIN_TOTAL_RANKS:
+		spawn_floater(target_tower.position + Vector2(-58.0, -30.0), "NEED %d+ UPGRADE RANKS (%d/%d)!" % [Balance.COMBINE_MIN_TOTAL_RANKS, cur_ranks, Balance.COMBINE_MIN_TOTAL_RANKS], Color(1.0, 0.62, 0.32))
 		return null
 	var combo_key: String = Balance.get_combo_key(target_tower.tower_type, shop_type)
 	if not Balance.TOWERS.has(combo_key):
@@ -1039,6 +1071,7 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	select_tower_unit(target_tower)
 	if SfxManager != null:
 		SfxManager.play("combine")
+	spawn_apex_shockwave(target_tower.position, Color(1.0, 0.86, 0.34), 84.0, 0.50)
 	spawn_floater(target_tower.position + Vector2(-46.0, -32.0), "COMBINED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
 	queue_redraw()
 	return target_tower
@@ -1050,6 +1083,10 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 	if not is_instance_valid(tower_a) or not is_instance_valid(tower_b):
 		return null
 	if not tower_a.can_combine() or not tower_b.can_combine():
+		return null
+	var combined_ranks: int = tower_a.get_total_upgrade_ranks() + tower_b.get_total_upgrade_ranks()
+	if not GameState.is_sandbox_mode and combined_ranks < Balance.COMBINE_MIN_TOTAL_RANKS:
+		spawn_floater(tower_a.position + Vector2(-60.0, -30.0), "NEED %d+ COMBINED RANKS (%d/%d)!" % [Balance.COMBINE_MIN_TOTAL_RANKS, combined_ranks, Balance.COMBINE_MIN_TOTAL_RANKS], Color(1.0, 0.62, 0.32))
 		return null
 	var combo_key: String = Balance.get_combo_key(tower_a.tower_type, tower_b.tower_type)
 	if not Balance.TOWERS.has(combo_key):
@@ -1081,6 +1118,7 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 	select_tower_unit(tower_a)
 	if SfxManager != null:
 		SfxManager.play("combine")
+	spawn_apex_shockwave(tower_a.position, Color(1.0, 0.86, 0.34), 84.0, 0.50)
 	spawn_floater(tower_a.position + Vector2(-46.0, -32.0), "MERGED: %s!" % str(Balance.TOWERS[combo_key]["name"]), Color(1.0, 0.88, 0.35))
 	queue_redraw()
 	return tower_a
@@ -1146,6 +1184,7 @@ func _on_mission_reset() -> void:
 	clear_all_towers()
 	clear_all_projectiles()
 	floating_texts.clear()
+	apex_shockwaves.clear()
 	leak_flash_timer = 0.0
 	hive_beam_timer = 0.0
 	surge_explosion_timer = 0.0
@@ -1231,11 +1270,21 @@ func spawn_projectile() -> ProjectileEffect:
 func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
 	var enemy: EnemyUnit = enemy_scene.instantiate()
 	enemies_container.add_child(enemy)
-	enemy.setup(next_enemy_id, enemy_type, wave_num, enemy_path.curve)
+	enemy.setup(next_enemy_id, enemy_type, wave_num, enemy_path.curve, self)
 	next_enemy_id += 1
 	enemy.leaked.connect(_on_unit_leaked)
 	enemy.died.connect(_on_unit_died)
 	return enemy
+
+
+func spawn_enemy_at_distance(enemy_type: String, wave_num: int, dist: float, bounty_mult: float = 0.5) -> EnemyUnit:
+	var e: EnemyUnit = spawn_enemy(enemy_type, wave_num)
+	e.is_split_child = true
+	e.money_on_kill = maxi(1, int(round(float(e.money_on_kill) * bounty_mult)))
+	e.research_on_kill = 0
+	e.distance_along_path = clampf(dist, 0.0, maxf(0.0, e.path_length - 6.0))
+	e._sync_transform_to_path()
+	return e
 
 
 func sandbox_spawn_enemy(enemy_type: String, wave_num: int, count: int = 1) -> Array[EnemyUnit]:
@@ -1277,6 +1326,31 @@ func _on_unit_died(enemy: EnemyUnit) -> void:
 		AnalyticsManager.record_enemy_progress(enemy.enemy_type, enemy.get_path_progress_pct(), false)
 	var is_replay: bool = GameState.mission.replay_count_this_wave > 0
 	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position, is_replay)
+
+	# Brood Carrier nested splitter (BTD5 MOAB-style death burst!)
+	if enemy.enemy_type == "carrier" and enemy_path != null and enemy_path.curve != null:
+		var children: Array = Balance.ENEMIES["carrier"].get("split_children", [])
+		for ci in range(children.size()):
+			var offset_d: float = (float(ci) - float(children.size() - 1) * 0.5) * 8.5
+			spawn_enemy_at_distance(str(children[ci]), enemy.spawn_wave, enemy.distance_along_path + offset_d, 0.5)
+		spawn_apex_shockwave(enemy.position, Color(1.0, 0.58, 0.22), 54.0, 0.38)
+		spawn_floater(enemy.position + Vector2(-34.0, -24.0), "BROOD SPLIT!", Color(1.0, 0.62, 0.25))
+
+	# Tier-5 Apex Slag Nova death detonation (when marked by Solaris / Helios / Slag-Nova Crucible)
+	if enemy._slag_nova_dmg > 0.0:
+		var nova_r: float = 82.0
+		var nova_dmg: float = enemy._slag_nova_dmg
+		var src_node: Node = null
+		if enemy._slag_nova_source_ref != null:
+			var ref_obj = enemy._slag_nova_source_ref.get_ref()
+			if ref_obj != null and is_instance_valid(ref_obj):
+				src_node = ref_obj
+		spawn_apex_shockwave(enemy.position, Color(1.0, 0.48, 0.18), nova_r, 0.42)
+		for other in get_active_enemies():
+			if other == enemy or not is_instance_valid(other) or not other.is_alive():
+				continue
+			if other.position.distance_to(enemy.position) <= nova_r:
+				other.take_damage(nova_dmg, "Normal", src_node)
 
 
 func get_active_enemies() -> Array[EnemyUnit]:
@@ -1474,12 +1548,16 @@ func _draw() -> void:
 	# Sector watermark in bottom-right corner
 	draw_string(font, Vector2(695.0, 472.0), "%s (%s)" % [str(lvl_cfg["name"]), str(lvl_cfg["zone_rule"])], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.52))
 
-	# 2) Refinery Annex industrial zone (bottom-left)
+	# 2) Refinery Annex industrial zone (bottom-left) + Refinery Tech Tier indicator
+	var r_tier: int = GameState.get_refinery_tier()
+	var r_tier_col := Color(0.32, 0.62, 0.54) if r_tier == 1 else (Color(0.35, 0.88, 0.72) if r_tier == 2 else (Color(1.0, 0.82, 0.32) if r_tier == 3 else Color(0.55, 0.96, 1.0)))
 	draw_rect(Rect2(REFINERY_ANNEX_RECT.position + Vector2(2, 3), REFINERY_ANNEX_RECT.size), Color(0.0, 0.0, 0.0, 0.35))
 	draw_rect(REFINERY_ANNEX_RECT, Color(0.09, 0.13, 0.17))
 	draw_rect(Rect2(REFINERY_ANNEX_RECT.position, Vector2(REFINERY_ANNEX_RECT.size.x, 24.0)), Color(0.13, 0.22, 0.22))
-	draw_rect(REFINERY_ANNEX_RECT, Color(0.32, 0.62, 0.54), false, 1.8)
-	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(9, 16), "REFINERY ANNEX", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.68, 0.96, 0.86))
+	draw_rect(REFINERY_ANNEX_RECT, r_tier_col, false, 2.0 if r_tier >= 3 else 1.8)
+	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(6, 16), "REFINERY T%d" % r_tier, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, r_tier_col.lightened(0.35))
+	var r_rate_str: String = "$%.2f/s" % GameState.get_refinery_rate_per_sec()
+	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(84, 16), r_rate_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.95, 0.92, 0.55))
 
 	var ref_count: int = GameState.mission.economy.get("refineries_owned", 0)
 	for i in range(ref_count):
@@ -1680,6 +1758,16 @@ func _draw() -> void:
 	# 8b) Time Ability Explosion / Detonation Animations (Pause Stasis Blast, Haste Overdrive Surge, Rewind Vortex)
 	if ability_fx_timer > 0.0:
 		_draw_ability_fx()
+
+	# 8c) Combine / Tier-4 / Tier-5 Apex Overdrive & Slag Nova Shockwave Rings
+	for sw in apex_shockwaves:
+		var prog: float = clampf(1.0 - (float(sw["timer"]) / maxf(0.01, float(sw["max_timer"]))), 0.0, 1.0)
+		var alpha: float = clampf(1.0 - prog, 0.0, 1.0)
+		var rad: float = lerpf(12.0, float(sw["max_rad"]), prog)
+		var col: Color = sw["color"]
+		draw_circle(sw["pos"], rad * 0.65, Color(col.r, col.g, col.b, alpha * 0.18))
+		draw_arc(sw["pos"], rad, 0.0, TAU, 36, Color(col.r, col.g, col.b, alpha * 0.92), 3.2 * alpha + 1.0)
+		draw_arc(sw["pos"], rad * 0.72, 0.0, TAU, 28, Color(1.0, 0.98, 0.85, alpha * 0.75), 1.6)
 
 	# 9) Global Time Power Battlefield Border FX (Pause Stasis Frost / Haste Overclock)
 	if GameState.is_enemies_frozen:

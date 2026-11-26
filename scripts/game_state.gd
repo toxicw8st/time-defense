@@ -43,6 +43,7 @@ class MissionState:
 		"money": Balance.STARTING_MONEY,
 		"research": Balance.STARTING_RESEARCH,
 		"refineries_owned": Balance.STARTING_REFINERIES,
+		"refinery_tier": 1,
 	}
 	var owned_research: Dictionary = {}
 	var cleared_waves: Dictionary = {}
@@ -432,10 +433,30 @@ func get_enemy_speed_multiplier() -> float:
 func get_enemy_bounty_multiplier() -> float:
 	var diff_mult: float = float(get_difficulty_cfg().get("bounty_mult", 1.0))
 	var lvl_mult: float = 1.0 + float(get_level_cfg().get("bounty_bonus", 0.0))
-	# Preserve exact W1-20 bounties; smoothly taper W21-45 kill bounties (down to 0.55x) to curb late-game cash bloat
+	# BTD5-style kill-bounty brackets: exact 1.0x W1-15, then steep drop W16+ so Refinery Tech / Banks fund Apex T5!
 	var wave_n: int = mission.wave_number if mission != null else 1
-	var late_taper: float = maxf(0.55, 1.0 - 0.018 * float(maxi(0, wave_n - 20)))
-	return diff_mult * lvl_mult * late_taper
+	var bracket_mult: float = 1.0
+	if wave_n >= 36:
+		bracket_mult = 0.28
+	elif wave_n >= 26:
+		bracket_mult = 0.45
+	elif wave_n >= 16:
+		bracket_mult = 0.70
+	return diff_mult * lvl_mult * bracket_mult
+
+
+func get_refinery_tier() -> int:
+	if mission == null:
+		return 1
+	return clampi(int(mission.economy.get("refinery_tier", 1)), 1, Balance.REFINERY_MAX_TIER)
+
+
+func get_refinery_tier_cfg() -> Dictionary:
+	return Balance.get_refinery_tier_cfg(get_refinery_tier())
+
+
+func get_refinery_rate_per_sec() -> float:
+	return float(get_refinery_tier_cfg().get("rate_per_sec", Balance.REFINERY_RATE_PER_SEC))
 
 
 func get_level_tower_range_multiplier() -> float:

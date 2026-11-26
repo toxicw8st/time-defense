@@ -25,8 +25,9 @@ func _ready() -> void:
 	await _test_g_combos_bubble_and_sandbox()
 	await _test_h_rebalance_and_pass2_polish()
 	await _test_i_analytics_telemetry_and_ui()
+	await _test_j_v2_btd5_evolution()
 
-	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok rebalance=ok pass2=ok analytics=ok)")
+	print("ALL_OVERHAUL_SELF_TESTS_PASSED (a=ok b=ok c=ok d=ok e=ok f=ok package=ok combos=ok bubble=ok sandbox=ok rebalance=ok pass2=ok analytics=ok v2_btd5=ok)")
 	get_tree().quit(0)
 
 
@@ -1017,32 +1018,38 @@ func _test_g_combos_bubble_and_sandbox() -> void:
 	map.clear_all_enemies()
 	map.clear_all_projectiles()
 
-	# 3) Verify Drag-to-Combine (shop onto built base tower) and Two-Tower Merge
+	# 3) Verify Earned Combine Gate (3+ upgrade ranks required outside Sandbox), Drag-to-Combine & Two-Tower Merge
 	var b1: TowerUnit = map.build_tower_on_pad(4, "blaster") # P5 (380, 157)
 	b1.current_job = null
 	b1.is_built = true
 	var p5_screen: Vector2 = map.position + b1.position * map.scale
+	var blocked_eval: Dictionary = map.evaluate_drop_position(b1.position, "laser")
+	assert(not bool(blocked_eval["valid"]) and str(blocked_eval.get("reason", "")).contains("UPGRADE RANKS"), "Lv0 base tower MUST NOT combine outside Sandbox before 3+ upgrade ranks")
+	b1.levels["damage"] = 2
+	b1.levels["fire_rate"] = 1 # 3 total ranks -> earned combine unlocked!
 	var drop_eval: Dictionary = map.evaluate_drop_position(b1.position, "laser")
 	assert(bool(drop_eval["valid"]) and str(drop_eval.get("mode", "")) == "combine" and str(drop_eval.get("combo_type", "")) == "blaster+laser")
 	var combined1: TowerUnit = hud.drag_and_drop_tower("laser", p5_screen)
-	assert(combined1 == b1 and combined1.tower_type == "blaster+laser", "Dropping shop Laser onto Blaster must combine into blaster+laser")
+	assert(combined1 == b1 and combined1.tower_type == "blaster+laser", "Dropping shop Laser onto Lv3 Blaster must combine into blaster+laser")
 	combined1.current_job = null
 	combined1.is_built = true
 	assert(not combined1.can_combine(), "Already combined towers cannot merge a third time")
 
-	# Two-tower merge on map (mortar + annihilator -> mortar+annihilator) keeping higher upgrade level
+	# Two-tower merge on map (mortar + annihilator -> mortar+annihilator) requiring 3+ combined ranks & keeping higher upgrade level
 	var m_t: TowerUnit = map.build_tower_on_pad(5, "mortar")
 	var a_t: TowerUnit = map.build_tower_on_pad(6, "annihilator")
 	m_t.current_job = null
 	m_t.is_built = true
 	a_t.current_job = null
 	a_t.is_built = true
-	a_t.levels["damage"] = 2
+	a_t.levels["damage"] = 2 # Only 2 combined ranks -> blocked!
+	assert(map.combine_two_towers(m_t, a_t) == null, "Two-tower combine with only 2 combined ranks MUST be blocked outside Sandbox")
+	m_t.levels["range"] = 1 # Now 2 + 1 = 3 combined ranks!
 	var found_partner_off: TowerUnit = map._find_combinable_partner_at(a_t.position + Vector2(40.0, 0.0), m_t, 46.0)
 	assert(found_partner_off == a_t, "Generous 46px Combine hitbox must find built partner at +40px thumb offset")
 	var merged: TowerUnit = map.combine_two_towers(m_t, a_t)
 	assert(merged == m_t and merged.tower_type == "mortar+annihilator", "Two-tower combine must form mortar+annihilator")
-	assert(int(merged.levels["damage"]) == 2, "Merged tower must inherit higher upgrade rank")
+	assert(int(merged.levels["damage"]) == 2 and int(merged.levels["range"]) == 1, "Merged tower must inherit higher upgrade ranks")
 
 	# 4) Verify Sandbox Mode on any level (e.g. Level 4): infinite money, instant build, Wave 1..45 launch, individual enemy spawns, no game-over on leaks
 	hud._select_level(4)
@@ -1275,7 +1282,8 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 	b_t.is_built = true
 	assert(b_t.start_upgrade("damage"))
 	b_t.current_job = null
-	b_t.levels["damage"] = 1
+	b_t.levels["damage"] = 2
+	b_t.levels["fire_rate"] = 1 # 3+ ranks to unlock earned combine
 	var merged: TowerUnit = map.combine_tower_with_shop(b_t, "laser")
 	assert(merged != null and merged.tower_type == "blaster+laser")
 	merged.current_job = null
@@ -1386,3 +1394,198 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 	remove_child(inst)
 	inst.queue_free()
 	print("CHECK_ANALYTICS_TELEMETRY_AND_UI_PASS runs=1 combo_tracked=ok sandbox_filter=ok json_io=ok ui_bounds=ok")
+
+
+func _test_j_v2_btd5_evolution() -> void:
+	# 1) Verify all 21 combinations have unique Tier-4 Milestone Perks & Tier-5 APEX OVERDRIVE definitions
+	var base_keys: Array[String] = Balance.BASE_TOWER_KEYS
+	var evo_count: int = 0
+	for i in range(base_keys.size()):
+		for j in range(i, base_keys.size()):
+			var ck: String = Balance.get_combo_key(base_keys[i], base_keys[j])
+			var t4: Dictionary = Balance.get_combo_evolution_cfg(ck, 1)
+			var t5: Dictionary = Balance.get_combo_evolution_cfg(ck, 2)
+			assert(not t4.is_empty() and int(t4["cost"]) >= 1200 and str(t4["name"]) != "", "Missing/invalid T4 evolution for %s" % ck)
+			assert(not t5.is_empty() and int(t5["cost"]) >= 3600 and str(t5["name"]) != "", "Missing/invalid T5 APEX evolution for %s" % ck)
+			assert(Balance.get_merge_surcharge(base_keys[i], base_keys[j]) >= 145, "Merge fee for %s must be bumped to BTD5 milestone scale" % ck)
+			evo_count += 1
+	assert(evo_count == 21, "All 21 combinations must have T4 & T5 Apex evolutions")
+
+	# 2) Verify all 6 Signature Exam Waves (W15, 20, 23, 28, 35, 45) & 4 new enemies
+	for ek in ["stalker", "mender", "carrier", "conduit"]:
+		assert(Balance.ENEMIES.has(ek), "Missing v2.0 enemy: %s" % ek)
+	for ew in [15, 20, 23, 28, 35, 45]:
+		var wdef: Dictionary = WavesData.get_wave_def(ew)
+		assert(str(wdef.get("exam_title", "")) != "", "Wave %d must be a handcrafted Signature Exam Wave" % ew)
+		var sched: Array[Dictionary] = WavesData.build_spawn_schedule(ew)
+		assert(sched.size() >= 20, "Exam wave %d schedule too small" % ew)
+		var max_gap: float = 0.0
+		for si in range(1, sched.size()):
+			max_gap = maxf(max_gap, float(sched[si]["time"]) - float(sched[si - 1]["time"]))
+		assert(max_gap <= 15.0, "Exam wave %d must have smooth pacing (max_gap=%.2fs)" % [ew, max_gap])
+
+	# 3) Live combat verification of 4 new enemies, Tier-4/5 Apex Overdrive mechanics, Refinery Tech ladder & Economy Brackets
+	GameState.set_sandbox_mode(false)
+	GameState.difficulty_key = "standard"
+	GameState.reset_meta_progression()
+	GameState.prompts_muted = true
+	GameState.reset_mission()
+
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var inst: Node = main_scene.instantiate()
+	add_child(inst)
+	await get_tree().process_frame
+
+	var map: GameMap = inst.get_node("Map")
+	var wm: WaveManager = inst.get_node("WaveManager")
+	var econ: EconomyManager = inst.get_node("EconomyManager")
+	var hud: CanvasLayer = inst.get_node("HUD")
+	GameState.mission.economy["money"] = 60000
+
+	# 3a) Phase Stalker (Cloaked) vs Lv0 Blaster (blocked!) vs Range Lv2 Blaster (detects!) & Chrono Bubble reveal
+	var b_blind: TowerUnit = map.build_tower_on_pad(0, "blaster") # P1 (220, 32)
+	b_blind.current_job = null
+	b_blind.is_built = true
+	var stalker: EnemyUnit = map.spawn_enemy("stalker", 11)
+	stalker.advance_along_path(2.2) # inside P1's 108px range
+	assert(stalker.is_effectively_cloaked(), "Phase Stalker must spawn cloaked")
+	assert(b_blind._pick_target() == null, "Lv0 Blaster MUST NOT target cloaked Phase Stalker")
+	b_blind.levels["range"] = 2
+	assert(b_blind.can_detect_cloaked() and b_blind._pick_target() == stalker, "Range Lv2+ optics must detect cloaked Phase Stalker")
+	b_blind.levels["range"] = 0
+	stalker.reveal_cloak(4.0)
+	assert(not stalker.is_effectively_cloaked() and b_blind._pick_target() == stalker, "Revealed Phase Stalker must become targetable by all towers")
+	map.clear_all_enemies()
+	map.sell_tower(b_blind)
+
+	# 3b) Bio-Mender 6%/s regeneration + Decay/Shred suppression
+	var mender: EnemyUnit = map.spawn_enemy("mender", 13)
+	mender.hp = mender.max_hp * 0.5
+	var m_hp0: float = mender.hp
+	mender.step_status_effects(1.0)
+	assert(mender.hp > m_hp0 + 40.0, "Bio-Mender must regenerate ~6%% max HP/sec when unsuppressed (was %.1f -> %.1f)" % [m_hp0, mender.hp])
+	var m_hp1: float = mender.hp
+	mender.apply_armor_shred(3, 3.0)
+	mender.step_status_effects(1.0)
+	assert(mender.hp <= m_hp1 + 0.01, "Armor Shred / Decay must suppress Bio-Mender regeneration")
+	map.clear_all_enemies()
+
+	# 3c) Brood Carrier death split -> 2 Blitzers + 4 Rushers at exact path position
+	var carrier: EnemyUnit = map.spawn_enemy("carrier", 15)
+	carrier.distance_along_path = 240.0
+	carrier._sync_transform_to_path()
+	carrier.take_damage(99999.0, "Piercing")
+	var split_enemies: Array[EnemyUnit] = map.get_active_enemies()
+	assert(split_enemies.size() == 6, "Brood Carrier death must spawn 6 split children (2 Blitzers + 4 Rushers), got %d" % split_enemies.size())
+	var split_blitz: int = 0
+	var split_rush: int = 0
+	for se in split_enemies:
+		assert(se.is_split_child and absf(se.distance_along_path - 240.0) <= 35.0, "Split child must spawn near parent path position")
+		if se.enemy_type == "blitzer":
+			split_blitz += 1
+		elif se.enemy_type == "rusher":
+			split_rush += 1
+	assert(split_blitz == 2 and split_rush == 4, "Carrier must split into 2 Blitzers + 4 Rushers, got %d/%d" % [split_blitz, split_rush])
+	map.clear_all_enemies()
+
+	# 3d) Aegis Conduit 95px -35% Shield Aura + Tier-5 Omega Singularity Sovereign Apex Execute & Shield-Aura Bypass!
+	var conduit: EnemyUnit = map.spawn_enemy("conduit", 22)
+	var shielded_c: EnemyUnit = map.spawn_enemy("crawler", 22)
+	conduit.distance_along_path = 120.0
+	conduit._sync_transform_to_path()
+	shielded_c.distance_along_path = 140.0 # 20px away (<95px)
+	shielded_c._sync_transform_to_path()
+	assert(shielded_c.is_shielded_by_conduit(), "Ally within 95px of live Aegis Conduit must be shielded")
+	var dmg_shielded: float = shielded_c.take_damage(20.0, "Normal") # 20 * 1.0 * 0.65 = 13.0
+	assert(is_equal_approx(dmg_shielded, 13.0), "Aegis Conduit must mitigate ally damage by -35%% (expected 13.0, got %.2f)" % dmg_shielded)
+
+	var omega_t: TowerUnit = map.build_tower_on_pad(0, "railgun")
+	omega_t.current_job = null
+	omega_t.is_built = true
+	omega_t.transform_to_combo("railgun+annihilator", 0, {"damage": 2, "range": 1, "fire_rate": 0}, 0.0, true)
+	map.select_tower_unit(omega_t)
+	hud._refresh_all()
+	assert(hud.combine_button.visible and hud.combine_button.text.contains("T4"), "Selected Combo tower must show Tier-4 Evolution button")
+	assert(omega_t.start_apex_evolution())
+	omega_t.advance_tower(10.0) # not in wave yet -> pauses until wave; start wave!
+	GameState.is_wave_active = true
+	omega_t.advance_tower(10.0)
+	assert(omega_t.apex_tier == 1, "Tier-4 Evolution must complete during wave")
+	hud._refresh_all()
+	assert(hud.combine_button.text.contains("T5"), "Tier-4 tower must show Tier-5 APEX button")
+	assert(omega_t.start_apex_evolution())
+	omega_t.advance_tower(12.0)
+	assert(omega_t.apex_tier == 2, "Tier-5 APEX OVERDRIVE must complete")
+	hud._refresh_all()
+	assert(hud.combine_button.disabled and hud.combine_button.text.contains("MAX"), "Tier-5 APEX tower must show MAX badge")
+
+	# Omega T5 ignores Conduit Shield Aura AND executes Juggernaut < 12% HP!
+	shielded_c.hp = 50.0
+	var dmg_apex_bypass: float = shielded_c.take_damage(20.0, "Normal", omega_t)
+	assert(is_equal_approx(dmg_apex_bypass, 20.0), "Tier-5 Omega must bypass Conduit Shield Aura (expected 20.0, got %.2f)" % dmg_apex_bypass)
+	var exec_jugg: EnemyUnit = map.spawn_enemy("juggernaut", 25)
+	exec_jugg.hp = exec_jugg.max_hp * 0.11 # 11% HP -> below Omega's 12% execute threshold!
+	exec_jugg.take_damage(10.0, "Piercing", omega_t)
+	assert(exec_jugg.is_dead_or_leaked, "Tier-5 Omega Singularity Sovereign must EXECUTE boss below 12%% HP!")
+	map.clear_all_enemies()
+	map.sell_tower(omega_t)
+
+	# 3e) Tier-5 Stasis Singularity Pylon ("Temporal Vortex Engine") backward path pull!
+	var vortex_t: TowerUnit = map.build_tower_on_pad(0, "slow")
+	vortex_t.current_job = null
+	vortex_t.is_built = true
+	vortex_t.transform_to_combo("slow+slow", 0, {"damage": 3, "range": 0, "fire_rate": 0}, 0.0, true)
+	vortex_t.apex_tier = 2 # Tier-5 Temporal Vortex Engine!
+	var pull_e: EnemyUnit = map.spawn_enemy("crawler", 1)
+	pull_e.distance_along_path = 115.0 # (225, 75), right in front of P1 (220, 32)
+	pull_e._sync_transform_to_path()
+	vortex_t._fire_at(pull_e)
+	var dist_before_pull: float = pull_e.distance_along_path
+	# Freeze normal forward movement? No, even while moving slowly, 40%+18%=58% slow -> speed = 12 * 0.42 = 5.04 px/s, while pull = 13.0 px/s -> NET BACKWARD!
+	for _ps in range(10):
+		pull_e.advance_along_path(0.1)
+		for p in map.projectiles_container.get_children():
+			if p is ProjectileEffect:
+				p.advance_projectile(0.1)
+	assert(pull_e.distance_along_path < dist_before_pull, "Tier-5 Temporal Vortex Bubble must pull enemies BACKWARD along path (was %.1f -> %.1f)" % [dist_before_pull, pull_e.distance_along_path])
+	map.clear_all_enemies()
+	map.clear_all_projectiles()
+	map.sell_tower(vortex_t)
+
+	# 3f) 4-Tier Refinery Tech Ladder + Bank Compound Interest + BTD5 Kill-Bounty Brackets
+	assert(not econ.can_upgrade_refinery_tier(), "Refinery Tech T2 must require owning at least 1 Refinery outside Sandbox")
+	GameState.mission.economy["refineries_owned"] = 1
+	assert(econ.can_upgrade_refinery_tier() and econ.start_upgrade_refinery_tier())
+	econ.step_economy(10.0)
+	assert(GameState.get_refinery_tier() == 2, "Refinery Tech must upgrade to T2 Chrono-Plant")
+	var cash_t2_before: int = GameState.mission.economy["money"]
+	econ._tick_accum = 0.0
+	econ.step_economy(Balance.REFINERY_TICK_INTERVAL)
+	assert(GameState.mission.economy["money"] == cash_t2_before + 3, "T2 Chrono-Plant must yield +$3 per 4s tick (3x baseline)")
+
+	# Upgrade to T3 Temporal Bank & verify wave-clear compound interest + W11+ stipend!
+	assert(econ.start_upgrade_refinery_tier())
+	econ.step_economy(15.0)
+	assert(GameState.get_refinery_tier() == 3, "Refinery Tech must upgrade to T3 Temporal Bank")
+	GameState.mission.wave_number = 20
+	GameState.mission.economy["money"] = 4000
+	wm._lives_at_wave_start = GameState.mission.lives
+	wm._complete_current_wave()
+	# Expected: W20 stipend ($40 + 6*20 = $160) + Clean-wave 12% of W20 b$ + Bank 10% of $4,000 ($400) > $560!
+	assert(GameState.mission.economy["money"] >= 4560, "T3 Temporal Bank + W20 stipend must grant compound bank interest + clear bonus (got $%d)" % GameState.mission.economy["money"])
+
+	# Verify BTD5 kill-bounty brackets
+	GameState.mission.wave_number = 10
+	assert(is_equal_approx(GameState.get_enemy_bounty_multiplier(), 1.0))
+	GameState.mission.wave_number = 20
+	assert(is_equal_approx(GameState.get_enemy_bounty_multiplier(), 0.70))
+	GameState.mission.wave_number = 30
+	assert(is_equal_approx(GameState.get_enemy_bounty_multiplier(), 0.45))
+	GameState.mission.wave_number = 40
+	assert(is_equal_approx(GameState.get_enemy_bounty_multiplier(), 0.28))
+
+	GameState.is_wave_active = false
+	GameState.prompts_muted = false
+	remove_child(inst)
+	inst.queue_free()
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 apex_vortex=ok apex_execute=ok")

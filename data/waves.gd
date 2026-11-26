@@ -137,11 +137,98 @@ static func get_target_threat_s_dollars(wave_number: int, player_assets_spent: i
 	return maxi(20, int(round(base_s)))
 
 
+## Handcrafted BTD5-Style Signature Exam Waves (Waves 11+ ONLY — Waves 1-10 remain 100% locked!)
+const EXAM_WAVES: Dictionary = {
+	15: {
+		"wave": 15,
+		"exam_title": "EXAM: BROOD BREACH",
+		"note": "EXAM W15: Brood Breach — Splitters + Cloaked Stalkers",
+		"target_s_dollars": 480,
+		"tracks": [
+			{"type": "crawler", "count": 20, "interval": 1.20, "group_size": 0, "group_delay": 0.0, "start_delay": 0.0},
+			{"type": "rusher", "count": 24, "interval": 1.15, "group_size": 0, "group_delay": 0.0, "start_delay": 1.0},
+			{"type": "brute", "count": 6, "interval": 4.20, "group_size": 0, "group_delay": 0.0, "start_delay": 2.0},
+			{"type": "stalker", "count": 10, "interval": 2.60, "group_size": 0, "group_delay": 0.0, "start_delay": 3.5},
+			{"type": "carrier", "count": 3, "interval": 8.50, "group_size": 0, "group_delay": 0.0, "start_delay": 6.0},
+		],
+	},
+	20: {
+		"wave": 20,
+		"exam_title": "EXAM: PHANTOM DREADNOUGHTS",
+		"note": "EXAM BOSS W20: Phantom Dreadnoughts — Cloaked Flankers + Titans",
+		"target_s_dollars": 820,
+		"tracks": [
+			{"type": "rusher", "count": 20, "interval": 1.40, "group_size": 0, "group_delay": 0.0, "start_delay": 0.0},
+			{"type": "stalker", "count": 16, "interval": 1.90, "group_size": 0, "group_delay": 0.0, "start_delay": 1.5},
+			{"type": "mender", "count": 6, "interval": 4.50, "group_size": 0, "group_delay": 0.0, "start_delay": 3.0},
+			{"type": "juggernaut", "count": 4, "interval": 7.20, "group_size": 0, "group_delay": 0.0, "start_delay": 4.5},
+			{"type": "colossus", "count": 2, "interval": 12.0, "group_size": 0, "group_delay": 0.0, "start_delay": 7.5},
+		],
+	},
+	23: {
+		"wave": 23,
+		"exam_title": "EXAM: THE SWARM WALL",
+		"note": "EXAM W23: The Swarm Wall — 3 Relentless Burst Platoons (BTD5 R63 Homage)",
+		"target_s_dollars": 1120,
+		"tracks": [
+			# 3 high-density Rusher bursts of 22 each (0.18s apart, 5.2s breather between bursts!)
+			{"type": "rusher", "count": 66, "interval": 0.18, "group_size": 22, "group_delay": 5.2, "start_delay": 0.0},
+			{"type": "brute", "count": 18, "interval": 0.55, "group_size": 6, "group_delay": 5.2, "start_delay": 1.2},
+			{"type": "blitzer", "count": 12, "interval": 0.65, "group_size": 4, "group_delay": 5.2, "start_delay": 2.4},
+			{"type": "carrier", "count": 3, "interval": 9.20, "group_size": 0, "group_delay": 0.0, "start_delay": 3.0},
+		],
+	},
+	28: {
+		"wave": 28,
+		"exam_title": "EXAM: BIO-REGEN TIDE",
+		"note": "EXAM W28: Bio-Regen Tide — Massive Regenerators + Splitters (BTD5 R76 Homage)",
+		"target_s_dollars": 1750,
+		"tracks": [
+			{"type": "mender", "count": 24, "interval": 1.15, "group_size": 6, "group_delay": 3.2, "start_delay": 0.0},
+			{"type": "stalker", "count": 14, "interval": 2.10, "group_size": 0, "group_delay": 0.0, "start_delay": 2.0},
+			{"type": "carrier", "count": 4, "interval": 6.80, "group_size": 0, "group_delay": 0.0, "start_delay": 4.0},
+			{"type": "juggernaut", "count": 4, "interval": 7.00, "group_size": 0, "group_delay": 0.0, "start_delay": 5.5},
+			{"type": "colossus", "count": 2, "interval": 11.5, "group_size": 0, "group_delay": 0.0, "start_delay": 9.0},
+		],
+	},
+	35: {
+		"wave": 35,
+		"exam_title": "EXAM: AEGIS ARMADA",
+		"note": "EXAM W35: Aegis Armada — Shield Conduits Protecting Boss Columns",
+		"target_s_dollars": 3650,
+		"tracks": [
+			{"type": "conduit", "count": 6, "interval": 6.00, "group_size": 0, "group_delay": 0.0, "start_delay": 0.0},
+			{"type": "stalker", "count": 16, "interval": 2.00, "group_size": 0, "group_delay": 0.0, "start_delay": 1.0},
+			{"type": "mender", "count": 12, "interval": 2.80, "group_size": 0, "group_delay": 0.0, "start_delay": 2.0},
+			{"type": "carrier", "count": 6, "interval": 5.80, "group_size": 0, "group_delay": 0.0, "start_delay": 3.0},
+			{"type": "juggernaut", "count": 6, "interval": 5.80, "group_size": 0, "group_delay": 0.0, "start_delay": 4.0},
+			{"type": "colossus", "count": 6, "interval": 6.20, "group_size": 0, "group_delay": 0.0, "start_delay": 5.0},
+		],
+	},
+	45: {
+		"wave": 45,
+		"exam_title": "EXAM: OMEGA SOVEREIGN SIEGE",
+		"note": "FINAL EXAM W45: Omega Sovereign Siege — Ultimate Apex Overdrive Test",
+		"target_s_dollars": 9800,
+		"tracks": [
+			{"type": "conduit", "count": 8, "interval": 5.50, "group_size": 0, "group_delay": 0.0, "start_delay": 0.0},
+			{"type": "stalker", "count": 22, "interval": 1.90, "group_size": 0, "group_delay": 0.0, "start_delay": 1.0},
+			{"type": "mender", "count": 16, "interval": 2.60, "group_size": 0, "group_delay": 0.0, "start_delay": 1.5},
+			{"type": "carrier", "count": 8, "interval": 5.20, "group_size": 0, "group_delay": 0.0, "start_delay": 2.5},
+			{"type": "juggernaut", "count": 10, "interval": 4.50, "group_size": 0, "group_delay": 0.0, "start_delay": 3.5},
+			{"type": "colossus", "count": 14, "interval": 3.80, "group_size": 0, "group_delay": 0.0, "start_delay": 4.5},
+		],
+	},
+}
+
+
 ## Generates deterministic wave definitions for Waves 11..200 using s$ threat budget.
-## Juggernaut (s$40) joins the regular wave pool after Wave 10.
+## Juggernaut (s$40) joins W11+, Phase Stalker W11+, Bio-Mender W13+, Brood Carrier W15+, Colossus W16+, Aegis Conduit W22+.
 static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dictionary:
 	if wave_number >= 1 and wave_number <= WAVES.size():
 		return WAVES[wave_number - 1]
+	if EXAM_WAVES.has(wave_number):
+		return EXAM_WAVES[wave_number]
 
 	var w: int = maxi(1, wave_number)
 	var raw_budget_s: int = get_target_threat_s_dollars(w, player_assets_spent)
@@ -152,39 +239,52 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 	var is_boss_wave: bool = (w % 10 == 0)
 
 	var colossus_count: int = 0
+	var conduit_count: int = 0
+	var carrier_count: int = 0
 	var jugg_count: int = 0
 	var blitzer_count: int = 0
+	var mender_count: int = 0
+	var stalker_count: int = 0
 	var brute_count: int = 0
 	var rusher_count: int = 0
 	var crawler_count: int = 0
 
 	if w >= 16:
-		var col_share: float = 0.55 if is_boss_wave else 0.34
-		colossus_count = int(floor(float(remaining_s) * col_share / 95.0))
-		remaining_s -= colossus_count * 95
+		var col_share: float = 0.50 if is_boss_wave else 0.30
+		colossus_count = maxi(1, int(floor(float(remaining_s) * col_share / 95.0)))
+		remaining_s = maxi(0, remaining_s - colossus_count * 95)
+
+	if w >= 22:
+		conduit_count = clampi(int(floor(float(remaining_s) * 0.14 / 48.0)), 1, 10)
+		remaining_s = maxi(0, remaining_s - conduit_count * 48)
+
+	if w >= 15:
+		carrier_count = clampi(int(floor(float(remaining_s) * 0.16 / 55.0)), 1, 10)
+		remaining_s = maxi(0, remaining_s - carrier_count * 55)
 
 	if is_boss_wave:
-		# Boss waves (20, 30, 40...): heavy Juggernaut + Colossus assault
-		jugg_count = maxi(4, int(floor(float(remaining_s) * 0.55 / 40.0)))
+		# Boss waves (30, 40, 50...): heavy Juggernaut + Colossus + specialist escort assault
+		jugg_count = maxi(4, int(floor(float(remaining_s) * 0.45 / 40.0)))
 		remaining_s = maxi(0, remaining_s - jugg_count * 40)
-		blitzer_count = int(floor(float(remaining_s) * 0.35 / 26.0))
-		remaining_s -= blitzer_count * 26
-		brute_count = int(floor(float(remaining_s) * 0.45 / 8.0))
-		remaining_s -= brute_count * 8
-		rusher_count = int(floor(float(remaining_s) * 0.60 / 2.0))
-		remaining_s -= rusher_count * 2
-		crawler_count = maxi(0, remaining_s)
 	else:
-		# Regular waves 11+: at least 2 Juggernauts (grows smoothly with s$), Blitzers, Brutes, Rushers, Crawlers
-		jugg_count = maxi(2, int(floor(float(remaining_s) * 0.40 / 40.0)))
+		jugg_count = maxi(2, int(floor(float(remaining_s) * 0.34 / 40.0)))
 		remaining_s = maxi(0, remaining_s - jugg_count * 40)
-		blitzer_count = int(floor(float(remaining_s) * 0.35 / 26.0))
-		remaining_s -= blitzer_count * 26
-		brute_count = int(floor(float(remaining_s) * 0.45 / 8.0))
-		remaining_s -= brute_count * 8
-		rusher_count = int(floor(float(remaining_s) * 0.60 / 2.0))
-		remaining_s -= rusher_count * 2
-		crawler_count = maxi(0, remaining_s)
+
+	if w >= 13:
+		mender_count = clampi(int(floor(float(remaining_s) * 0.22 / 16.0)), 2, 18)
+		remaining_s = maxi(0, remaining_s - mender_count * 16)
+
+	if w >= 11:
+		stalker_count = clampi(int(floor(float(remaining_s) * 0.24 / 14.0)), 3, 20)
+		remaining_s = maxi(0, remaining_s - stalker_count * 14)
+
+	blitzer_count = int(floor(float(remaining_s) * 0.32 / 26.0))
+	remaining_s = maxi(0, remaining_s - blitzer_count * 26)
+	brute_count = int(floor(float(remaining_s) * 0.45 / 8.0))
+	remaining_s = maxi(0, remaining_s - brute_count * 8)
+	rusher_count = int(floor(float(remaining_s) * 0.60 / 2.0))
+	remaining_s = maxi(0, remaining_s - rusher_count * 2)
+	crawler_count = maxi(0, remaining_s)
 
 	# Steady, tighter continuous spawn stream so late-game bosses compress into real siege pressure
 	var spawn_span: float = clampf(34.0 + float(w - 10) * 1.15, 36.0, 82.0)
@@ -206,7 +306,25 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 			"interval": clampf(spawn_span / float(maxi(1, rusher_count)), 0.45, 1.80),
 			"group_size": 0,
 			"group_delay": 0.0,
-			"start_delay": 1.2,
+			"start_delay": 1.0,
+		})
+	if stalker_count > 0:
+		tracks.append({
+			"type": "stalker",
+			"count": stalker_count,
+			"interval": clampf(spawn_span / float(maxi(1, stalker_count)), 1.60, 5.50),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 1.8,
+		})
+	if mender_count > 0:
+		tracks.append({
+			"type": "mender",
+			"count": mender_count,
+			"interval": clampf(spawn_span / float(maxi(1, mender_count)), 2.00, 6.20),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 2.2,
 		})
 	if brute_count > 0:
 		tracks.append({
@@ -224,7 +342,25 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 			"interval": clampf(spawn_span / float(maxi(1, blitzer_count)), 2.80, 9.00),
 			"group_size": 0,
 			"group_delay": 0.0,
-			"start_delay": 4.0,
+			"start_delay": 3.5,
+		})
+	if conduit_count > 0:
+		tracks.append({
+			"type": "conduit",
+			"count": conduit_count,
+			"interval": clampf(spawn_span / float(maxi(1, conduit_count)), 4.50, 12.00),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 4.2,
+		})
+	if carrier_count > 0:
+		tracks.append({
+			"type": "carrier",
+			"count": carrier_count,
+			"interval": clampf(spawn_span / float(maxi(1, carrier_count)), 5.00, 12.50),
+			"group_size": 0,
+			"group_delay": 0.0,
+			"start_delay": 5.0,
 		})
 	if jugg_count > 0:
 		tracks.append({
@@ -239,10 +375,10 @@ static func get_wave_def(wave_number: int, player_assets_spent: int = -1) -> Dic
 		tracks.append({
 			"type": "colossus",
 			"count": colossus_count,
-			"interval": clampf(spawn_span / float(maxi(1, colossus_count)), 7.50, 16.00),
+			"interval": clampf(spawn_span / float(maxi(1, colossus_count)), 6.50, 15.00),
 			"group_size": 0,
 			"group_delay": 0.0,
-			"start_delay": 8.0,
+			"start_delay": 7.5,
 		})
 
 	return {

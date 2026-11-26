@@ -732,6 +732,13 @@ func record_refinery_started(cost: int, next_count: int) -> void:
 	_log_event("refinery", {"count": next_count, "cost": cost})
 
 
+func record_refinery_tier_upgraded(new_tier: int, cost: int) -> void:
+	if current_run.is_empty():
+		return
+	current_run["refinery_tier"] = new_tier
+	_log_event("refinery_tier", {"tier": new_tier, "cost": cost})
+
+
 func record_research_bought(node_key: String, new_rank: int, cost: int) -> void:
 	if current_run.is_empty():
 		return
