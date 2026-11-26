@@ -1652,8 +1652,25 @@ func _test_j_v2_btd5_evolution() -> void:
 	map.cancel_combine_partner_pick()
 	map.sell_tower(c_las)
 
+	# 3j) Verify interactive Battlefield Zoom (+ / - / Reset / Pan clamping / Zero pad overlap)
+	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
+	var base_sc: float = map.scale.x
+	var base_pos_snap: Vector2 = map.position
+	assert(hud.zoom_bar != null and hud.zoom_in_button != null and hud.zoom_reset_button != null, "Floating zoom controls bar must exist")
+	hud.zoom_in_button.pressed.emit()
+	assert(map.user_zoom >= 1.35 and map.scale.x > base_sc * 1.3, "Zoom In button must zoom battlefield (>1.35x), got zoom=%.2f scale=%.2f" % [map.user_zoom, map.scale.x])
+	assert(hud.zoom_reset_button.text == "1.4x", "Zoom pill must display live zoom factor, got %s" % hud.zoom_reset_button.text)
+	map.pan_by_screen_delta(Vector2(9999.0, 9999.0))
+	var vp_box: Rect2 = map.get_viewport_rect_screen()
+	assert(map.position.x <= vp_box.position.x + 1.0 and map.position.y <= vp_box.position.y + 1.0, "Zoomed map pan must clamp inside left/top viewport edge")
+	map.pan_by_screen_delta(Vector2(-9999.0, -9999.0))
+	assert(map.position.x + GameMap.MAP_WIDTH * map.scale.x >= vp_box.end.x - 1.0, "Zoomed map pan must clamp inside right viewport edge")
+	hud.zoom_reset_button.pressed.emit()
+	assert(is_equal_approx(map.user_zoom, 1.0) and map.position.distance_to(base_pos_snap) < 1.5, "Zoom Reset must cleanly restore 1.0x full overview")
+	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
+
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok" % sprite_count)
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok" % sprite_count)

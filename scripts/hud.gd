@@ -149,6 +149,18 @@ var end_analytics_button: Button = null
 var combine_button: Button = null
 var combine_partner_box: VBoxContainer = null
 var _last_combine_list_sig: String = ""
+var zoom_bar: PanelContainer = null
+var zoom_out_button: Button = null
+var zoom_reset_button: Button = null
+var zoom_in_button: Button = null
+var _active_touches: Dictionary = {}
+var _pinch_prev_dist: float = 0.0
+var _pinch_prev_mid: Vector2 = Vector2.ZERO
+var _pan_pointer_active: bool = false
+var _pan_is_middle: bool = false
+var _pan_start_pos: Vector2 = Vector2.ZERO
+var _pan_last_pos: Vector2 = Vector2.ZERO
+var _is_panning_map: bool = false
 var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
@@ -308,6 +320,7 @@ func _ready() -> void:
 	_build_research_buttons()
 	_build_start_menu()
 	_build_combine_and_sandbox_ui()
+	_build_zoom_controls_ui()
 	_setup_responsive_grids()
 	_build_guide_ui()
 	_setup_right_panel_buttons()
@@ -1425,6 +1438,110 @@ func _populate_recipes_list() -> void:
 		_scale_overlay_typography(recipes_list_box, true)
 
 
+func _build_zoom_controls_ui() -> void:
+	if zoom_bar != null:
+		return
+	zoom_bar = PanelContainer.new()
+	zoom_bar.name = "ZoomControlsBar"
+	zoom_bar.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.06, 0.10, 0.16, 0.92), Color(0.36, 0.72, 0.96), 8, 4.0, 3.0))
+	add_child(zoom_bar)
+	# Keep zoom pill tucked cleanly under overlays
+	if surge_banner != null and surge_banner.get_parent() == self:
+		move_child(zoom_bar, surge_banner.get_index())
+
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 4)
+	zoom_bar.add_child(hb)
+
+	zoom_out_button = Button.new()
+	zoom_out_button.name = "ZoomOutButton"
+	zoom_out_button.text = "−"
+	zoom_out_button.tooltip_text = "Zoom Out (-)"
+	zoom_out_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	zoom_out_button.pressed.connect(func() -> void: _step_map_zoom(-1))
+	UIIcons.apply_right_button_theme(zoom_out_button, Color(0.42, 0.78, 1.0))
+	hb.add_child(zoom_out_button)
+
+	zoom_reset_button = Button.new()
+	zoom_reset_button.name = "ZoomResetButton"
+	zoom_reset_button.text = "1.0x"
+	zoom_reset_button.tooltip_text = "Reset Battlefield Zoom (0) — Pinch or scroll wheel to zoom anytime!"
+	zoom_reset_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	zoom_reset_button.pressed.connect(_reset_map_zoom)
+	UIIcons.apply_right_button_theme(zoom_reset_button, Color(0.55, 0.85, 1.0))
+	hb.add_child(zoom_reset_button)
+
+	zoom_in_button = Button.new()
+	zoom_in_button.name = "ZoomInButton"
+	zoom_in_button.text = "+"
+	zoom_in_button.tooltip_text = "Zoom In (+) onto battlefield or selected tower"
+	zoom_in_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	zoom_in_button.pressed.connect(func() -> void: _step_map_zoom(1))
+	UIIcons.apply_right_button_theme(zoom_in_button, Color(0.38, 0.95, 0.85))
+	hb.add_child(zoom_in_button)
+
+
+func _step_map_zoom(direction: int) -> void:
+	if map_ref == null:
+		return
+	const STEPS: Array[float] = [1.0, 1.4, 1.85, 2.4]
+	var cur: float = map_ref.user_zoom
+	var target: float = cur
+	if direction > 0:
+		target = STEPS[STEPS.size() - 1]
+		for s in STEPS:
+			if s > cur + 0.06:
+				target = s
+				break
+	else:
+		target = STEPS[0]
+		for i in range(STEPS.size() - 1, -1, -1):
+			if STEPS[i] < cur - 0.06:
+				target = STEPS[i]
+				break
+	if direction > 0 and _selected_tower != null and is_instance_valid(_selected_tower):
+		map_ref.zoom_to_local_point(target, _selected_tower.position)
+	else:
+		map_ref.set_user_zoom(target)
+	_refresh_zoom_controls()
+
+
+func _reset_map_zoom() -> void:
+	if map_ref != null:
+		map_ref.reset_user_zoom()
+	_refresh_zoom_controls()
+
+
+func _refresh_zoom_controls() -> void:
+	if zoom_reset_button == null or map_ref == null:
+		return
+	var z: float = map_ref.user_zoom
+	zoom_reset_button.text = "%.1fx" % z
+	zoom_reset_button.modulate = Color(0.45, 0.98, 1.0) if z > 1.01 else Color.WHITE
+	if zoom_out_button != null:
+		zoom_out_button.disabled = (z <= 1.01)
+	if zoom_in_button != null:
+		zoom_in_button.disabled = (z >= GameMap.MAX_USER_ZOOM - 0.02)
+
+
+func _is_any_blocking_overlay_visible() -> bool:
+	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay, guide_panel]:
+		if ov != null and ov.visible:
+			return true
+	return false
+
+
+func _is_point_in_battlefield_open(screen_pos: Vector2) -> bool:
+	if map_ref == null or _is_any_blocking_overlay_visible():
+		return false
+	if not map_ref.get_viewport_rect_screen().has_point(screen_pos):
+		return false
+	for hud_ctrl in [top_bar, bottom_bar, right_panel, zoom_bar, sandbox_panel, debug_panel, enemy_inspector_panel]:
+		if hud_ctrl != null and hud_ctrl.visible and hud_ctrl.get_global_rect().has_point(screen_pos):
+			return false
+	return true
+
+
 func _build_guide_ui() -> void:
 	# Full-screen interposing overlay: dims the entire battlefield and brings Chrono-Commander Vex
 	# in at ~1/4 of the viewport beside/above a bold tactical speech callout box.
@@ -1847,7 +1964,86 @@ func _input(event: InputEvent) -> void:
 			else:
 				_toggle_pause_menu()
 			get_viewport().set_input_as_handled()
+		elif not _is_any_blocking_overlay_visible():
+			if event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
+				_step_map_zoom(1)
+				get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
+				_step_map_zoom(-1)
+				get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_0 or event.keycode == KEY_KP_0:
+				_reset_map_zoom()
+				get_viewport().set_input_as_handled()
 		return
+
+	# Battlefield Zoom & Pan Gestures (Wheel Zoom, 2-Finger Pinch-to-Zoom, 1-Finger / Drag-to-Pan when zoomed)
+	if map_ref != null and _drag_candidate_type == "" and not _is_dragging_tower and not _is_any_blocking_overlay_visible():
+		if event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP and _is_point_in_battlefield_open(event.position):
+				map_ref.set_user_zoom(map_ref.user_zoom * 1.18, event.position)
+				_refresh_zoom_controls()
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and _is_point_in_battlefield_open(event.position):
+				map_ref.set_user_zoom(map_ref.user_zoom / 1.18, event.position)
+				_refresh_zoom_controls()
+				get_viewport().set_input_as_handled()
+				return
+			elif (event.button_index == MOUSE_BUTTON_MIDDLE or (event.button_index == MOUSE_BUTTON_LEFT and map_ref.user_zoom > 1.01)) and _is_point_in_battlefield_open(event.position):
+				_pan_pointer_active = true
+				_pan_is_middle = (event.button_index == MOUSE_BUTTON_MIDDLE)
+				_pan_start_pos = event.position
+				_pan_last_pos = event.position
+				_is_panning_map = false
+		elif event is InputEventMouseButton and not event.pressed:
+			if _pan_pointer_active and (event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_MIDDLE):
+				var was_panning: bool = _is_panning_map
+				_pan_pointer_active = false
+				_pan_is_middle = false
+				_is_panning_map = false
+				if was_panning:
+					get_viewport().set_input_as_handled()
+					return
+		elif event is InputEventMouseMotion and _pan_pointer_active and map_ref.user_zoom > 1.01:
+			var moved: float = event.position.distance_to(_pan_start_pos)
+			if not _is_panning_map and (_pan_is_middle or moved >= 12.0):
+				_is_panning_map = true
+			if _is_panning_map:
+				map_ref.pan_by_screen_delta(event.position - _pan_last_pos)
+				_pan_last_pos = event.position
+				get_viewport().set_input_as_handled()
+				return
+		elif event is InputEventScreenTouch:
+			if event.pressed:
+				if _is_point_in_battlefield_open(event.position) or not _active_touches.is_empty():
+					_active_touches[event.index] = event.position
+					if _active_touches.size() == 2:
+						var pts: Array = _active_touches.values()
+						_pinch_prev_dist = maxf(10.0, (pts[0] as Vector2).distance_to(pts[1] as Vector2))
+						_pinch_prev_mid = ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
+						_pan_pointer_active = false
+						_is_panning_map = false
+			else:
+				_active_touches.erase(event.index)
+				if _active_touches.size() < 2:
+					_pinch_prev_dist = 0.0
+		elif event is InputEventScreenDrag and _active_touches.has(event.index):
+			_active_touches[event.index] = event.position
+			if _active_touches.size() == 2:
+				var pts2: Array = _active_touches.values()
+				var p0: Vector2 = pts2[0]
+				var p1: Vector2 = pts2[1]
+				var cur_dist: float = maxf(10.0, p0.distance_to(p1))
+				var cur_mid: Vector2 = (p0 + p1) * 0.5
+				if _pinch_prev_dist > 10.0:
+					var ratio: float = cur_dist / _pinch_prev_dist
+					map_ref.pan_by_screen_delta(cur_mid - _pinch_prev_mid)
+					map_ref.set_user_zoom(map_ref.user_zoom * ratio, cur_mid)
+					_refresh_zoom_controls()
+				_pinch_prev_dist = cur_dist
+				_pinch_prev_mid = cur_mid
+				get_viewport().set_input_as_handled()
+				return
 
 	if _drag_candidate_type != "":
 		if event is InputEventMouseMotion or event is InputEventScreenDrag:
@@ -1917,6 +2113,7 @@ func _refresh_all() -> void:
 
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
 	var mode_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else (" [ENDLESS]" if GameState.is_endless_mode else "")
+	_refresh_zoom_controls()
 	wave_label.text = "Wave %d / %d (Lv %d)%s" % [m.wave_number, max_w, GameState.selected_mission_level, mode_tag]
 	money_label.text = "Money: $INF (SANDBOX)" if GameState.is_sandbox_mode else ("Money: $%d" % m.economy["money"])
 	research_label.text = "Research: %d R (%d/%d)" % [
@@ -3101,7 +3298,7 @@ func _apply_bar_safe_margins(bar: PanelContainer, pad_x: float) -> void:
 	if bar == null:
 		return
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.11, 0.14, 0.20, 0.96)
+	sb.bg_color = Color(0.10, 0.13, 0.19, 1.0)
 	sb.border_color = Color(0.26, 0.34, 0.48)
 	sb.set_border_width_all(1)
 	sb.content_margin_left = 6.0 + pad_x
@@ -3414,9 +3611,14 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		right_panel.size = Vector2(340.0, 480.0)
 		right_panel.set_deferred("size", Vector2(340.0, 480.0))
 		if map_ref != null:
-			map_ref.position = Vector2(0.0, 64.0)
-			map_ref.scale = Vector2.ONE
 			map_ref.set_viewport_margins(0.0, 0.0)
+			map_ref.set_base_layout(Rect2(0.0, 64.0, 940.0, 480.0), Vector2(0.0, 64.0), 1.0)
+		if zoom_bar != null:
+			_place_overlay_exact(zoom_bar, Vector2(940.0 - 144.0, 68.0), Vector2(138.0, 32.0))
+			for zb in [zoom_out_button, zoom_reset_button, zoom_in_button]:
+				if zb != null:
+					zb.custom_minimum_size = Vector2(34.0, 24.0)
+					zb.add_theme_font_size_override("font_size", 11)
 		surge_banner.position = Vector2(150.0, 68.0)
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(572.0, 68.0)
@@ -3467,9 +3669,14 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		var extra_right: float = extra_w - extra_left
 		var map_y: float = top_h + floorf((avail_h - GameMap.MAP_HEIGHT * map_scale) * 0.5)
 		if map_ref != null:
-			map_ref.position = Vector2(extra_left * map_scale, map_y)
-			map_ref.scale = Vector2(map_scale, map_scale)
 			map_ref.set_viewport_margins(extra_left, extra_right)
+			map_ref.set_base_layout(Rect2(0.0, top_h, avail_w, avail_h), Vector2(extra_left * map_scale, map_y), map_scale)
+		if zoom_bar != null:
+			_place_overlay_exact(zoom_bar, Vector2(right_panel.position.x - 186.0, top_h + 6.0), Vector2(178.0, 44.0))
+			for zb in [zoom_out_button, zoom_reset_button, zoom_in_button]:
+				if zb != null:
+					zb.custom_minimum_size = Vector2(46.0, 36.0)
+					zb.add_theme_font_size_override("font_size", 14)
 
 		surge_banner.position = Vector2(safe_x + 12.0, top_h + 6.0)
 		surge_banner.size = Vector2(410.0, 42.0)
@@ -3508,9 +3715,14 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	var map_h: float = GameMap.MAP_HEIGHT * p_scale
 	if map_ref != null:
 		var map_x: float = floorf(maxf(0.0, (vp_size.x - GameMap.MAP_WIDTH * p_scale) * 0.5))
-		map_ref.position = Vector2(map_x, safe_top + p_top_h)
-		map_ref.scale = Vector2(p_scale, p_scale)
 		map_ref.set_viewport_margins(0.0, 0.0)
+		map_ref.set_base_layout(Rect2(0.0, safe_top + p_top_h, vp_size.x, map_h), Vector2(map_x, safe_top + p_top_h), p_scale)
+	if zoom_bar != null:
+		_place_overlay_exact(zoom_bar, Vector2(vp_size.x - 252.0, safe_top + p_top_h + 8.0), Vector2(240.0, 62.0))
+		for zb in [zoom_out_button, zoom_reset_button, zoom_in_button]:
+			if zb != null:
+				zb.custom_minimum_size = Vector2(64.0, 52.0)
+				zb.add_theme_font_size_override("font_size", 20)
 
 	bottom_bar.position = Vector2(0.0, bot_y)
 	_set_bottom_button_widths(1.0, 108.0, 20, true)

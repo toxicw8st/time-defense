@@ -124,6 +124,15 @@ var _shake_timer: float = 0.0
 var _shake_intensity: float = 0.0
 var _draw_shake_offset: Vector2 = Vector2.ZERO
 
+# Interactive Battlefield Zoom & Pan Camera (1.0x full overview -> 2.5x close-up tower inspection)
+const MIN_USER_ZOOM: float = 1.0
+const MAX_USER_ZOOM: float = 2.5
+var user_zoom: float = 1.0
+var user_pan: Vector2 = Vector2.ZERO
+var _base_viewport_rect: Rect2 = Rect2(0.0, 64.0, MAP_WIDTH, MAP_HEIGHT)
+var _base_pos: Vector2 = Vector2(0.0, 64.0)
+var _base_scale: float = 1.0
+
 
 static func get_level_config(level_id: int) -> Dictionary:
 	var lid: int = clampi(level_id, 1, 5)
@@ -324,6 +333,7 @@ func load_level(level_id: int) -> void:
 	active_player_base_pos = cfg["player_base_pos"]
 	_build_path_curve()
 	clear_all_towers()
+	reset_user_zoom()
 	queue_redraw()
 
 
@@ -545,6 +555,100 @@ func set_viewport_margins(left_m: float, right_m: float) -> void:
 		map_click_area.offset_right = MAP_WIDTH + extra_right_margin
 		map_click_area.offset_bottom = MAP_HEIGHT
 	queue_redraw()
+
+
+func set_base_layout(vp_rect: Rect2, base_pos: Vector2, base_scale: float) -> void:
+	_base_viewport_rect = vp_rect
+	_base_pos = base_pos
+	_base_scale = maxf(0.1, base_scale)
+	_apply_camera_transform()
+
+
+func get_viewport_rect_screen() -> Rect2:
+	return _base_viewport_rect
+
+
+func _apply_camera_transform() -> void:
+	if user_zoom <= 1.005:
+		user_zoom = 1.0
+		user_pan = Vector2.ZERO
+		position = _base_pos
+		scale = Vector2(_base_scale, _base_scale)
+		queue_redraw()
+		return
+
+	var eff_scale: float = _base_scale * user_zoom
+	var vc: Vector2 = _base_viewport_rect.get_center()
+	var base_origin_from_vc: Vector2 = _base_pos - vc
+	var raw_x: float = vc.x + base_origin_from_vc.x * user_zoom + user_pan.x
+	var raw_y: float = vc.y + base_origin_from_vc.y * user_zoom + user_pan.y
+
+	var map_w_px: float = MAP_WIDTH * eff_scale
+	var map_h_px: float = MAP_HEIGHT * eff_scale
+	var pos_x: float = raw_x
+	var pos_y: float = raw_y
+
+	if map_w_px <= _base_viewport_rect.size.x:
+		pos_x = _base_viewport_rect.position.x + (_base_viewport_rect.size.x - map_w_px) * 0.5
+	else:
+		pos_x = clampf(raw_x, _base_viewport_rect.end.x - map_w_px, _base_viewport_rect.position.x)
+
+	if map_h_px <= _base_viewport_rect.size.y:
+		pos_y = _base_viewport_rect.position.y + (_base_viewport_rect.size.y - map_h_px) * 0.5
+	else:
+		pos_y = clampf(raw_y, _base_viewport_rect.end.y - map_h_px, _base_viewport_rect.position.y)
+
+	user_pan = Vector2(
+		pos_x - (vc.x + base_origin_from_vc.x * user_zoom),
+		pos_y - (vc.y + base_origin_from_vc.y * user_zoom)
+	)
+	position = Vector2(pos_x, pos_y)
+	scale = Vector2(eff_scale, eff_scale)
+	queue_redraw()
+
+
+func set_user_zoom(new_zoom: float, focus_screen_pos: Vector2 = Vector2(-1.0, -1.0)) -> void:
+	var clamped_z: float = clampf(new_zoom, MIN_USER_ZOOM, MAX_USER_ZOOM)
+	if clamped_z <= 1.01:
+		reset_user_zoom()
+		return
+	var focus: Vector2 = focus_screen_pos if focus_screen_pos.x >= 0.0 else _base_viewport_rect.get_center()
+	var cur_scale: float = maxf(0.01, scale.x)
+	var world_pt: Vector2 = (focus - position) / cur_scale
+	user_zoom = clamped_z
+	var new_eff_scale: float = _base_scale * user_zoom
+	var desired_pos: Vector2 = focus - world_pt * new_eff_scale
+	var vc: Vector2 = _base_viewport_rect.get_center()
+	var base_origin_from_vc: Vector2 = _base_pos - vc
+	user_pan = desired_pos - (vc + base_origin_from_vc * user_zoom)
+	_apply_camera_transform()
+
+
+func zoom_to_local_point(new_zoom: float, local_pt: Vector2) -> void:
+	var clamped_z: float = clampf(new_zoom, MIN_USER_ZOOM, MAX_USER_ZOOM)
+	if clamped_z <= 1.01:
+		reset_user_zoom()
+		return
+	user_zoom = clamped_z
+	var new_eff_scale: float = _base_scale * user_zoom
+	var vc: Vector2 = _base_viewport_rect.get_center()
+	var desired_pos: Vector2 = vc - local_pt * new_eff_scale
+	var base_origin_from_vc: Vector2 = _base_pos - vc
+	user_pan = desired_pos - (vc + base_origin_from_vc * user_zoom)
+	_apply_camera_transform()
+
+
+func pan_by_screen_delta(screen_delta: Vector2) -> void:
+	if user_zoom <= 1.01:
+		return
+	user_pan += screen_delta
+	_apply_camera_transform()
+
+
+func reset_user_zoom() -> void:
+	user_zoom = 1.0
+	user_pan = Vector2.ZERO
+	_apply_camera_transform()
 
 
 func set_economy_ref(p_econ: Node) -> void:
@@ -1309,6 +1413,7 @@ func _on_mission_reset() -> void:
 	inspected_enemy = null
 	_shake_timer = 0.0
 	_shake_intensity = 0.0
+	reset_user_zoom()
 	next_enemy_id = 1
 	next_tower_id = 1
 	queue_redraw()
