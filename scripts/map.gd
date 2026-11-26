@@ -512,6 +512,12 @@ func finish_drag_placement(tower_type: String, global_screen_pos: Vector2) -> To
 		if p_idx >= 0 and pad_occupancy[p_idx] == null:
 			return build_tower_on_pad(p_idx, tower_type)
 		return build_tower_in_zone(eval["pos"], tower_type, int(eval["zone_idx"]))
+	elif str(eval.get("mode", "")) == "combine":
+		var fail_t: TowerUnit = eval.get("merge_target", null)
+		var fail_pos: Vector2 = fail_t.position if fail_t != null else local_pos
+		var rsn_txt: String = str(eval.get("reason", "CANNOT COMBINE"))
+		spawn_floater(fail_pos + Vector2(-62.0, -32.0), rsn_txt + "!", Color(1.0, 0.45, 0.38))
+		GameState.event_logged.emit(rsn_txt)
 	return null
 
 
@@ -843,6 +849,12 @@ func _on_map_gui_input(event: InputEvent) -> void:
 				if bool(eval_armed["valid"]):
 					combine_tower_with_shop(eval_armed.get("merge_target", null), pending_build_type)
 					pending_build_type = ""
+				else:
+					var fail_t2: TowerUnit = eval_armed.get("merge_target", null)
+					var fail_p2: Vector2 = fail_t2.position if fail_t2 != null else local_pos
+					var rsn2: String = str(eval_armed.get("reason", "CANNOT COMBINE"))
+					spawn_floater(fail_p2 + Vector2(-62.0, -32.0), rsn2 + "!", Color(1.0, 0.45, 0.38))
+					GameState.event_logged.emit(rsn2)
 				map_click_area.accept_event()
 				return
 			var clicked_pad_armed: int = _find_pad_at(local_pos)
@@ -1017,9 +1029,92 @@ func build_tower_in_zone(drop_pos: Vector2, tower_type: String, zone_idx: int = 
 
 func _clear_combine_highlights() -> void:
 	for t in get_all_towers():
-		if t.is_combine_highlighted:
+		if t.is_combine_highlighted or t.combine_badge_text != "":
 			t.is_combine_highlighted = false
+			t.combine_badge_text = ""
+			t.combine_badge_affordable = false
+			t.combine_badge_meets_ranks = false
 			t.queue_redraw()
+
+
+func get_two_tower_combine_quote(tower_a: TowerUnit, tower_b: TowerUnit) -> Dictionary:
+	if tower_a == null or tower_b == null or tower_a == tower_b:
+		return {}
+	if not is_instance_valid(tower_a) or not is_instance_valid(tower_b):
+		return {}
+	if not tower_a.can_combine() or not tower_b.can_combine():
+		return {}
+	var combo_key: String = Balance.get_combo_key(tower_a.tower_type, tower_b.tower_type)
+	if not Balance.TOWERS.has(combo_key):
+		return {}
+	var combined_ranks: int = tower_a.get_total_upgrade_ranks() + tower_b.get_total_upgrade_ranks()
+	var meets_ranks: bool = GameState.is_sandbox_mode or combined_ranks >= Balance.COMBINE_MIN_TOTAL_RANKS
+	var base_fee: int = Balance.get_merge_surcharge(tower_a.tower_type, tower_b.tower_type)
+	var xfer_fee: int = Balance.get_merge_upgrade_transfer_fee(tower_a.tower_type, tower_a.levels, tower_b.tower_type, tower_b.levels, combo_key)
+	var total_cost: int = base_fee + xfer_fee
+	var money: int = int(GameState.mission.economy.get("money", 0))
+	var can_afford: bool = GameState.is_sandbox_mode or money >= total_cost
+	return {
+		"combo_key": combo_key,
+		"combo_name": str(Balance.TOWERS[combo_key]["name"]),
+		"base_fee": base_fee,
+		"xfer_fee": xfer_fee,
+		"total_cost": total_cost,
+		"combined_ranks": combined_ranks,
+		"meets_ranks": meets_ranks,
+		"can_afford": can_afford,
+		"shortfall": maxi(0, total_cost - money),
+	}
+
+
+func get_best_combine_quote_for(source_tower: TowerUnit) -> Dictionary:
+	if source_tower == null or not is_instance_valid(source_tower) or not source_tower.can_combine():
+		return {}
+	var best_valid: Dictionary = {}
+	var best_any: Dictionary = {}
+	for t in get_all_towers():
+		if t == source_tower or not t.can_combine():
+			continue
+		var q: Dictionary = get_two_tower_combine_quote(source_tower, t)
+		if q.is_empty():
+			continue
+		if best_any.is_empty() or int(q["combined_ranks"]) > int(best_any["combined_ranks"]):
+			best_any = q
+		if bool(q["meets_ranks"]):
+			if best_valid.is_empty() or int(q["total_cost"]) < int(best_valid["total_cost"]):
+				best_valid = q
+	return best_valid if not best_valid.is_empty() else best_any
+
+
+func refresh_combine_partner_badges() -> int:
+	if combine_source_tower == null or not is_instance_valid(combine_source_tower) or not combine_source_tower.can_combine():
+		_clear_combine_highlights()
+		return 0
+	var ready_rank_count: int = 0
+	for t in get_all_towers():
+		if t == combine_source_tower or not t.can_combine():
+			t.is_combine_highlighted = false
+			t.combine_badge_text = ""
+			t.combine_badge_affordable = false
+			t.combine_badge_meets_ranks = false
+			t.queue_redraw()
+			continue
+		var q: Dictionary = get_two_tower_combine_quote(combine_source_tower, t)
+		if q.is_empty():
+			continue
+		var meets: bool = bool(q["meets_ranks"])
+		var afford: bool = bool(q["can_afford"])
+		var cost_i: int = int(q["total_cost"])
+		t.is_combine_highlighted = true
+		t.combine_badge_meets_ranks = meets
+		t.combine_badge_affordable = afford
+		if meets:
+			ready_rank_count += 1
+			t.combine_badge_text = ("FUSE $%d" % cost_i) if afford else ("NEED $%d" % cost_i)
+		else:
+			t.combine_badge_text = "%d/%d RK" % [int(q["combined_ranks"]), Balance.COMBINE_MIN_TOTAL_RANKS]
+		t.queue_redraw()
+	return ready_rank_count
 
 
 func start_combine_partner_pick(source_tower: TowerUnit) -> int:
@@ -1028,15 +1123,7 @@ func start_combine_partner_pick(source_tower: TowerUnit) -> int:
 		return 0
 	combine_source_tower = source_tower
 	pending_build_type = ""
-	var count: int = 0
-	var src_ranks: int = source_tower.get_total_upgrade_ranks()
-	for t in get_all_towers():
-		if t != source_tower and t.can_combine():
-			var ok_ranks: bool = GameState.is_sandbox_mode or (src_ranks + t.get_total_upgrade_ranks() >= Balance.COMBINE_MIN_TOTAL_RANKS)
-			if ok_ranks:
-				t.is_combine_highlighted = true
-				t.queue_redraw()
-				count += 1
+	var count: int = refresh_combine_partner_badges()
 	queue_redraw()
 	return count
 
@@ -1059,9 +1146,16 @@ func combine_tower_with_shop(target_tower: TowerUnit, shop_type: String) -> Towe
 	var combo_key: String = Balance.get_combo_key(target_tower.tower_type, shop_type)
 	if not Balance.TOWERS.has(combo_key):
 		return null
+	var base_shop: int = int(Balance.TOWERS[shop_type]["cost"])
+	var merge_fee: int = Balance.get_merge_surcharge(target_tower.tower_type, shop_type)
 	var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(target_tower.tower_type, target_tower.levels, shop_type, {}, combo_key)
-	var cost: int = int(Balance.TOWERS[shop_type]["cost"]) + Balance.get_merge_surcharge(target_tower.tower_type, shop_type) + upg_xfer
+	var cost: int = base_shop + merge_fee + upg_xfer
 	if not GameState.spend_money(cost, true):
+		var have: int = int(GameState.mission.economy.get("money", 0))
+		spawn_floater(target_tower.position + Vector2(-62.0, -32.0), "NEED $%d TO FUSE (HAVE $%d)!" % [cost, have], Color(1.0, 0.42, 0.38))
+		GameState.event_logged.emit("Need $%d to fuse %s ($%d tower + $%d merge + $%d upgrade sync) — have $%d!" % [
+			cost, str(Balance.TOWERS[combo_key]["name"]), base_shop, merge_fee, upg_xfer, have
+		])
 		return null
 	var prev_type_a: String = target_tower.tower_type
 	var b_time: float = Balance.get_merge_build_time(prev_type_a, shop_type)
@@ -1085,16 +1179,24 @@ func combine_two_towers(tower_a: TowerUnit, tower_b: TowerUnit) -> TowerUnit:
 		return null
 	if not tower_a.can_combine() or not tower_b.can_combine():
 		return null
-	var combined_ranks: int = tower_a.get_total_upgrade_ranks() + tower_b.get_total_upgrade_ranks()
-	if not GameState.is_sandbox_mode and combined_ranks < Balance.COMBINE_MIN_TOTAL_RANKS:
-		spawn_floater(tower_a.position + Vector2(-60.0, -30.0), "NEED %d+ COMBINED RANKS (%d/%d)!" % [Balance.COMBINE_MIN_TOTAL_RANKS, combined_ranks, Balance.COMBINE_MIN_TOTAL_RANKS], Color(1.0, 0.62, 0.32))
+	var q: Dictionary = get_two_tower_combine_quote(tower_a, tower_b)
+	if q.is_empty():
 		return null
-	var combo_key: String = Balance.get_combo_key(tower_a.tower_type, tower_b.tower_type)
-	if not Balance.TOWERS.has(combo_key):
+	if not bool(q["meets_ranks"]):
+		spawn_floater(tower_b.position + Vector2(-60.0, -30.0), "NEED %d+ COMBINED RANKS (%d/%d)!" % [Balance.COMBINE_MIN_TOTAL_RANKS, int(q["combined_ranks"]), Balance.COMBINE_MIN_TOTAL_RANKS], Color(1.0, 0.62, 0.32))
+		GameState.event_logged.emit("Need %d+ combined upgrade ranks (%d/%d) before fusing!" % [Balance.COMBINE_MIN_TOTAL_RANKS, int(q["combined_ranks"]), Balance.COMBINE_MIN_TOTAL_RANKS])
 		return null
-	var upg_xfer: int = Balance.get_merge_upgrade_transfer_fee(tower_a.tower_type, tower_a.levels, tower_b.tower_type, tower_b.levels, combo_key)
-	var surcharge: int = Balance.get_merge_surcharge(tower_a.tower_type, tower_b.tower_type) + upg_xfer
+	var combo_key: String = str(q["combo_key"])
+	var base_fee: int = int(q["base_fee"])
+	var upg_xfer: int = int(q["xfer_fee"])
+	var surcharge: int = int(q["total_cost"])
 	if not GameState.spend_money(surcharge, true):
+		var have: int = int(GameState.mission.economy.get("money", 0))
+		spawn_floater(tower_b.position + Vector2(-64.0, -32.0), "NEED $%d TO FUSE (HAVE $%d)!" % [surcharge, have], Color(1.0, 0.42, 0.38))
+		GameState.event_logged.emit("Need $%d to fuse %s ($%d merge + $%d upgrade sync) — have $%d!" % [
+			surcharge, str(q["combo_name"]), base_fee, upg_xfer, have
+		])
+		refresh_combine_partner_badges()
 		return null
 	var merged_levels := {
 		"damage": maxi(int(tower_a.levels["damage"]), int(tower_b.levels["damage"])),

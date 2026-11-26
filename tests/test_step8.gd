@@ -1616,8 +1616,37 @@ func _test_j_v2_btd5_evolution() -> void:
 	if FileAccess.file_exists(vex_save_path):
 		DirAccess.remove_absolute(abs_vex_save)
 
+	# 3i) Verify live combine cost badges, HUD cost display, and non-silent insufficient-funds feedback
+	GameState.set_sandbox_mode(false)
+	GameState.mission.economy["money"] = 2000
+	var c_las: TowerUnit = map.build_tower_on_pad(1, "laser")
+	var c_mor: TowerUnit = map.build_tower_on_pad(2, "mortar")
+	c_las.current_job = null
+	c_las.is_built = true
+	c_mor.current_job = null
+	c_mor.is_built = true
+	c_las.levels["damage"] = 3
+	c_mor.levels["fire_rate"] = 3
+	var q_lm: Dictionary = map.get_two_tower_combine_quote(c_las, c_mor)
+	assert(not q_lm.is_empty() and bool(q_lm["meets_ranks"]) and int(q_lm["total_cost"]) >= 170 and int(q_lm["total_cost"]) <= 420, "Laser Lv3 + Mortar Lv3 combine cost must be reasonable & non-double-taxed (got %s)" % str(q_lm))
+	GameState.mission.economy["money"] = int(q_lm["total_cost"]) - 50
+	map.select_tower_unit(c_las)
+	hud._refresh_selection_panel()
+	assert(hud.combine_button.text.contains("$%d" % int(q_lm["total_cost"])), "Combine button must display live minimum combine cost, got: %s" % hud.combine_button.text)
+	assert(map.start_combine_partner_pick(c_las) >= 1)
+	assert(c_mor.is_combine_highlighted and c_mor.combine_badge_text == ("NEED $%d" % int(q_lm["total_cost"])), "Unaffordable partner must show NEED $cost badge, got: %s" % c_mor.combine_badge_text)
+	var floaters_before: int = map.floating_texts.size()
+	assert(map.combine_two_towers(c_las, c_mor) == null, "Combine must fail cleanly when cash is short")
+	assert(map.floating_texts.size() > floaters_before, "Failed combine due to low cash must spawn a visible NEED $cost floater!")
+	GameState.mission.economy["money"] = int(q_lm["total_cost"]) + 20
+	map.refresh_combine_partner_badges()
+	assert(c_mor.combine_badge_affordable and c_mor.combine_badge_text == ("FUSE $%d" % int(q_lm["total_cost"])), "Affordable partner must flip live to green FUSE $cost badge, got: %s" % c_mor.combine_badge_text)
+	map.cancel_combine_partner_pick()
+	map.sell_tower(c_las)
+	map.sell_tower(c_mor)
+
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on" % sprite_count)
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok" % sprite_count)

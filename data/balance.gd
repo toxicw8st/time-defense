@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v2.0-btd5-evolution"
+const BALANCE_VERSION: String = "v2.1-combine-pricing-ux"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
@@ -1593,6 +1593,8 @@ static func get_upgrade_investment_value(tower_type: String, lvls: Dictionary) -
 	return total
 
 
+const MERGE_UPGRADE_SYNC_RATIO: float = 0.35
+
 static func get_merge_upgrade_transfer_fee(
 	type_a: String,
 	levels_a: Dictionary,
@@ -1607,7 +1609,8 @@ static func get_merge_upgrade_transfer_fee(
 	}
 	var target_val: int = get_upgrade_investment_value(combo_type, merged)
 	var paid_val: int = get_upgrade_investment_value(type_a, levels_a) + get_upgrade_investment_value(type_b, levels_b)
-	return maxi(0, int(round(float(target_val - paid_val) / 5.0)) * 5)
+	var diff: float = maxf(0.0, float(target_val - paid_val)) * MERGE_UPGRADE_SYNC_RATIO
+	return maxi(0, int(round(diff / 5.0)) * 5)
 
 
 static func get_damage_multiplier(damage_type: String, armour_tags: Array) -> float:

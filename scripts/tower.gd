@@ -29,6 +29,9 @@ var is_built: bool = false
 var fire_cooldown: float = 0.0
 var is_selected: bool = false
 var is_combine_highlighted: bool = false
+var combine_badge_text: String = ""
+var combine_badge_affordable: bool = false
+var combine_badge_meets_ranks: bool = false
 var map_ref: GameMap = null
 var projectile_scene: PackedScene = preload("res://scenes/projectile.tscn")
 var aim_angle: float = -PI * 0.5
@@ -215,6 +218,9 @@ func transform_to_combo(
 	_ramp_stacks = 0
 	_opened_enemy_ids.clear()
 	is_combine_highlighted = false
+	combine_badge_text = ""
+	combine_badge_affordable = false
+	combine_badge_meets_ranks = false
 	if instant_complete or (GameState.is_sandbox_mode and GameState.sandbox_instant_build):
 		current_job = null
 		is_built = true
@@ -856,8 +862,11 @@ func _draw() -> void:
 
 	if is_combine_highlighted:
 		var ch_pulse: float = 0.55 + 0.35 * sin(anim_time * 9.0)
-		draw_arc(Vector2.ZERO, 23.0, 0.0, TAU, 28, Color(1.0, 0.88, 0.32, ch_pulse), 2.8)
-		draw_circle(Vector2.ZERO, 20.5, Color(1.0, 0.86, 0.28, 0.16 * ch_pulse))
+		var hl_col := Color(0.32, 1.0, 0.64, ch_pulse) if (combine_badge_meets_ranks and combine_badge_affordable) else (
+			Color(1.0, 0.44, 0.38, ch_pulse) if combine_badge_meets_ranks else Color(1.0, 0.78, 0.32, ch_pulse * 0.85)
+		)
+		draw_arc(Vector2.ZERO, 23.5, 0.0, TAU, 28, hl_col, 3.0)
+		draw_circle(Vector2.ZERO, 21.0, Color(hl_col.r, hl_col.g, hl_col.b, 0.16 * ch_pulse))
 
 	if not has_sprite:
 		var outer_oct := _make_octagon(16.0)
@@ -922,3 +931,18 @@ func _draw() -> void:
 			draw_circle(Vector2(13.8, -13.0 + float(i) * 3.8), 1.6, Color(0.38, 0.92, 1.0))
 		for i in range(s_lvl):
 			draw_circle(Vector2(17.6, -13.0 + float(i) * 3.8), 1.6, Color(1.0, 0.88, 0.32))
+
+	# Live Combine Partner Price Pill floating clearly above highlighted partner towers!
+	if is_combine_highlighted and combine_badge_text != "":
+		var pill_col := Color(0.32, 1.0, 0.64) if (combine_badge_meets_ranks and combine_badge_affordable) else (
+			Color(1.0, 0.46, 0.40) if combine_badge_meets_ranks else Color(1.0, 0.80, 0.36)
+		)
+		var pill_bg := Color(0.04, 0.16, 0.11, 0.96) if (combine_badge_meets_ranks and combine_badge_affordable) else (
+			Color(0.20, 0.05, 0.06, 0.96) if combine_badge_meets_ranks else Color(0.16, 0.11, 0.04, 0.94)
+		)
+		var bw: float = maxf(52.0, float(combine_badge_text.length()) * 6.2 + 12.0)
+		var bx: float = -bw * 0.5
+		var by: float = -40.0
+		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 15.0)), pill_bg)
+		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 15.0)), pill_col, false, 1.6)
+		draw_string(font, Vector2(bx + 6.0, by + 11.5), combine_badge_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, pill_col)

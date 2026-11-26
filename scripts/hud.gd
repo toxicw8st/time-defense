@@ -1399,7 +1399,7 @@ func _populate_recipes_list() -> void:
 			top_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			top_l.add_theme_font_size_override("font_size", 12)
 			top_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42) if is_same else Color(0.52, 0.94, 1.0))
-			top_l.text = "%s + %s  =>  %s  (+$%d merge | Rng %.0f | %.2f/s)" % [
+			top_l.text = "%s + %s  =>  %s  (+$%d merge + sync | Rng %.0f | %.2f/s)" % [
 				na, nb, cname, Balance.get_merge_surcharge(bkeys[i], bkeys[j]), float(cfg["range"]), float(cfg["fire_rate"])
 			]
 			rv.add_child(top_l)
@@ -2289,20 +2289,42 @@ func _refresh_selection_panel() -> void:
 			combine_button.visible = true
 			if not is_already_combo:
 				var is_picking: bool = (map_ref != null and map_ref.combine_source_tower == _selected_tower)
+				if is_picking:
+					map_ref.refresh_combine_partner_badges()
+				var best_q: Dictionary = map_ref.get_best_combine_quote_for(_selected_tower) if map_ref != null else {}
+				var has_rank_partner: bool = (not best_q.is_empty() and bool(best_q.get("meets_ranks", false)))
 				var rks: int = _selected_tower.get_total_upgrade_ranks()
 				if is_picking:
-					combine_button.text = "Cancel Merge" if compact_2col else "Click Partner Tower (Tap Cancel)"
+					if has_rank_partner:
+						var min_c: int = int(best_q["total_cost"])
+						combine_button.text = ("Cancel ($%d+)" % min_c) if compact_2col else ("Tap Tagged Tower ($%d+) — Cancel" % min_c)
+						_set_button_description(combine_button, "Green = ready now | Red = need more $. Cheapest: %s = $%d ($%d merge + $%d sync)." % [
+							str(best_q["combo_name"]), min_c, int(best_q["base_fee"]), int(best_q["xfer_fee"])
+						])
+					else:
+						combine_button.text = "Cancel Merge" if compact_2col else "Click Partner Tower (Tap Cancel)"
+						_set_button_description(combine_button, "Need 3+ combined upgrade ranks across 2 base towers, or tap Cancel.")
 					combine_button.disabled = false
 					combine_button.modulate = Color(1.0, 0.90, 0.35)
-					_set_button_description(combine_button, "Tap a glowing base tower (3+ combined ranks) to fuse, or tap Cancel.")
 				else:
-					if not GameState.is_sandbox_mode and rks < Balance.COMBINE_MIN_TOTAL_RANKS:
-						combine_button.text = ("Fuse (%d/3 rk)" % rks) if compact_2col else ("Combine (Ranks %d/3)..." % rks)
+					if has_rank_partner:
+						var min_cost: int = int(best_q["total_cost"])
+						var can_aff: bool = bool(best_q["can_afford"])
+						combine_button.text = (("Fuse ($%d+)" % min_cost) if can_aff else ("Fuse ($%d!)" % min_cost)) if compact_2col else ("Combine (from $%d)..." % min_cost)
+						combine_button.modulate = Color(0.55, 1.0, 0.72) if can_aff else Color(1.0, 0.80, 0.52)
+						_set_button_description(combine_button, "Cheapest fuse: %s = $%d ($%d merge + $%d upgrade sync). Tap to see exact $ on every partner!" % [
+							str(best_q["combo_name"]), min_cost, int(best_q["base_fee"]), int(best_q["xfer_fee"])
+						])
+					elif not GameState.is_sandbox_mode and rks < Balance.COMBINE_MIN_TOTAL_RANKS:
+						var best_sum: int = int(best_q.get("combined_ranks", rks))
+						combine_button.text = ("Fuse (%d/3 rk)" % best_sum) if compact_2col else ("Combine (Ranks %d/3)..." % best_sum)
+						combine_button.modulate = Color(0.95, 0.82, 0.58)
+						_set_button_description(combine_button, "Upgrade base towers to 3+ combined ranks (%d/3) before fusing (or drag from shop at 3+ ranks)." % best_sum)
 					else:
 						combine_button.text = "Combine..." if compact_2col else "Combine w/ Another Tower..."
+						combine_button.modulate = Color.WHITE
+						_set_button_description(combine_button, "Build another base tower to fuse on-map, or drag any tower from the shop onto this tower!")
 					combine_button.disabled = not _selected_tower.can_combine()
-					combine_button.modulate = Color.WHITE
-					_set_button_description(combine_button, "Fuse 2 base towers with 3+ combined upgrade ranks (or drag from shop).")
 			else:
 				# Tier-4 Milestone Perk -> Tier-5 APEX OVERDRIVE slot!
 				if _selected_tower.apex_tier >= 2:
@@ -2746,13 +2768,19 @@ func _on_combine_button_pressed() -> void:
 		return
 	var partner_count: int = map_ref.start_combine_partner_pick(_selected_tower)
 	if partner_count == 0:
-		var rks: int = _selected_tower.get_total_upgrade_ranks()
-		if not GameState.is_sandbox_mode and rks < Balance.COMBINE_MIN_TOTAL_RANKS:
-			GameState.event_logged.emit("Upgrade base towers to 3+ combined ranks (%d/3) before fusing!" % rks)
+		var best_q: Dictionary = map_ref.get_best_combine_quote_for(_selected_tower)
+		var best_sum: int = int(best_q.get("combined_ranks", _selected_tower.get_total_upgrade_ranks()))
+		if not GameState.is_sandbox_mode and best_sum < Balance.COMBINE_MIN_TOTAL_RANKS:
+			map_ref.spawn_floater(_selected_tower.position + Vector2(-62.0, -32.0), "NEED 3+ COMBINED RANKS (%d/3)!" % best_sum, Color(1.0, 0.72, 0.32))
+			GameState.event_logged.emit("Upgrade base towers to 3+ combined ranks (%d/3) before fusing!" % best_sum)
 		else:
+			map_ref.spawn_floater(_selected_tower.position + Vector2(-66.0, -32.0), "BUILD ANOTHER BASE TOWER OR DRAG SHOP!", Color(1.0, 0.84, 0.42))
 			GameState.event_logged.emit("Drag any shop tower onto this tower OR build another base tower to combine!")
 	else:
-		GameState.event_logged.emit("Click a highlighted base tower on the map to combine (%d valid)." % partner_count)
+		var best_q2: Dictionary = map_ref.get_best_combine_quote_for(_selected_tower)
+		var min_c: int = int(best_q2.get("total_cost", 0))
+		var aff_str: String = "Tap a GREEN tag to fuse now!" if bool(best_q2.get("can_afford", false)) else ("Need $%d+ to fuse (red tags show cost)!" % min_c)
+		GameState.event_logged.emit("Combine costs shown over %d partner(s) — %s" % [partner_count, aff_str])
 	_refresh_selection_panel()
 
 
