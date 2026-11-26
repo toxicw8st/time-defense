@@ -137,19 +137,20 @@ static func get_level_config(level_id: int) -> Dictionary:
 			"player_base_pos": PLAYER_BASE_POS,
 			"waypoints": PATH_WAYPOINTS.duplicate(),
 			"zones": [
-				{"id": 1, "label": "ROW 1", "rect": Rect2(200.0, 14.0, 360.0, 36.0)},
-				{"id": 2, "label": "ROW 2", "rect": Rect2(230.0, 139.0, 430.0, 36.0)},
-				{"id": 2, "label": "ROW 2E", "rect": Rect2(752.0, 139.0, 44.0, 36.0)},
-				{"id": 3, "label": "ROW 3", "rect": Rect2(275.0, 304.0, 510.0, 36.0)},
-				{"id": 4, "label": "ROW 4", "rect": Rect2(265.0, 431.0, 420.0, 36.0)},
+				{"id": 1, "label": "ROW 1", "rect": Rect2(165.0, 14.0, 495.0, 36.0)},
+				{"id": 2, "label": "ROW 2", "rect": Rect2(180.0, 135.0, 485.0, 44.0)},
+				{"id": 3, "label": "EAST RIDGE", "rect": Rect2(760.0, 56.0, 138.0, 240.0)},
+				{"id": 4, "label": "ROW 3", "rect": Rect2(268.0, 300.0, 520.0, 44.0)},
+				{"id": 5, "label": "ROW 4", "rect": Rect2(215.0, 431.0, 510.0, 36.0)},
 			],
 			"pads": BUILD_PAD_POSITIONS.duplicate(),
 		}
 	elif lid == 2:
 		var z2: Array[Dictionary] = [
-			{"id": 1, "label": "COL 1", "rect": Rect2(252.0, 68.0, 76.0, 306.0)},
-			{"id": 2, "label": "COL 2", "rect": Rect2(482.0, 118.0, 76.0, 306.0)},
-			{"id": 3, "label": "COL 3", "rect": Rect2(702.0, 68.0, 76.0, 306.0)},
+			{"id": 1, "label": "COL 1", "rect": Rect2(246.0, 68.0, 88.0, 306.0)},
+			{"id": 2, "label": "COL 2", "rect": Rect2(476.0, 118.0, 88.0, 306.0)},
+			{"id": 3, "label": "COL 3", "rect": Rect2(696.0, 68.0, 88.0, 306.0)},
+			{"id": 4, "label": "WEST OVERLOOK", "rect": Rect2(18.0, 52.0, 108.0, 126.0)},
 		]
 		var p2: Array[Vector2] = [
 			Vector2(290, 95), Vector2(290, 145), Vector2(290, 195), Vector2(290, 245), Vector2(290, 295), Vector2(290, 345),
@@ -185,10 +186,12 @@ static func get_level_config(level_id: int) -> Dictionary:
 		}
 	elif lid == 3:
 		var z3: Array[Dictionary] = [
-			{"id": 1, "label": "ISLAND NW", "rect": Rect2(205.0, 118.0, 200.0, 80.0)},
-			{"id": 2, "label": "ISLAND NE", "rect": Rect2(445.0, 118.0, 200.0, 80.0)},
-			{"id": 3, "label": "ISLAND SW", "rect": Rect2(265.0, 292.0, 210.0, 76.0)},
-			{"id": 4, "label": "ISLAND SE", "rect": Rect2(515.0, 292.0, 220.0, 76.0)},
+			{"id": 1, "label": "ISLAND NW", "rect": Rect2(195.0, 114.0, 218.0, 88.0)},
+			{"id": 2, "label": "ISLAND NE", "rect": Rect2(438.0, 114.0, 218.0, 88.0)},
+			{"id": 3, "label": "ISLAND SW", "rect": Rect2(255.0, 288.0, 224.0, 84.0)},
+			{"id": 4, "label": "ISLAND SE", "rect": Rect2(506.0, 288.0, 232.0, 84.0)},
+			{"id": 5, "label": "NORTH RIDGE", "rect": Rect2(160.0, 8.0, 515.0, 28.0)},
+			{"id": 6, "label": "EAST OVERLOOK", "rect": Rect2(760.0, 60.0, 146.0, 265.0)},
 		]
 		var p3: Array[Vector2] = [
 			Vector2(235, 140), Vector2(305, 140), Vector2(375, 140), Vector2(270, 178), Vector2(340, 178),
@@ -220,10 +223,11 @@ static func get_level_config(level_id: int) -> Dictionary:
 		}
 	elif lid == 4:
 		var z4: Array[Dictionary] = [
-			{"id": 1, "label": "NORTH BASTION", "rect": Rect2(245.0, 122.0, 230.0, 78.0)},
-			{"id": 2, "label": "EAST SANCTUM", "rect": Rect2(575.0, 122.0, 145.0, 120.0)},
-			{"id": 3, "label": "SOUTH BASTION", "rect": Rect2(265.0, 322.0, 240.0, 60.0)},
-			{"id": 4, "label": "SE KEEP", "rect": Rect2(545.0, 285.0, 175.0, 95.0)},
+			{"id": 1, "label": "NORTH BASTION", "rect": Rect2(240.0, 116.0, 245.0, 88.0)},
+			{"id": 2, "label": "EAST SANCTUM", "rect": Rect2(570.0, 116.0, 158.0, 128.0)},
+			{"id": 3, "label": "SOUTH BASTION", "rect": Rect2(255.0, 316.0, 255.0, 68.0)},
+			{"id": 4, "label": "SE KEEP", "rect": Rect2(540.0, 280.0, 188.0, 104.0)},
+			{"id": 5, "label": "EAST WALL", "rect": Rect2(834.0, 68.0, 88.0, 344.0)},
 		]
 		var p4: Array[Vector2] = [
 			Vector2(275, 142), Vector2(355, 142), Vector2(435, 142), Vector2(315, 180), Vector2(395, 180),
@@ -257,11 +261,11 @@ static func get_level_config(level_id: int) -> Dictionary:
 		}
 	else:
 		var z5: Array[Dictionary] = [
-			{"id": 1, "label": "PILLBOX 1", "rect": Rect2(130.0, 18.0, 170.0, 34.0)},
-			{"id": 2, "label": "PILLBOX 2", "rect": Rect2(248.0, 228.0, 174.0, 114.0)},
-			{"id": 3, "label": "PILLBOX 3", "rect": Rect2(525.0, 148.0, 90.0, 260.0)},
-			{"id": 4, "label": "PILLBOX 4", "rect": Rect2(718.0, 95.0, 130.0, 240.0)},
-			{"id": 5, "label": "PILLBOX 5", "rect": Rect2(220.0, 434.0, 420.0, 34.0)},
+			{"id": 1, "label": "PILLBOX 1", "rect": Rect2(128.0, 14.0, 225.0, 34.0)},
+			{"id": 2, "label": "PILLBOX 2", "rect": Rect2(242.0, 224.0, 186.0, 122.0)},
+			{"id": 3, "label": "PILLBOX 3", "rect": Rect2(520.0, 142.0, 100.0, 268.0)},
+			{"id": 4, "label": "PILLBOX 4", "rect": Rect2(714.0, 86.0, 144.0, 256.0)},
+			{"id": 5, "label": "PILLBOX 5", "rect": Rect2(185.0, 434.0, 520.0, 34.0)},
 		]
 		var p5: Array[Vector2] = [
 			Vector2(155, 35), Vector2(215, 35), Vector2(275, 35),
@@ -1650,6 +1654,19 @@ func _draw() -> void:
 		draw_line(Vector2(left_x, gy), Vector2(right_x, gy), Color(0.14, 0.19, 0.28, 0.62), 1.0)
 		gy += 80.0
 
+	# Sector power conduits & corner telemetry beacons (eliminates dead-space feel in outer corners)
+	var conduit_col := Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.22)
+	var annex_hub := Vector2(REFINERY_ANNEX_RECT.end.x, REFINERY_ANNEX_RECT.get_center().y)
+	draw_line(annex_hub, Vector2(annex_hub.x + 28.0, annex_hub.y), conduit_col, 2.2)
+	draw_line(Vector2(annex_hub.x + 28.0, annex_hub.y), Vector2(active_player_base_pos.x, annex_hub.y), Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.12), 1.8)
+	draw_line(Vector2(active_player_base_pos.x, annex_hub.y), active_player_base_pos, conduit_col, 2.2)
+	var c_pulse: float = fmod(visual_time * 0.35, 1.0)
+	var sig_x: float = lerpf(annex_hub.x + 28.0, active_player_base_pos.x, c_pulse)
+	draw_circle(Vector2(sig_x, annex_hub.y), 2.6, Color(0.45, 0.96, 1.0, 0.55))
+	for corner_p in [Vector2(left_x + 24.0, 24.0), Vector2(right_x - 24.0, 24.0), Vector2(right_x - 24.0, MAP_HEIGHT - 24.0)]:
+		draw_arc(corner_p, 9.0, 0.0, TAU, 16, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.26), 1.2)
+		draw_circle(corner_p, 2.2, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.45 + 0.30 * sin(visual_time * 3.0)))
+
 	# Sector watermark in bottom-right corner
 	draw_string(font, Vector2(695.0, 472.0), "%s (%s)" % [str(lvl_cfg["name"]), str(lvl_cfg["zone_rule"])], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.52))
 
@@ -1854,7 +1871,7 @@ func _draw() -> void:
 				var ghost_tex: Texture2D = SpriteLibrary.get_tower_texture(preview_key)
 				if ghost_tex != null:
 					var g_meta: Dictionary = SpriteLibrary.get_tower_meta(preview_key)
-					var g_size: Vector2 = SpriteLibrary.compute_tower_draw_size(ghost_tex, g_meta, 38.0 if Balance.is_combo_tower(preview_key) else 35.0, 66.0)
+					var g_size: Vector2 = SpriteLibrary.compute_tower_draw_size(ghost_tex, g_meta, 49.0 if Balance.is_combo_tower(preview_key) else 43.0, 82.0)
 					var g_piv := Vector2(float(g_meta.get("pivot_x", 0.5)), float(g_meta.get("pivot_y", 0.5)))
 					var g_tint := Color(1.0, 0.92, 0.55, 0.82) if (is_combine_hover and valid_drop) else (Color(0.62, 1.0, 0.85, 0.78) if valid_drop else Color(1.0, 0.45, 0.42, 0.68))
 					SpriteLibrary.draw_sprite_oriented(self, ghost_tex, center, -PI * 0.5, g_size, g_piv, g_tint, _draw_shake_offset)
@@ -1983,7 +2000,7 @@ func _draw_enemy_base(font: Font) -> void:
 		var ab_w: float = maxf(1.0, float(ab_tex.get_width()))
 		var ab_h: float = maxf(1.0, float(ab_tex.get_height()))
 		var breath_s: float = 1.0 + 0.03 * sin(visual_time * pulse_spd)
-		var ab_sc: float = (78.0 / maxf(ab_w, ab_h)) * breath_s
+		var ab_sc: float = (90.0 / maxf(ab_w, ab_h)) * breath_s
 		var ab_mod := Color.WHITE
 		if hive_beam_timer > 0.0:
 			ab_mod = Color(1.55, 1.28, 0.72, 1.0)
@@ -2097,12 +2114,12 @@ func _draw_player_base(font: Font) -> void:
 			draw_colored_polygon(cone_pts, Color(1.0, 0.15, 0.18, 0.26))
 
 	# Base shadow & Player Citadel custom sprite (with procedural octagonal hull fallback)
-	draw_circle(pb_pos + Vector2(2, 3), 38.0, Color(0.0, 0.0, 0.0, 0.48))
+	draw_circle(pb_pos + Vector2(2, 3), 42.0, Color(0.0, 0.0, 0.0, 0.48))
 	var pb_tex: Texture2D = SpriteLibrary.get_structure_texture("player_base")
 	if pb_tex != null:
 		var pb_w: float = maxf(1.0, float(pb_tex.get_width()))
 		var pb_h: float = maxf(1.0, float(pb_tex.get_height()))
-		var pb_sc: float = 80.0 / maxf(pb_w, pb_h)
+		var pb_sc: float = 92.0 / maxf(pb_w, pb_h)
 		var pb_mod := Color.WHITE
 		if leak_flash_timer > 0.0:
 			pb_mod = Color(1.45, 0.55, 0.55, 1.0)
@@ -2191,7 +2208,7 @@ func _draw_player_base(font: Font) -> void:
 	# Swelling Chronosphere Core + Custom Chrono-Manipulator Dome & Hive Destroyer Turret
 	var cm_tex: Texture2D = SpriteLibrary.get_structure_texture("chrono_manipulator")
 	if cm_tex != null:
-		var cm_sz: float = lerpf(32.0, 38.0, buildup)
+		var cm_sz: float = lerpf(38.0, 46.0, buildup)
 		var cm_mod := Color(1.0, 0.82, 0.45, 0.95) if GameState.is_base_locked() else Color.WHITE
 		SpriteLibrary.draw_sprite_oriented(self, cm_tex, pb_pos, visual_time * 0.45 * spin_mult, Vector2(cm_sz, cm_sz), Vector2(0.5, 0.5), cm_mod, _draw_shake_offset)
 	else:
@@ -2206,7 +2223,7 @@ func _draw_player_base(font: Font) -> void:
 		var hd_ang: float = to_hive.angle() + PI # Sprite natively faces LEFT (-X)
 		var hd_w: float = maxf(1.0, float(hd_tex.get_width()))
 		var hd_h: float = maxf(1.0, float(hd_tex.get_height()))
-		var hd_sc: float = 46.0 / maxf(hd_w, hd_h)
+		var hd_sc: float = 54.0 / maxf(hd_w, hd_h)
 		var hd_pos: Vector2 = pb_pos + to_hive * 18.0
 		var hd_mod := Color(1.35, 1.35, 1.0, 1.0) if (hive_beam_timer > 0.0 or GameState.is_base_charging()) else Color(0.95, 0.98, 1.0, 0.96)
 		if GameState.is_base_charging():

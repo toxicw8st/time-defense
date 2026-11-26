@@ -248,9 +248,9 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	# Verify 1280x720 TOUCH Phone Landscape activates big touch buttons instead of tiny desktop buttons!
 	hud.force_touch_ui = true
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
-	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.size.y, 76.0), "Touch 1280x720 must use tall 76px TopBar fitting 1280px, got %s" % str(hud.top_bar.size))
+	assert(is_equal_approx(hud.top_bar.size.x, 1280.0) and is_equal_approx(hud.top_bar.size.y, 74.0), "Touch 1280x720 must use sleek 74px TopBar fitting 1280px, got %s" % str(hud.top_bar.size))
 	assert(hud.speed_1x_button.custom_minimum_size.x >= 54.0 and hud.speed_1x_button.custom_minimum_size.y >= 36.0, "Touch speed buttons must be fat thumb targets (>=54x36)")
-	assert(hud.tower_buttons_grid.columns == 2, "Touch 1280x720 must use 2-col upgrades")
+	assert(hud.build_buttons_grid.columns == 2 and hud.tower_buttons_grid.columns == 2, "Touch 1280x720 must use 2-col shop & upgrades")
 	assert(hud.upg_dmg_button.get_index() == 0 and hud.target_mode_button.get_index() > hud.upg_rng_button.get_index(), "Upgrades must sit above TargetMode so thumbs never fat-finger TargetMode")
 	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
@@ -263,10 +263,12 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait Phone (1280x2844)
 	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
 	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
-	assert(hud.right_panel.position == Vector2(1220.0, 76.0) and hud.right_panel.size.x == 380.0)
-	assert(hud.tower_buttons_grid.columns == 2, "Phone Landscape must use 2-col tower upgrades to eliminate vertical scrolling")
-	assert(hud.build_blaster_button.custom_minimum_size.y >= 38.0, "Phone landscape shop buttons must be bigger (>=38px)")
-	assert(map.scale.x >= 0.95)
+	assert(is_equal_approx(hud.bottom_bar.size.y, 132.0), "Phone Landscape BottomBar must be compact 132px to zoom battlefield up, got %.1f" % hud.bottom_bar.size.y)
+	assert(hud.right_panel.position == Vector2(1140.0, 74.0) and hud.right_panel.size.x == 460.0, "Wide phone RightPanel must be spacious 460px, got pos=%s size=%s" % [str(hud.right_panel.position), str(hud.right_panel.size)])
+	assert(hud.build_buttons_grid.columns == 2 and hud.tower_buttons_grid.columns == 2, "Phone Landscape must use 2-col shop & tower grids to eliminate vertical scrolling")
+	assert(hud.build_blaster_button.custom_minimum_size.y >= 48.0, "Phone landscape shop buttons must be bigger (>=48px)")
+	assert(hud.start_wave_button.custom_minimum_size.y >= 72.0, "Phone landscape bottom action buttons must be big thumb targets (>=72px)")
+	assert(map.scale.x >= 1.05, "20:9 Phone Landscape map must zoom UP (>1.05x) instead of shrinking with dead margins (got %.3f)" % map.scale.x)
 	for ctrl_name in ["TopBar", "RightPanel", "BottomBar"]:
 		var ctrl: Control = hud.get_node(ctrl_name)
 		var r := Rect2(ctrl.position, ctrl.size)
@@ -1641,9 +1643,14 @@ func _test_j_v2_btd5_evolution() -> void:
 	GameState.mission.economy["money"] = int(q_lm["total_cost"]) + 20
 	map.refresh_combine_partner_badges()
 	assert(c_mor.combine_badge_affordable and c_mor.combine_badge_text == ("FUSE $%d" % int(q_lm["total_cost"])), "Affordable partner must flip live to green FUSE $cost badge, got: %s" % c_mor.combine_badge_text)
+	hud._refresh_selection_panel()
+	assert(hud.combine_partner_box != null and hud.combine_partner_box.visible, "Inline 1-tap combine partner picker must open inside RightPanel")
+	var inline_btn: Button = hud.combine_partner_box.get_node_or_null("CombinePartnerBtn_%d" % c_mor.tower_id) as Button
+	assert(inline_btn != null and inline_btn.text.contains("$%d" % int(q_lm["total_cost"])), "Inline partner button must show exact combine $cost")
+	inline_btn.pressed.emit()
+	assert(c_las.tower_type == "mortar+laser", "Tapping inline 1-tap combine partner button must immediately fuse towers into mortar+laser!")
 	map.cancel_combine_partner_pick()
 	map.sell_tower(c_las)
-	map.sell_tower(c_mor)
 
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false

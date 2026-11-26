@@ -85,8 +85,8 @@ static func draw_turret(
 	if tex != null:
 		var meta: Dictionary = SpriteLibrary.get_tower_meta(tower_type)
 		var is_combo: bool = Balance.is_combo_tower(tower_type)
-		var ped_px: float = 39.0 if is_combo else 36.0
-		var max_w: float = 70.0 if is_combo else 62.0
+		var ped_px: float = 49.0 if is_combo else 43.0
+		var max_w: float = 86.0 if is_combo else 74.0
 		var draw_size: Vector2 = SpriteLibrary.compute_tower_draw_size(tex, meta, ped_px, max_w)
 		var pivot := Vector2(float(meta.get("pivot_x", 0.5)), float(meta.get("pivot_y", 0.5)))
 		var is_radial: bool = bool(meta.get("radial", false))

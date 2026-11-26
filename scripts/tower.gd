@@ -940,9 +940,9 @@ func _draw() -> void:
 		var pill_bg := Color(0.04, 0.16, 0.11, 0.96) if (combine_badge_meets_ranks and combine_badge_affordable) else (
 			Color(0.20, 0.05, 0.06, 0.96) if combine_badge_meets_ranks else Color(0.16, 0.11, 0.04, 0.94)
 		)
-		var bw: float = maxf(52.0, float(combine_badge_text.length()) * 6.2 + 12.0)
+		var bw: float = maxf(62.0, float(combine_badge_text.length()) * 7.2 + 14.0)
 		var bx: float = -bw * 0.5
-		var by: float = -40.0
-		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 15.0)), pill_bg)
-		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 15.0)), pill_col, false, 1.6)
-		draw_string(font, Vector2(bx + 6.0, by + 11.5), combine_badge_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, pill_col)
+		var by: float = -45.0
+		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 18.0)), pill_bg)
+		draw_rect(Rect2(Vector2(bx, by), Vector2(bw, 18.0)), pill_col, false, 1.8)
+		draw_string(font, Vector2(bx + 7.0, by + 13.5), combine_badge_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, pill_col)

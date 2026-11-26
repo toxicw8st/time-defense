@@ -147,6 +147,8 @@ var end_endless_button: Button = null
 var end_analytics_button: Button = null
 
 var combine_button: Button = null
+var combine_partner_box: VBoxContainer = null
+var _last_combine_list_sig: String = ""
 var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
@@ -441,7 +443,7 @@ func _build_start_menu() -> void:
 	vbox.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "SELECT MISSION SECTOR (LEVELS 1-5)"
+	subtitle.text = "SELECT MISSION SECTOR (LEVELS 1-5)  •  %s" % Balance.BALANCE_VERSION
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 11)
 	subtitle.add_theme_color_override("font_color", Color(0.75, 0.86, 0.98))
@@ -1576,6 +1578,15 @@ func _setup_responsive_grids() -> void:
 				b.reparent(tower_buttons_grid)
 				b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
+	# 2b) Inline 1-tap Combine Partner Picker right inside TowerPanelBox (no fat-finger map taps required!)
+	if tower_panel_box != null and combine_partner_box == null:
+		combine_partner_box = VBoxContainer.new()
+		combine_partner_box.name = "CombinePartnerBox"
+		combine_partner_box.visible = false
+		combine_partner_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		combine_partner_box.add_theme_constant_override("separation", 5)
+		tower_panel_box.add_child(combine_partner_box)
+
 	# 3) Bottom bar actions 6-col (1 row desktop/landscape) <-> 3-col (2 chunky rows portrait)
 	var bot_vbox := get_node_or_null("BottomBar/VBox") as VBoxContainer
 	var old_row2 := get_node_or_null("BottomBar/VBox/Row2") as HBoxContainer
@@ -2360,7 +2371,11 @@ func _refresh_selection_panel() -> void:
 		else:
 			sell_button.text = ("Sell +$%d" % refund) if compact_2col else ("Sell Tower (+$%d)" % refund)
 			sell_button.modulate = Color.WHITE
+		_refresh_combine_partner_list()
 	elif _selected_pad_idx >= 0 or (map_ref != null and map_ref.selected_drop_pos.x >= 0.0):
+		if combine_partner_box != null:
+			combine_partner_box.visible = false
+			_last_combine_list_sig = ""
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
 		var zlabel: String = map_ref.get_zone_label_for_pad(_selected_pad_idx) if (map_ref != null and _selected_pad_idx >= 0) else "TOWER ZONE"
@@ -2374,6 +2389,9 @@ func _refresh_selection_panel() -> void:
 		_style_build_button(build_railgun_button, "railgun", money, false)
 		_style_build_button(build_annihilator_button, "annihilator", money, false)
 	else:
+		if combine_partner_box != null:
+			combine_partner_box.visible = false
+			_last_combine_list_sig = ""
 		build_menu_box.visible = true
 		tower_panel_box.visible = false
 		var pending: String = map_ref.pending_build_type if map_ref != null else ""
@@ -2542,8 +2560,18 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
 	var cost: int = int(cfg["cost"])
 	var affordable: bool = (GameState.is_sandbox_mode or money >= cost) and not GameState.mission.is_over
-	var armed_prefix: String = "[CLICK PAD] " if is_armed else ""
-	btn.text = "%s%s ($%d)" % [armed_prefix, cfg["name"], cost]
+	var is_2col: bool = (build_buttons_grid != null and build_buttons_grid.columns >= 2)
+	var short_names := {
+		"blaster": "Blaster",
+		"mortar": "Mortar",
+		"laser": "Laser",
+		"slow": "Chrono Slow",
+		"railgun": "Rail Gun",
+		"annihilator": "Annihilator",
+	}
+	var disp_name: String = str(short_names.get(tower_type, cfg["name"])) if is_2col else str(cfg["name"])
+	var armed_prefix: String = "[TAP] " if (is_armed and is_2col) else ("[CLICK PAD] " if is_armed else "")
+	btn.text = "%s%s ($%d)" % [armed_prefix, disp_name, cost]
 	btn.disabled = not affordable
 	if _armed_style_state.get(tower_type, false) != is_armed:
 		_armed_style_state[tower_type] = is_armed
@@ -2753,6 +2781,113 @@ func _on_sell_pressed() -> void:
 	_sell_confirm_armed = false
 	if map_ref != null:
 		map_ref.sell_tower(_selected_tower)
+
+
+func _refresh_combine_partner_list() -> void:
+	if combine_partner_box == null:
+		return
+	var show_picker: bool = (
+		_selected_tower != null
+		and is_instance_valid(_selected_tower)
+		and not Balance.is_combo_tower(_selected_tower.tower_type)
+		and map_ref != null
+		and map_ref.combine_source_tower == _selected_tower
+	)
+	if not show_picker:
+		combine_partner_box.visible = false
+		_last_combine_list_sig = ""
+		return
+
+	var money: int = int(GameState.mission.economy.get("money", 0))
+	var entries: Array[Dictionary] = []
+	for t in map_ref.get_all_towers():
+		if t == _selected_tower or not t.can_combine():
+			continue
+		var q: Dictionary = map_ref.get_two_tower_combine_quote(_selected_tower, t)
+		if q.is_empty():
+			continue
+		entries.append({"tower": t, "quote": q})
+
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var qa: Dictionary = a["quote"]
+		var qb: Dictionary = b["quote"]
+		var ra: int = (2 if (bool(qa["meets_ranks"]) and bool(qa["can_afford"])) else (1 if bool(qa["meets_ranks"]) else 0))
+		var rb: int = (2 if (bool(qb["meets_ranks"]) and bool(qb["can_afford"])) else (1 if bool(qb["meets_ranks"]) else 0))
+		if ra != rb:
+			return ra > rb
+		return int(qa["total_cost"]) < int(qb["total_cost"])
+	)
+
+	var sig_parts: PackedStringArray = [str(_selected_tower.tower_id), str(money), _current_layout_mode]
+	for e in entries:
+		var pt: TowerUnit = e["tower"]
+		var q: Dictionary = e["quote"]
+		sig_parts.append("%d:%s:%d:%s:%s" % [pt.tower_id, str(q["combo_key"]), int(q["total_cost"]), str(q["meets_ranks"]), str(q["can_afford"])])
+	var new_sig: String = "|".join(sig_parts)
+	combine_partner_box.visible = true
+	if new_sig == _last_combine_list_sig:
+		return
+	_last_combine_list_sig = new_sig
+
+	for ch in combine_partner_box.get_children():
+		ch.queue_free()
+
+	var is_port: bool = (_current_layout_mode == "portrait")
+	var is_wide: bool = (_current_layout_mode == "landscape_wide")
+	var hdr := Label.new()
+	hdr.text = "TAP A PARTNER BELOW (OR ON MAP) TO FUSE:"
+	hdr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hdr.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
+	hdr.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42))
+	combine_partner_box.add_child(hdr)
+
+	if entries.is_empty():
+		var empty_l := Label.new()
+		empty_l.text = "No other built base tower on map yet. Build a 2nd base tower OR drag any tower from the shop onto this one!"
+		empty_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_l.add_theme_font_size_override("font_size", 17 if is_port else 11)
+		empty_l.add_theme_color_override("font_color", Color(0.86, 0.92, 0.98))
+		combine_partner_box.add_child(empty_l)
+		return
+
+	var btn_h: float = 76.0 if is_port else (46.0 if is_wide else 34.0)
+	var btn_fs: int = 19 if is_port else (13 if is_wide else 11)
+	for e in entries:
+		var partner_t: TowerUnit = e["tower"]
+		var q: Dictionary = e["quote"]
+		var combo_key: String = str(q["combo_key"])
+		var combo_name: String = str(q["combo_name"])
+		var total_c: int = int(q["total_cost"])
+		var meets: bool = bool(q["meets_ranks"])
+		var afford: bool = bool(q["can_afford"])
+		var p_btn := Button.new()
+		p_btn.name = "CombinePartnerBtn_%d" % partner_t.tower_id
+		p_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		p_btn.custom_minimum_size = Vector2(0.0, btn_h)
+		p_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		p_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		p_btn.add_theme_font_size_override("font_size", btn_fs)
+		var c_icon: ImageTexture = SpriteLibrary.get_ui_badge_icon(combo_key, 34)
+		if c_icon != null:
+			p_btn.icon = c_icon
+		if meets and afford:
+			p_btn.text = "FUSE $%d  ->  %s" % [total_c, combo_name]
+			UIIcons.apply_right_button_theme(p_btn, Color(0.32, 0.98, 0.62), true)
+			p_btn.modulate = Color(0.75, 1.0, 0.84)
+		elif meets:
+			p_btn.text = "NEED $%d  ->  %s (short $%d)" % [total_c, combo_name, int(q["shortfall"])]
+			UIIcons.apply_right_button_theme(p_btn, Color(0.98, 0.42, 0.38), false)
+			p_btn.modulate = Color(1.0, 0.78, 0.75)
+		else:
+			p_btn.text = "%d/3 RANKS  ->  %s ($%d)" % [int(q["combined_ranks"]), combo_name, total_c]
+			UIIcons.apply_right_button_theme(p_btn, Color(0.96, 0.76, 0.30), false)
+			p_btn.modulate = Color(1.0, 0.90, 0.66)
+		p_btn.pressed.connect(func() -> void:
+			if _selected_tower != null and is_instance_valid(_selected_tower) and is_instance_valid(partner_t) and map_ref != null:
+				map_ref.combine_two_towers(_selected_tower, partner_t)
+				_refresh_all()
+		)
+		combine_partner_box.add_child(p_btn)
 
 
 func _on_combine_button_pressed() -> void:
@@ -3123,21 +3258,21 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 		if lb != null:
 			lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if build_buttons_grid != null:
-		build_buttons_grid.columns = 2 if is_port else 1
-		build_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else 6)
-		build_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else 4)
+		build_buttons_grid.columns = 2 if (is_port or is_wide) else 1
+		build_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else (8 if is_wide else 6))
+		build_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else (6 if is_wide else 4))
 	if tower_buttons_grid != null:
 		tower_buttons_grid.columns = 2 if (is_port or is_wide) else 1
-		tower_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else 6)
-		tower_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else 4)
+		tower_buttons_grid.add_theme_constant_override("h_separation", 12 if is_port else (8 if is_wide else 6))
+		tower_buttons_grid.add_theme_constant_override("v_separation", 10 if is_port else (6 if is_wide else 4))
 	if bottom_actions_grid != null:
 		bottom_actions_grid.columns = 3 if is_port else 6
 		bottom_actions_grid.add_theme_constant_override("h_separation", 12 if is_port else 8)
-		bottom_actions_grid.add_theme_constant_override("v_separation", 10 if is_port else 8)
+		bottom_actions_grid.add_theme_constant_override("v_separation", 10 if is_port else 6)
 
-	var shop_btn_h: float = 88.0 if is_port else (38.0 if is_wide else 28.0)
-	var shop_btn_fs: int = 22 if is_port else (13 if is_wide else 11)
-	var shop_lbl_fs: int = 21 if is_port else (12 if is_wide else 11)
+	var shop_btn_h: float = 88.0 if is_port else (48.0 if is_wide else 28.0)
+	var shop_btn_fs: int = 22 if is_port else (14 if is_wide else 11)
+	var shop_lbl_fs: int = 21 if is_port else (13 if is_wide else 11)
 	for sb in [build_blaster_button, build_mortar_button, build_laser_button, build_slow_button, build_railgun_button, build_annihilator_button, build_recipes_button, target_mode_button, upg_dmg_button, upg_rng_button, upg_spd_button, combine_button, sell_button, manip_upgrade_button, refinery_tech_button]:
 		if sb != null:
 			sb.custom_minimum_size.y = shop_btn_h
@@ -3148,19 +3283,22 @@ func _apply_responsive_ergonomics(mode: String) -> void:
 	var meta_hint := get_node_or_null("RightPanel/Margin/VBox/Scroll/ContentVBox/MetaHintLabel") as Label
 	if meta_hint != null:
 		meta_hint.add_theme_font_size_override("font_size", 18 if is_port else 10)
-	hover_info_panel.custom_minimum_size.y = 96.0 if is_port else (48.0 if is_wide else 44.0)
+	hover_info_panel.custom_minimum_size.y = 96.0 if is_port else (44.0 if is_wide else 44.0)
 	var hclip := hover_info_panel.get_node_or_null("HoverMargin/HoverClip") as Control
 	if hclip != null:
-		hclip.custom_minimum_size.y = 82.0 if is_port else (38.0 if is_wide else 34.0)
+		hclip.custom_minimum_size.y = 82.0 if is_port else (34.0 if is_wide else 34.0)
 	hover_info_label.add_theme_font_size_override("font_size", 20 if is_port else (12 if is_wide else 11))
 
 	# BottomBar labels & Surge bar
-	var bot_lbl_fs: int = 19 if is_port else (12 if is_wide else 12)
+	var bot_lbl_fs: int = 19 if is_port else (13 if is_wide else 12)
 	surge_label.add_theme_font_size_override("font_size", bot_lbl_fs)
 	surge_label.clip_text = is_port
 	surge_penalty_label.add_theme_font_size_override("font_size", bot_lbl_fs)
-	event_feed_label.add_theme_font_size_override("font_size", 18 if is_port else 11)
-	surge_bar.custom_minimum_size = Vector2(210.0 if is_port else 360.0, 30.0 if is_port else 22.0)
+	event_feed_label.add_theme_font_size_override("font_size", 18 if is_port else 12)
+	surge_bar.custom_minimum_size = Vector2(210.0 if is_port else 320.0, 30.0 if is_port else (16.0 if is_wide else 22.0))
+	var bot_vbox_erg := get_node_or_null("BottomBar/VBox") as VBoxContainer
+	if bot_vbox_erg != null:
+		bot_vbox_erg.add_theme_constant_override("separation", 6 if is_port else (3 if is_wide else 6))
 
 	# Overlays typography (GuidePanel full-screen interposing layout is styled directly in _position_guide_panel)
 	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay]:
@@ -3298,12 +3436,14 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		return
 
 	# 2) Phone / Touch Landscape & Widescreen (1280x720 Touch AND Pixel 11 Pro 20:9 1600x720)
+	# Tight vertical bar padding (70px top + 132px bottom) maximizes battlefield zoom (>1.07x on 20:9 phones!)
+	# while giving RightPanel a generous 460px 2-column zero-scroll touch grid and bigger 74px bottom buttons!
 	if vp_size.x >= vp_size.y:
 		_apply_responsive_ergonomics("landscape_wide")
-		var top_h: float = 76.0
-		var bot_h: float = 180.0
-		var rp_w: float = 380.0 if vp_size.x >= 1380.0 else 356.0
-		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.08, 0.0, 28.0)
+		var top_h: float = 74.0
+		var bot_h: float = 132.0
+		var rp_w: float = 460.0 if vp_size.x >= 1460.0 else (420.0 if vp_size.x >= 1360.0 else 368.0)
+		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.06, 0.0, 24.0)
 		_apply_bar_safe_margins(top_bar, safe_x)
 		_apply_bar_safe_margins(bottom_bar, safe_x)
 
@@ -3311,7 +3451,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		top_bar.size = Vector2(vp_size.x, top_h)
 
 		bottom_bar.position = Vector2(0.0, vp_size.y - bot_h)
-		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.22), 62.0, 12, false)
+		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.24), 74.0, 13, false)
 		bottom_bar.size = Vector2(vp_size.x, bot_h)
 
 		var middle_h: float = maxf(460.0, vp_size.y - top_h - bot_h)

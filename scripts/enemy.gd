@@ -488,18 +488,18 @@ func _draw() -> void:
 				var hp_wave: float = fmod(anim_time * 1.8, 1.0)
 				draw_arc(Vector2.ZERO, lerpf(10.0, 24.0, hp_wave), 0.0, TAU, 22, Color(0.30, 1.0, 0.55, (1.0 - hp_wave) * 0.85), 2.0)
 
-		var target_max: float = 30.0
+		var target_max: float = 36.0
 		match enemy_type:
-			"crawler": target_max = 28.0
-			"rusher": target_max = 28.0
-			"stalker": target_max = 34.0
-			"blitzer": target_max = 32.0
-			"mender": target_max = 34.0
-			"brute": target_max = 42.0
-			"conduit": target_max = 40.0
-			"carrier": target_max = 48.0
-			"juggernaut": target_max = 56.0
-			"colossus": target_max = 68.0
+			"crawler": target_max = 34.0
+			"rusher": target_max = 34.0
+			"stalker": target_max = 40.0
+			"blitzer": target_max = 38.0
+			"mender": target_max = 42.0
+			"brute": target_max = 50.0
+			"conduit": target_max = 48.0
+			"carrier": target_max = 58.0
+			"juggernaut": target_max = 68.0
+			"colossus": target_max = 82.0
 
 		var sw: float = maxf(1.0, float(sprite_tex.get_width()))
 		var sh: float = maxf(1.0, float(sprite_tex.get_height()))
