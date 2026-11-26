@@ -1389,7 +1389,7 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 		assert(ab.end.x <= test_vp.x + 1.0 and ab.end.y <= test_vp.y + 1.0, "StartAnalyticsButton overflow at %s: %s" % [str(test_vp), str(ab)])
 
 	AnalyticsManager.runs = prev_runs_backup
-	AnalyticsManager.suppress_default_persistence = false
+	AnalyticsManager.suppress_default_persistence = true
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
