@@ -822,6 +822,12 @@ func _draw() -> void:
 		# Holographic blueprint chassis + hazard construction frame
 		var base_oct := _make_octagon(15.5)
 		draw_colored_polygon(base_oct, Color(0.14, 0.20, 0.28, 0.92))
+		var bp_tex: Texture2D = SpriteLibrary.get_tower_texture(tower_type)
+		if bp_tex != null:
+			var bp_meta: Dictionary = SpriteLibrary.get_tower_meta(tower_type)
+			var bp_size: Vector2 = SpriteLibrary.compute_tower_draw_size(bp_tex, bp_meta, 34.0, 56.0)
+			var bp_piv := Vector2(float(bp_meta.get("pivot_x", 0.5)), float(bp_meta.get("pivot_y", 0.5)))
+			SpriteLibrary.draw_sprite_oriented(self, bp_tex, Vector2.ZERO, aim_angle, bp_size, bp_piv, Color(0.45, 0.90, 1.0, 0.42))
 		var pulse_a: float = 0.55 + 0.35 * sin(anim_time * 8.0)
 		draw_circle(Vector2.ZERO, 9.5, Color(0.28, 0.75, 0.95, 0.25 * pulse_a))
 		draw_rect(rect, Color(0.95, 0.82, 0.32, 0.85), false, 2.0)
@@ -842,25 +848,29 @@ func _draw() -> void:
 	# Haste active overclock aura
 	if GameState.is_haste_active:
 		var h_pulse: float = 0.5 + 0.35 * sin(anim_time * 10.0)
-		draw_arc(Vector2.ZERO, 19.5, 0.0, TAU, 28, Color(0.35, 1.0, 0.82, h_pulse), 2.0)
+		draw_arc(Vector2.ZERO, 20.5, 0.0, TAU, 28, Color(0.35, 1.0, 0.82, h_pulse), 2.2)
 
-	# Armored octagonal pedestal base
+	# Armored octagonal pedestal base (drawn procedurally only when no custom sprite; sprites include their own pedestal!)
 	var accent_col: Color = Visuals.get_accent_color(tower_type)
+	var has_sprite: bool = (SpriteLibrary.get_tower_texture(tower_type) != null)
 
 	if is_combine_highlighted:
 		var ch_pulse: float = 0.55 + 0.35 * sin(anim_time * 9.0)
-		draw_arc(Vector2.ZERO, 22.5, 0.0, TAU, 28, Color(1.0, 0.88, 0.32, ch_pulse), 2.8)
-		draw_circle(Vector2.ZERO, 20.0, Color(1.0, 0.86, 0.28, 0.14 * ch_pulse))
+		draw_arc(Vector2.ZERO, 23.0, 0.0, TAU, 28, Color(1.0, 0.88, 0.32, ch_pulse), 2.8)
+		draw_circle(Vector2.ZERO, 20.5, Color(1.0, 0.86, 0.28, 0.16 * ch_pulse))
 
-	var outer_oct := _make_octagon(16.0)
-	var inner_oct := _make_octagon(13.2)
-	draw_colored_polygon(outer_oct, Color(0.11, 0.15, 0.22))
-	draw_colored_polygon(inner_oct, Color(0.17, 0.22, 0.31))
-	var rim_col: Color = Color(0.98, 0.90, 0.42) if (is_selected or is_combine_highlighted) else accent_col.darkened(0.15)
-	for i in range(8):
-		draw_line(outer_oct[i], outer_oct[(i + 1) % 8], rim_col, 2.2 if (is_selected or is_combine_highlighted) else 1.5)
-	draw_circle(Vector2.ZERO, 10.5, Color(0.10, 0.13, 0.19))
-	draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 24, accent_col.darkened(0.25), 1.2)
+	if not has_sprite:
+		var outer_oct := _make_octagon(16.0)
+		var inner_oct := _make_octagon(13.2)
+		draw_colored_polygon(outer_oct, Color(0.11, 0.15, 0.22))
+		draw_colored_polygon(inner_oct, Color(0.17, 0.22, 0.31))
+		var rim_col: Color = Color(0.98, 0.90, 0.42) if (is_selected or is_combine_highlighted) else accent_col.darkened(0.15)
+		for i in range(8):
+			draw_line(outer_oct[i], outer_oct[(i + 1) % 8], rim_col, 2.2 if (is_selected or is_combine_highlighted) else 1.5)
+		draw_circle(Vector2.ZERO, 10.5, Color(0.10, 0.13, 0.19))
+		draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 24, accent_col.darkened(0.25), 1.2)
+	elif is_selected:
+		draw_arc(Vector2.ZERO, 21.0, 0.0, TAU, 28, Color(0.98, 0.90, 0.42, 0.92), 2.2)
 
 	if Balance.is_combo_tower(tower_type):
 		if apex_tier >= 2:

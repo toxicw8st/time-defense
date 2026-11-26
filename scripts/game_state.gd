@@ -141,8 +141,10 @@ func load_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	var saved_diff: String = str(cfg.get_value("prefs", "difficulty", "standard"))
 	if Balance.DIFFICULTY_PRESETS.has(saved_diff):
 		difficulty_key = saved_diff
-	prompts_muted = bool(cfg.get_value("prefs", "prompts_muted", false))
-	guide_completed = bool(cfg.get_value("prefs", "guide_completed", false))
+	# Guide Vex is intentionally always enabled on fresh startup for testing & immediate onboarding;
+	# players can still dismiss/mute Vex for the active session.
+	prompts_muted = false
+	guide_completed = false
 	show_damage_numbers = bool(cfg.get_value("prefs", "show_damage_numbers", true))
 	auto_wave_enabled = bool(cfg.get_value("prefs", "auto_wave", false))
 	if SfxManager != null:

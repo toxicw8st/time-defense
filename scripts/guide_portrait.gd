@@ -84,6 +84,37 @@ func _draw() -> void:
 	draw_colored_polygon(beam_pts, Color(accent.r, accent.g, accent.b, 0.16))
 	draw_line(Vector2(cx - 128.0 * s, base_y), Vector2(cx + 128.0 * s, base_y), accent, 3.0 * s)
 
+	# 2b) High-res custom Chrono-Commander Vex portrait sprite (falls back to procedural vector art if absent)
+	var vex_tex: Texture2D = SpriteLibrary.get_character_texture("vex")
+	if vex_tex != null:
+		var tw: float = maxf(1.0, float(vex_tex.get_width()))
+		var th: float = maxf(1.0, float(vex_tex.get_height()))
+		var fit_s: float = minf((w * 0.98) / tw, (h * 0.95) / th)
+		var talk_bounce: float = absf(sin(anim_time * 13.0)) * 3.8 * s if talk_timer > 0.0 else 0.0
+		var breath_scale: float = 1.0 + sin(anim_time * 3.2) * 0.012 + (0.016 if talk_timer > 0.0 else 0.0)
+		var dw: float = tw * fit_s * breath_scale
+		var dh: float = th * fit_s * breath_scale
+		var dst_pos := Vector2(cx - dw * 0.5, base_y - dh + bob * 0.65 - talk_bounce)
+		var mod_tint := Color.WHITE
+		if mood == "alert":
+			mod_tint = Color(1.04, 0.95, 0.93, 1.0)
+		elif talk_timer > 0.0:
+			var glow_p: float = 1.0 + 0.05 * absf(sin(anim_time * 11.0))
+			mod_tint = Color(glow_p, glow_p, glow_p, 1.0)
+		draw_texture_rect(vex_tex, Rect2(dst_pos, Vector2(dw, dh)), false, mod_tint)
+		# Subtle holographic transmission scanlines across Vex
+		var scan_step_s: int = maxi(6, int(round(9.0 * s)))
+		var scan_off_s: int = int(fmod(anim_time * 24.0, float(scan_step_s)))
+		for sy in range(scan_off_s, int(h), scan_step_s):
+			draw_line(Vector2(dst_pos.x + dw * 0.08, float(sy)), Vector2(dst_pos.x + dw * 0.92, float(sy)), Color(accent.r, accent.g, accent.b, 0.045), 1.0)
+		# Live comms waveform bar under Vex when speaking
+		if talk_timer > 0.0:
+			for bar_i in range(9):
+				var bx: float = cx - 48.0 * s + float(bar_i) * 12.0 * s
+				var bh: float = (4.0 + 10.0 * absf(sin(anim_time * 16.0 + float(bar_i) * 0.9))) * s
+				draw_rect(Rect2(Vector2(bx, base_y - bh - 4.0 * s), Vector2(6.0 * s, bh)), Color(accent.r, accent.g, accent.b, 0.82))
+		return
+
 	# 3) Armored Chrono-Command Jacket / Torso & Broad Pauldrons
 	var coat_pts := PackedVector2Array([
 		Vector2(cx - 126.0 * s, base_y),

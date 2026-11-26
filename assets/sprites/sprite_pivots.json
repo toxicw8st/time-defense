@@ -1,0 +1,389 @@
+{
+	"character:vex": {
+		"base_h_ratio": 1.0,
+		"h": 423,
+		"path": "res://assets/sprites/characters/vex.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 490
+	},
+	"enemy:blitzer": {
+		"base_h_ratio": 1.0,
+		"h": 91,
+		"path": "res://assets/sprites/enemies/blitzer.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 152
+	},
+	"enemy:brute": {
+		"base_h_ratio": 1.0,
+		"h": 115,
+		"path": "res://assets/sprites/enemies/brute.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 168
+	},
+	"enemy:carrier": {
+		"base_h_ratio": 1.0,
+		"h": 163,
+		"path": "res://assets/sprites/enemies/carrier.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"enemy:colossus": {
+		"base_h_ratio": 1.0,
+		"h": 124,
+		"path": "res://assets/sprites/enemies/colossus.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 220
+	},
+	"enemy:conduit": {
+		"base_h_ratio": 1.0,
+		"h": 165,
+		"path": "res://assets/sprites/enemies/conduit.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 180
+	},
+	"enemy:crawler": {
+		"base_h_ratio": 1.0,
+		"h": 99,
+		"path": "res://assets/sprites/enemies/crawler.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 140
+	},
+	"enemy:juggernaut": {
+		"base_h_ratio": 1.0,
+		"h": 136,
+		"path": "res://assets/sprites/enemies/juggernaut.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"enemy:mender": {
+		"base_h_ratio": 1.0,
+		"h": 143,
+		"path": "res://assets/sprites/enemies/mender.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 160
+	},
+	"enemy:rusher": {
+		"base_h_ratio": 1.0,
+		"h": 70,
+		"path": "res://assets/sprites/enemies/rusher.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 140
+	},
+	"enemy:stalker": {
+		"base_h_ratio": 1.0,
+		"h": 118,
+		"path": "res://assets/sprites/enemies/stalker.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 152
+	},
+	"structure:alien_base": {
+		"base_h_ratio": 1.0,
+		"h": 184,
+		"path": "res://assets/sprites/structures/alien_base.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 240
+	},
+	"structure:chrono_manipulator": {
+		"base_h_ratio": 1.0,
+		"h": 180,
+		"path": "res://assets/sprites/structures/chrono_manipulator.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 180
+	},
+	"structure:hive_destroyer": {
+		"base_h_ratio": 1.0,
+		"h": 123,
+		"path": "res://assets/sprites/structures/hive_destroyer.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 210
+	},
+	"structure:player_base": {
+		"base_h_ratio": 1.0,
+		"h": 234,
+		"path": "res://assets/sprites/structures/player_base.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 240
+	},
+	"structure:refinery": {
+		"base_h_ratio": 1.0,
+		"h": 145,
+		"path": "res://assets/sprites/structures/refinery.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 180
+	},
+	"tower:annihilator": {
+		"base_h_ratio": 0.978,
+		"h": 107,
+		"path": "res://assets/sprites/towers/annihilator.png",
+		"pivot_x": 0.344,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:annihilator+annihilator": {
+		"base_h_ratio": 0.985,
+		"h": 158,
+		"path": "res://assets/sprites/towers/annihilator_annihilator.png",
+		"pivot_x": 0.4,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 196
+	},
+	"tower:blaster": {
+		"base_h_ratio": 0.971,
+		"h": 146,
+		"path": "res://assets/sprites/towers/blaster.png",
+		"pivot_x": 0.422,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 180
+	},
+	"tower:blaster+annihilator": {
+		"base_h_ratio": 0.978,
+		"h": 139,
+		"path": "res://assets/sprites/towers/blaster_annihilator.png",
+		"pivot_x": 0.408,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 196
+	},
+	"tower:blaster+blaster": {
+		"base_h_ratio": 0.965,
+		"h": 128,
+		"path": "res://assets/sprites/towers/blaster_blaster.png",
+		"pivot_x": 0.379,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:blaster+laser": {
+		"base_h_ratio": 0.976,
+		"h": 93,
+		"path": "res://assets/sprites/towers/blaster_laser.png",
+		"pivot_x": 0.286,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:blaster+mortar": {
+		"base_h_ratio": 0.962,
+		"h": 158,
+		"path": "res://assets/sprites/towers/blaster_mortar.png",
+		"pivot_x": 0.402,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:blaster+railgun": {
+		"base_h_ratio": 0.905,
+		"h": 110,
+		"path": "res://assets/sprites/towers/blaster_railgun.png",
+		"pivot_x": 0.22,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 204
+	},
+	"tower:blaster+slow": {
+		"base_h_ratio": 0.976,
+		"h": 153,
+		"path": "res://assets/sprites/towers/blaster_slow.png",
+		"pivot_x": 0.409,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:laser": {
+		"base_h_ratio": 0.977,
+		"h": 104,
+		"path": "res://assets/sprites/towers/laser.png",
+		"pivot_x": 0.29,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 180
+	},
+	"tower:laser+annihilator": {
+		"base_h_ratio": 0.976,
+		"h": 113,
+		"path": "res://assets/sprites/towers/laser_annihilator.png",
+		"pivot_x": 0.327,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:laser+laser": {
+		"base_h_ratio": 0.975,
+		"h": 119,
+		"path": "res://assets/sprites/towers/laser_laser.png",
+		"pivot_x": 0.316,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:laser+railgun": {
+		"base_h_ratio": 0.965,
+		"h": 72,
+		"path": "res://assets/sprites/towers/laser_railgun.png",
+		"pivot_x": 0.22,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 210
+	},
+	"tower:laser+slow": {
+		"base_h_ratio": 0.974,
+		"h": 136,
+		"path": "res://assets/sprites/towers/laser_slow.png",
+		"pivot_x": 0.309,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:mortar": {
+		"base_h_ratio": 0.972,
+		"h": 153,
+		"path": "res://assets/sprites/towers/mortar.png",
+		"pivot_x": 0.435,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 180
+	},
+	"tower:mortar+annihilator": {
+		"base_h_ratio": 0.98,
+		"h": 128,
+		"path": "res://assets/sprites/towers/mortar_annihilator.png",
+		"pivot_x": 0.355,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 196
+	},
+	"tower:mortar+laser": {
+		"base_h_ratio": 0.976,
+		"h": 165,
+		"path": "res://assets/sprites/towers/mortar_laser.png",
+		"pivot_x": 0.503,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:mortar+mortar": {
+		"base_h_ratio": 0.916,
+		"h": 138,
+		"path": "res://assets/sprites/towers/mortar_mortar.png",
+		"pivot_x": 0.399,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:mortar+railgun": {
+		"base_h_ratio": 0.974,
+		"h": 107,
+		"path": "res://assets/sprites/towers/mortar_railgun.png",
+		"pivot_x": 0.442,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:mortar+slow": {
+		"base_h_ratio": 0.976,
+		"h": 134,
+		"path": "res://assets/sprites/towers/mortar_slow.png",
+		"pivot_x": 0.381,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 192
+	},
+	"tower:railgun": {
+		"base_h_ratio": 0.972,
+		"h": 86,
+		"path": "res://assets/sprites/towers/railgun.png",
+		"pivot_x": 0.226,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:railgun+annihilator": {
+		"base_h_ratio": 0.976,
+		"h": 108,
+		"path": "res://assets/sprites/towers/railgun_annihilator.png",
+		"pivot_x": 0.242,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 220
+	},
+	"tower:railgun+railgun": {
+		"base_h_ratio": 0.967,
+		"h": 73,
+		"path": "res://assets/sprites/towers/railgun_railgun.png",
+		"pivot_x": 0.289,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 210
+	},
+	"tower:slow": {
+		"base_h_ratio": 1.0,
+		"h": 180,
+		"path": "res://assets/sprites/towers/slow.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 179
+	},
+	"tower:slow+annihilator": {
+		"base_h_ratio": 0.972,
+		"h": 119,
+		"path": "res://assets/sprites/towers/slow_annihilator.png",
+		"pivot_x": 0.349,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 200
+	},
+	"tower:slow+railgun": {
+		"base_h_ratio": 0.974,
+		"h": 93,
+		"path": "res://assets/sprites/towers/slow_railgun.png",
+		"pivot_x": 0.258,
+		"pivot_y": 0.5,
+		"radial": false,
+		"w": 204
+	},
+	"tower:slow+slow": {
+		"base_h_ratio": 1.0,
+		"h": 173,
+		"path": "res://assets/sprites/towers/slow_slow.png",
+		"pivot_x": 0.5,
+		"pivot_y": 0.5,
+		"radial": true,
+		"w": 184
+	}
+}

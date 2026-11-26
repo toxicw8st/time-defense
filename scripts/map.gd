@@ -122,6 +122,7 @@ var combine_source_tower: TowerUnit = null
 var inspected_enemy: EnemyUnit = null
 var _shake_timer: float = 0.0
 var _shake_intensity: float = 0.0
+var _draw_shake_offset: Vector2 = Vector2.ZERO
 
 
 static func get_level_config(level_id: int) -> Dictionary:
@@ -1507,8 +1508,10 @@ func _draw() -> void:
 	if _shake_timer > 0.0 and _shake_intensity > 0.0:
 		var ox: float = sin(visual_time * 58.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
 		var oy: float = cos(visual_time * 67.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
-		draw_set_transform(Vector2(ox, oy))
+		_draw_shake_offset = Vector2(ox, oy)
+		draw_set_transform(_draw_shake_offset)
 	else:
+		_draw_shake_offset = Vector2.ZERO
 		draw_set_transform(Vector2.ZERO)
 	var font: Font = ThemeDB.fallback_font
 	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
@@ -1560,6 +1563,7 @@ func _draw() -> void:
 	draw_string(font, REFINERY_ANNEX_RECT.position + Vector2(84, 16), r_rate_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.95, 0.92, 0.55))
 
 	var ref_count: int = GameState.mission.economy.get("refineries_owned", 0)
+	var ref_tex: Texture2D = SpriteLibrary.get_structure_texture("refinery")
 	for i in range(ref_count):
 		var col: int = i % 2
 		var row: int = i / 2
@@ -1568,13 +1572,25 @@ func _draw() -> void:
 		if ry + 32.0 <= REFINERY_ANNEX_RECT.end.y:
 			var r_rect := Rect2(Vector2(rx, ry), Vector2(44, 32))
 			draw_rect(Rect2(r_rect.position + Vector2(1.5, 2.0), r_rect.size), Color(0.0, 0.0, 0.0, 0.4))
-			draw_rect(r_rect, Color(0.14, 0.30, 0.26))
-			draw_rect(r_rect, Color(0.45, 0.88, 0.72), false, 1.5)
-			draw_circle(Vector2(rx + 12.0, ry + 16.0), 7.5, Color(0.20, 0.46, 0.38))
-			draw_arc(Vector2(rx + 12.0, ry + 16.0), 7.5, 0.0, TAU, 16, Color(0.58, 0.96, 0.82), 1.2)
-			var r_pulse: float = 0.6 + 0.4 * sin(visual_time * 3.5 + float(i))
-			draw_circle(Vector2(rx + 12.0, ry + 16.0), 3.5, Color(0.48, 1.0, 0.78, r_pulse))
-			draw_string(font, Vector2(rx + 21, ry + 20), "REF", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.92, 1.0, 0.96))
+			if ref_tex != null:
+				draw_rect(r_rect, Color(0.07, 0.12, 0.15, 0.85))
+				draw_rect(r_rect, r_tier_col, false, 1.4)
+				var r_pulse_s: float = 0.72 + 0.28 * sin(visual_time * 3.5 + float(i))
+				var rw: float = float(ref_tex.get_width())
+				var rh: float = float(ref_tex.get_height())
+				var rsc: float = minf(42.0 / maxf(1.0, rw), 34.0 / maxf(1.0, rh))
+				var rsize := Vector2(rw * rsc, rh * rsc)
+				var rcenter := Vector2(rx + 22.0, ry + 16.0)
+				draw_circle(rcenter, 13.0, Color(r_tier_col.r, r_tier_col.g, r_tier_col.b, 0.14 * r_pulse_s))
+				SpriteLibrary.draw_sprite_oriented(self, ref_tex, rcenter, 0.0, rsize, Vector2(0.5, 0.5), Color.WHITE, _draw_shake_offset)
+			else:
+				draw_rect(r_rect, Color(0.14, 0.30, 0.26))
+				draw_rect(r_rect, Color(0.45, 0.88, 0.72), false, 1.5)
+				draw_circle(Vector2(rx + 12.0, ry + 16.0), 7.5, Color(0.20, 0.46, 0.38))
+				draw_arc(Vector2(rx + 12.0, ry + 16.0), 7.5, 0.0, TAU, 16, Color(0.58, 0.96, 0.82), 1.2)
+				var r_pulse: float = 0.6 + 0.4 * sin(visual_time * 3.5 + float(i))
+				draw_circle(Vector2(rx + 12.0, ry + 16.0), 3.5, Color(0.48, 1.0, 0.78, r_pulse))
+				draw_string(font, Vector2(rx + 21, ry + 20), "REF", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.92, 1.0, 0.96))
 
 	if economy_ref != null and economy_ref.refinery_job != null:
 		var i: int = ref_count
@@ -1733,7 +1749,15 @@ func _draw() -> void:
 				draw_circle(center, min_r, Color(1.0, 0.35, 0.35, 0.08))
 				draw_arc(center, min_r, 0.0, TAU, 32, Color(1.0, 0.45, 0.45, 0.75), 1.5)
 			if drag_tower_type != "":
-				draw_circle(center, 18.0 if is_combine_hover else 15.0, Color(1.0, 0.86, 0.28, 0.45) if (is_combine_hover and valid_drop) else (Color(0.35, 0.95, 0.82, 0.42) if valid_drop else Color(1.0, 0.38, 0.32, 0.38)))
+				var ghost_tex: Texture2D = SpriteLibrary.get_tower_texture(preview_key)
+				if ghost_tex != null:
+					var g_meta: Dictionary = SpriteLibrary.get_tower_meta(preview_key)
+					var g_size: Vector2 = SpriteLibrary.compute_tower_draw_size(ghost_tex, g_meta, 38.0 if Balance.is_combo_tower(preview_key) else 35.0, 66.0)
+					var g_piv := Vector2(float(g_meta.get("pivot_x", 0.5)), float(g_meta.get("pivot_y", 0.5)))
+					var g_tint := Color(1.0, 0.92, 0.55, 0.82) if (is_combine_hover and valid_drop) else (Color(0.62, 1.0, 0.85, 0.78) if valid_drop else Color(1.0, 0.45, 0.42, 0.68))
+					SpriteLibrary.draw_sprite_oriented(self, ghost_tex, center, -PI * 0.5, g_size, g_piv, g_tint, _draw_shake_offset)
+				else:
+					draw_circle(center, 18.0 if is_combine_hover else 15.0, Color(1.0, 0.86, 0.28, 0.45) if (is_combine_hover and valid_drop) else (Color(0.35, 0.95, 0.82, 0.42) if valid_drop else Color(1.0, 0.38, 0.32, 0.38)))
 				draw_arc(center, 19.0 if is_combine_hover else 16.0, 0.0, TAU, 24, ring_stroke, 2.4)
 				var box_w: float = maxf(130.0, float(status_txt.length()) * 6.5 + 16.0)
 				draw_rect(Rect2(center + Vector2(-box_w * 0.5, -36.0), Vector2(box_w, 16.0)), Color(0.05, 0.08, 0.14, 0.94))
@@ -1851,16 +1875,30 @@ func _draw_enemy_base(font: Font) -> void:
 		draw_line(mid_pt, tip_pt, tendril_col, 2.6)
 		draw_circle(tip_pt, 2.8, Color(1.0, 0.48, 0.32, hive_pulse))
 
-	# Outer & inner rotating organic chitin carapace
-	var hive_outer := _make_regular_poly(eb_pos, 30.0, 8, visual_time * 0.25)
-	var hive_inner := _make_regular_poly(eb_pos, 21.0, 8, -visual_time * 0.38)
-	var eb_fill := Color(1.0, 0.82, 0.28) if hive_beam_timer > 0.0 else (Color(0.42, 0.08, 0.12) if is_crit else Color(0.32, 0.09, 0.14))
-	draw_colored_polygon(hive_outer, eb_fill)
-	for s_i in range(8):
-		if is_crit and s_i % 3 == 0:
-			continue # Shattered outer carapace gaps when critical
-		draw_line(hive_outer[s_i], hive_outer[(s_i + 1) % 8], Color(1.0, 0.32, 0.36), 2.5)
-	draw_colored_polygon(hive_inner, Color(0.52, 0.12, 0.22))
+	# Alien Hive custom sprite (or procedural chitin carapace fallback)
+	var ab_tex: Texture2D = SpriteLibrary.get_structure_texture("alien_base")
+	if ab_tex != null:
+		var ab_w: float = maxf(1.0, float(ab_tex.get_width()))
+		var ab_h: float = maxf(1.0, float(ab_tex.get_height()))
+		var breath_s: float = 1.0 + 0.03 * sin(visual_time * pulse_spd)
+		var ab_sc: float = (78.0 / maxf(ab_w, ab_h)) * breath_s
+		var ab_mod := Color.WHITE
+		if hive_beam_timer > 0.0:
+			ab_mod = Color(1.55, 1.28, 0.72, 1.0)
+		elif is_crit:
+			ab_mod = Color(1.18, 0.78, 0.75, 1.0)
+		SpriteLibrary.draw_sprite_oriented(self, ab_tex, eb_pos, 0.0, Vector2(ab_w * ab_sc, ab_h * ab_sc), Vector2(0.5, 0.5), ab_mod, _draw_shake_offset)
+	else:
+		# Outer & inner rotating organic chitin carapace
+		var hive_outer := _make_regular_poly(eb_pos, 30.0, 8, visual_time * 0.25)
+		var hive_inner := _make_regular_poly(eb_pos, 21.0, 8, -visual_time * 0.38)
+		var eb_fill := Color(1.0, 0.82, 0.28) if hive_beam_timer > 0.0 else (Color(0.42, 0.08, 0.12) if is_crit else Color(0.32, 0.09, 0.14))
+		draw_colored_polygon(hive_outer, eb_fill)
+		for s_i in range(8):
+			if is_crit and s_i % 3 == 0:
+				continue # Shattered outer carapace gaps when critical
+			draw_line(hive_outer[s_i], hive_outer[(s_i + 1) % 8], Color(1.0, 0.32, 0.36), 2.5)
+		draw_colored_polygon(hive_inner, Color(0.52, 0.12, 0.22))
 
 	# Progressive Damage Fissures & Bio-Plasma Venting when Damaged or Critical
 	if is_dmg:
@@ -1878,14 +1916,15 @@ func _draw_enemy_base(font: Font) -> void:
 			draw_circle(Vector2(sx, sy), 3.5 + phase * 4.0, Color(0.25, 0.08, 0.14, (1.0 - phase) * 0.65))
 			draw_circle(Vector2(sx + 3.0, sy + 2.0), 2.2, Color(1.0, 0.45, 0.20, (1.0 - phase) * 0.9))
 
-	# Throbbing Alien Hive Core + 4 Bio-Eye Nodes
-	var core_r: float = 11.0 + 2.5 * sin(visual_time * pulse_spd)
-	draw_circle(eb_pos, core_r, Color(0.95, 0.18, 0.32, hive_pulse))
-	draw_circle(eb_pos, core_r * 0.52, Color(1.0, 0.72, 0.42))
-	for e_i in range(4):
-		var ea: float = float(e_i) * PI * 0.5 - visual_time * 0.8
-		var ep: Vector2 = eb_pos + Vector2(cos(ea), sin(ea)) * 15.5
-		draw_circle(ep, 2.6, Color(1.0, 0.85, 0.32, hive_pulse))
+	if ab_tex == null:
+		# Throbbing Alien Hive Core + 4 Bio-Eye Nodes
+		var core_r: float = 11.0 + 2.5 * sin(visual_time * pulse_spd)
+		draw_circle(eb_pos, core_r, Color(0.95, 0.18, 0.32, hive_pulse))
+		draw_circle(eb_pos, core_r * 0.52, Color(1.0, 0.72, 0.42))
+		for e_i in range(4):
+			var ea: float = float(e_i) * PI * 0.5 - visual_time * 0.8
+			var ep: Vector2 = eb_pos + Vector2(cos(ea), sin(ea)) * 15.5
+			draw_circle(ep, 2.6, Color(1.0, 0.85, 0.32, hive_pulse))
 
 	# Circular Hive HP Arc around Alien Base
 	var hp_col := Color(0.95, 0.26, 0.34) if not is_crit else Color(1.0, 0.52, 0.18, hive_pulse)
@@ -1955,31 +1994,44 @@ func _draw_player_base(font: Font) -> void:
 			])
 			draw_colored_polygon(cone_pts, Color(1.0, 0.15, 0.18, 0.26))
 
-	# Base shadow & outer octagonal citadel hull
-	draw_circle(pb_pos + Vector2(2, 3), 36.0, Color(0.0, 0.0, 0.0, 0.48))
-	var pb_outer := _make_regular_poly(pb_pos, 34.0, 8, PI * 0.125)
-	var pb_inner := _make_regular_poly(pb_pos, 25.0, 8, PI * 0.125)
-	var pb_fill := Color(0.11, 0.24, 0.40)
-	var pb_border := Color(0.38, 0.82, 1.0)
-	if leak_flash_timer > 0.0:
-		pb_fill = Color(0.88, 0.18, 0.20)
-		pb_border = Color(1.0, 0.85, 0.85)
-	elif is_almost_dead:
-		var crit_pulse: float = 0.55 + 0.45 * sin(visual_time * 11.0)
-		pb_fill = Color(0.34 + 0.18 * crit_pulse, 0.10, 0.14)
-		pb_border = Color(1.0, 0.28, 0.28, 0.70 + 0.30 * crit_pulse)
-	elif is_damaged:
-		pb_fill = Color(0.20, 0.20, 0.30)
-		pb_border = Color(1.0, 0.72, 0.28)
+	# Base shadow & Player Citadel custom sprite (with procedural octagonal hull fallback)
+	draw_circle(pb_pos + Vector2(2, 3), 38.0, Color(0.0, 0.0, 0.0, 0.48))
+	var pb_tex: Texture2D = SpriteLibrary.get_structure_texture("player_base")
+	if pb_tex != null:
+		var pb_w: float = maxf(1.0, float(pb_tex.get_width()))
+		var pb_h: float = maxf(1.0, float(pb_tex.get_height()))
+		var pb_sc: float = 80.0 / maxf(pb_w, pb_h)
+		var pb_mod := Color.WHITE
+		if leak_flash_timer > 0.0:
+			pb_mod = Color(1.45, 0.55, 0.55, 1.0)
+		elif is_almost_dead:
+			var cp: float = 0.5 + 0.5 * sin(visual_time * 11.0)
+			pb_mod = Color(1.18, 0.76 - 0.16 * cp, 0.76 - 0.16 * cp, 1.0)
+		SpriteLibrary.draw_sprite_oriented(self, pb_tex, pb_pos, 0.0, Vector2(pb_w * pb_sc, pb_h * pb_sc), Vector2(0.5, 0.5), pb_mod, _draw_shake_offset)
+	else:
+		var pb_outer := _make_regular_poly(pb_pos, 34.0, 8, PI * 0.125)
+		var pb_inner := _make_regular_poly(pb_pos, 25.0, 8, PI * 0.125)
+		var pb_fill := Color(0.11, 0.24, 0.40)
+		var pb_border := Color(0.38, 0.82, 1.0)
+		if leak_flash_timer > 0.0:
+			pb_fill = Color(0.88, 0.18, 0.20)
+			pb_border = Color(1.0, 0.85, 0.85)
+		elif is_almost_dead:
+			var crit_pulse: float = 0.55 + 0.45 * sin(visual_time * 11.0)
+			pb_fill = Color(0.34 + 0.18 * crit_pulse, 0.10, 0.14)
+			pb_border = Color(1.0, 0.28, 0.28, 0.70 + 0.30 * crit_pulse)
+		elif is_damaged:
+			pb_fill = Color(0.20, 0.20, 0.30)
+			pb_border = Color(1.0, 0.72, 0.28)
 
-	draw_colored_polygon(pb_outer, Color(0.08, 0.14, 0.24))
-	draw_colored_polygon(pb_inner, pb_fill)
+		draw_colored_polygon(pb_outer, Color(0.08, 0.14, 0.24))
+		draw_colored_polygon(pb_inner, pb_fill)
 
-	# Outer shield walls: intact when healthy, flickering broken segments when Almost Dead!
-	for s_i in range(8):
-		if is_almost_dead and int(floor(visual_time * 10.0) + s_i) % 3 == 0:
-			continue
-		draw_line(pb_outer[s_i], pb_outer[(s_i + 1) % 8], pb_border, 2.8)
+		# Outer shield walls: intact when healthy, flickering broken segments when Almost Dead!
+		for s_i in range(8):
+			if is_almost_dead and int(floor(visual_time * 10.0) + s_i) % 3 == 0:
+				continue
+			draw_line(pb_outer[s_i], pb_outer[(s_i + 1) % 8], pb_border, 2.8)
 
 	# --- C) Structural Hull Cracks, Smoke Plumes & Flying Sparks when Damaged / Almost Dead ---
 	if is_damaged:
@@ -2034,10 +2086,31 @@ func _draw_player_base(font: Font) -> void:
 				draw_circle(np, 2.2 + buildup * 1.8, Color(0.85, 0.48, 1.0, 0.9))
 				draw_circle(np, 1.2 + buildup * 0.8, Color(1.0, 0.95, 0.75))
 
-	# Swelling Chronosphere Core (grows from 6.2px up to 11.2px as electrical charge builds up)
-	var core_rad: float = lerpf(6.2, 10.6, buildup) + (2.0 * sin(visual_time * 16.0) if buildup >= 0.5 else 0.0)
-	draw_circle(pb_pos, core_rad, manip_col)
-	draw_circle(pb_pos, core_rad * 0.48, Color.WHITE)
+	# Swelling Chronosphere Core + Custom Chrono-Manipulator Dome & Hive Destroyer Turret
+	var cm_tex: Texture2D = SpriteLibrary.get_structure_texture("chrono_manipulator")
+	if cm_tex != null:
+		var cm_sz: float = lerpf(32.0, 38.0, buildup)
+		var cm_mod := Color(1.0, 0.82, 0.45, 0.95) if GameState.is_base_locked() else Color.WHITE
+		SpriteLibrary.draw_sprite_oriented(self, cm_tex, pb_pos, visual_time * 0.45 * spin_mult, Vector2(cm_sz, cm_sz), Vector2(0.5, 0.5), cm_mod, _draw_shake_offset)
+	else:
+		var core_rad: float = lerpf(6.2, 10.6, buildup) + (2.0 * sin(visual_time * 16.0) if buildup >= 0.5 else 0.0)
+		draw_circle(pb_pos, core_rad, manip_col)
+		draw_circle(pb_pos, core_rad * 0.48, Color.WHITE)
+
+	# Mounted Hive Destroyer siege rail aiming toward the Alien Hive!
+	var hd_tex: Texture2D = SpriteLibrary.get_structure_texture("hive_destroyer")
+	if hd_tex != null:
+		var to_hive: Vector2 = (active_enemy_base_pos - pb_pos).normalized()
+		var hd_ang: float = to_hive.angle() + PI # Sprite natively faces LEFT (-X)
+		var hd_w: float = maxf(1.0, float(hd_tex.get_width()))
+		var hd_h: float = maxf(1.0, float(hd_tex.get_height()))
+		var hd_sc: float = 46.0 / maxf(hd_w, hd_h)
+		var hd_pos: Vector2 = pb_pos + to_hive * 18.0
+		var hd_mod := Color(1.35, 1.35, 1.0, 1.0) if (hive_beam_timer > 0.0 or GameState.is_base_charging()) else Color(0.95, 0.98, 1.0, 0.96)
+		if GameState.is_base_charging():
+			var ch_glow: float = 0.55 + 0.45 * sin(visual_time * 12.0)
+			draw_circle(hd_pos + to_hive * 14.0, 9.0 + 3.0 * ch_glow, Color(0.38, 0.95, 1.0, 0.45 * ch_glow))
+		SpriteLibrary.draw_sprite_oriented(self, hd_tex, hd_pos, hd_ang, Vector2(hd_w * hd_sc, hd_h * hd_sc), Vector2(0.5, 0.5), hd_mod, _draw_shake_offset)
 
 	# --- E) ELECTRICAL SURGE EXPLOSION DETONATION (When Surge Triggers!) ---
 	if is_exploding:

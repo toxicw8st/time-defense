@@ -81,6 +81,30 @@ static func draw_turret(
 	var fwd: Vector2 = Vector2.RIGHT.rotated(aim_angle)
 	var side: Vector2 = Vector2(-fwd.y, fwd.x)
 
+	var tex: Texture2D = SpriteLibrary.get_tower_texture(tower_type)
+	if tex != null:
+		var meta: Dictionary = SpriteLibrary.get_tower_meta(tower_type)
+		var is_combo: bool = Balance.is_combo_tower(tower_type)
+		var ped_px: float = 39.0 if is_combo else 36.0
+		var max_w: float = 70.0 if is_combo else 62.0
+		var draw_size: Vector2 = SpriteLibrary.compute_tower_draw_size(tex, meta, ped_px, max_w)
+		var pivot := Vector2(float(meta.get("pivot_x", 0.5)), float(meta.get("pivot_y", 0.5)))
+		var is_radial: bool = bool(meta.get("radial", false))
+		var draw_ang: float = (anim_time * 0.35) if is_radial else aim_angle
+		var recoil_off: Vector2 = Vector2.ZERO if is_radial else (-fwd * (recoil * 0.85))
+		SpriteLibrary.draw_sprite_oriented(canvas, tex, recoil_off, draw_ang, draw_size, pivot, Color.WHITE)
+		if muzzle_flash_timer > 0.0:
+			var accent: Color = get_accent_color(tower_type)
+			var mf_a: float = clampf(muzzle_flash_timer / 0.14, 0.0, 1.0)
+			if is_radial:
+				canvas.draw_arc(Vector2.ZERO, 18.0 + (1.0 - mf_a) * 6.0, 0.0, TAU, 28, Color(accent.r, accent.g, accent.b, mf_a * 0.92), 2.5)
+			else:
+				var tip_dist: float = maxf(14.0, (1.0 - pivot.x) * draw_size.x - recoil * 0.5)
+				var tip_pos: Vector2 = fwd * tip_dist
+				canvas.draw_circle(tip_pos, 6.2 * mf_a + 1.8, Color(accent.r, accent.g, accent.b, mf_a * 0.85))
+				canvas.draw_circle(tip_pos, 3.0 * mf_a + 0.8, Color(1.0, 0.98, 0.86, mf_a))
+		return
+
 	match tower_type:
 		"blaster":
 			# Twin-barrel armor-piercing autocannon

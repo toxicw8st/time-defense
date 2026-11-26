@@ -1077,13 +1077,18 @@
       </svg>`;
     }
 
+    function renderTowerSprite(fileKey, sizePx, fallbackSvg) {
+      return `<img src="assets/sprites/towers/${fileKey}.png" alt="${fileKey}" style="width:${sizePx}px;height:${sizePx}px;object-fit:contain;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.65));" onerror="this.outerHTML=this.dataset.fb" data-fb="${fallbackSvg.replace(/"/g, '&quot;')}" />`;
+    }
+
     function renderBaseTowers() {
       const grid = document.getElementById("base-towers-grid");
       grid.innerHTML = TOWER_ORDER.map((k) => {
         const t = BASE_TOWERS[k];
+        const fb = buildComboSVG(k, k, true).replace('width="84" height="84"', 'width="52" height="52"');
         return `<div class="base-card">
           <div class="base-head">
-            <div style="flex-shrink:0">${buildComboSVG(k, k, true).replace('width="84" height="84"', 'width="48" height="48"')}</div>
+            <div style="flex-shrink:0;width:54px;height:54px;display:flex;align-items:center;justify-content:center;background:#0d1420;border:1px solid #2b3e5c;border-radius:8px;padding:3px;">${renderTowerSprite(k, 48, fb)}</div>
             <div>
               <div class="base-name">${t.name}</div>
               <div class="base-cost">$${t.cost} &middot; ${t.type} &middot; ${t.build}s build</div>
@@ -1167,9 +1172,10 @@
       grid.innerHTML = list.map((c) => {
         const typeTags = c.types.map((t) => `<span class="tag ${typeTagClass(t)}">${t}</span>`).join("");
         const mergeBadge = c.same ? `<span class="tag t-same">2-OF-A-KIND MERGE</span>` : "";
+        const spriteKey = c.id.replace("+", "_");
         return `<article class="combo-card" id="card-${c.id}">
           <div class="card-top">
-            <div class="art-box">${buildComboSVG(c.a, c.b, c.same)}</div>
+            <div class="art-box">${renderTowerSprite(spriteKey, 78, buildComboSVG(c.a, c.b, c.same))}</div>
             <div class="card-title-block">
               <div class="combo-recipe">${BASE_TOWERS[c.a].name} + ${BASE_TOWERS[c.b].name}</div>
               <h3 class="combo-name">${c.name}</h3>

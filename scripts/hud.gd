@@ -3538,7 +3538,14 @@ func _on_guide_ack_pressed() -> void:
 	if guide_panel != null:
 		guide_panel.visible = false
 	_release_guide_pause()
-	if _current_guide_beat == "w6_build":
+	if _current_guide_beat == "startup":
+		GameState.prompts_muted = false
+		GameState.guide_completed = false
+		if GameState.mission != null:
+			GameState.mission.shown_prompts.clear()
+		if pause_mute_check != null:
+			pause_mute_check.button_pressed = false
+	elif _current_guide_beat == "w6_build":
 		GameState.guide_completed = true
 		GameState.save_meta_progress()
 		if AnalyticsManager != null:

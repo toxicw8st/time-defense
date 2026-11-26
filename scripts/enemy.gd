@@ -473,180 +473,235 @@ func _draw() -> void:
 			var end_p: Vector2 = start_p + back_dir * (8.5 + float(swift_stacks_at_spawn) * 2.2)
 			draw_line(start_p, end_p, Color(0.38, 0.98, 0.78, 0.88), 2.0)
 
-	# Distinct alien morphology per enemy type
-	match enemy_type:
-		"crawler":
-			# 6 animated insectoid chitin legs + segmented carapace + pincer mandibles
-			for l_i in range(3):
-				var swing: float = sin(anim_time * 14.0 + float(l_i) * 2.1) * 2.6
-				var lx: float = (float(l_i) - 1.0) * 4.5
-				var root_l: Vector2 = fwd * lx + side * 5.0
-				var tip_l: Vector2 = fwd * (lx + swing) + side * (radius + 3.8)
-				var root_r: Vector2 = fwd * lx - side * 5.0
-				var tip_r: Vector2 = fwd * (lx - swing) - side * (radius + 3.8)
-				draw_line(root_l, tip_l, Color(0.45, 0.12, 0.12), 1.8)
-				draw_line(root_r, tip_r, Color(0.45, 0.12, 0.12), 1.8)
-			draw_circle(-fwd * 3.0, radius * 0.78, fill_color.darkened(0.22))
-			draw_circle(fwd * 1.5, radius * 0.82, fill_color)
-			draw_line(fwd * 7.0 + side * 3.2, fwd * 12.0 + side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
-			draw_line(fwd * 7.0 - side * 3.2, fwd * 12.0 - side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
-			draw_circle(fwd * 5.5 + side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
-			draw_circle(fwd * 5.5 - side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
-
-		"rusher":
-			# Swept-wing raptor swarmer with forward scythes & bio-thruster exhaust
-			var exhaust_len: float = 5.0 + 2.5 * sin(anim_time * 22.0)
-			draw_line(-fwd * 7.0, -fwd * (7.0 + exhaust_len), Color(0.45, 0.96, 1.0, 0.85), 3.2)
-			var wing_pts := [Vector2(11.0, 0.0), Vector2(-6.0, -9.5), Vector2(-3.0, 0.0), Vector2(-6.0, 9.5)]
-			_draw_poly_oriented(wing_pts, ang, fill_color)
-			var core_pts := [Vector2(8.0, 0.0), Vector2(-4.0, -4.5), Vector2(-4.0, 4.5)]
-			_draw_poly_oriented(core_pts, ang, fill_color.lightened(0.32))
-			draw_line(fwd * 5.0 + side * 4.5, fwd * 12.5 + side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
-			draw_line(fwd * 5.0 - side * 4.5, fwd * 12.5 - side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
-
-		"brute":
-			# Hulking armored goliath with heavy steel dorsal plates & battering-ram horns
-			var body_pts := [
-				Vector2(13.0, -6.0), Vector2(13.0, 6.0), Vector2(3.0, 14.5),
-				Vector2(-11.0, 12.0), Vector2(-14.5, 0.0), Vector2(-11.0, -12.0), Vector2(3.0, -14.5)
-			]
-			_draw_poly_oriented(body_pts, ang, fill_color.darkened(0.18))
-			var plate_pts := [
-				Vector2(9.0, -4.5), Vector2(9.0, 4.5), Vector2(1.0, 10.5),
-				Vector2(-9.0, 8.5), Vector2(-9.0, -8.5), Vector2(1.0, -10.5)
-			]
-			_draw_poly_oriented(plate_pts, ang, Color(0.55, 0.60, 0.68) if hit_flash_timer <= 0.0 else Color.WHITE)
-			draw_circle(Vector2.ZERO, 6.5, fill_color)
-			# Ram horns
-			draw_line(fwd * 9.0 + side * 6.5, fwd * 17.5 + side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
-			draw_line(fwd * 9.0 - side * 6.5, fwd * 17.5 - side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
-			draw_line(fwd * 8.5 - side * 4.0, fwd * 8.5 + side * 4.0, Color(1.0, 0.25, 0.25), 2.4)
-
-		"blitzer":
-			# Prismatic diamond interceptor with rotating reflective energy hex-shield
-			var diamond := [Vector2(12.5, 0.0), Vector2(0.0, -9.5), Vector2(-11.0, 0.0), Vector2(0.0, 9.5)]
-			_draw_poly_oriented(diamond, ang, fill_color.darkened(0.15))
-			var inner_d := [Vector2(8.5, 0.0), Vector2(0.0, -5.5), Vector2(-6.5, 0.0), Vector2(0.0, 5.5)]
-			_draw_poly_oriented(inner_d, ang, Color(0.82, 0.98, 1.0))
-			for s_i in range(6):
-				var sa1: float = anim_time * 3.5 + float(s_i) * TAU / 6.0
-				var sa2: float = sa1 + TAU / 6.0
-				draw_line(Vector2(cos(sa1), sin(sa1)) * 12.2, Vector2(cos(sa2), sin(sa2)) * 12.2, Color(0.65, 0.98, 1.0, 0.85), 1.6)
-
-		"juggernaut":
-			# Boss Dreadnought Leviathan (Armored + Reflective)
-			var hull := [
-				Vector2(17.0, -7.5), Vector2(17.0, 7.5), Vector2(5.0, 18.0),
-				Vector2(-13.0, 16.0), Vector2(-18.5, 0.0), Vector2(-13.0, -16.0), Vector2(5.0, -18.0)
-			]
-			_draw_poly_oriented(hull, ang, fill_color.darkened(0.25))
-			var armor_chevron := [
-				Vector2(13.0, -5.5), Vector2(13.0, 5.5), Vector2(3.0, 13.5),
-				Vector2(-10.0, 11.5), Vector2(-10.0, -11.5), Vector2(3.0, -13.5)
-			]
-			_draw_poly_oriented(armor_chevron, ang, Color(0.72, 0.78, 0.88))
-			draw_circle(Vector2.ZERO, 9.5, fill_color)
-			# Pulsing dark-matter reactor core
-			var core_r: float = 4.8 + 1.2 * sin(anim_time * 6.0)
-			draw_circle(Vector2.ZERO, core_r, Color(0.95, 0.52, 1.0))
-			draw_circle(Vector2.ZERO, 2.5, Color.WHITE)
-			# 4 heavy siege tusks
-			draw_line(fwd * 12.0 + side * 8.5, fwd * 22.5 + side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
-			draw_line(fwd * 12.0 - side * 8.5, fwd * 22.5 - side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
-			draw_line(fwd * 14.0 + side * 4.0, fwd * 20.0 + side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
-			draw_line(fwd * 14.0 - side * 4.0, fwd * 20.0 - side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
-			# Rotating outer Reflective prismatic shield
-			for s_i in range(6):
-				var sa1: float = -anim_time * 2.2 + float(s_i) * TAU / 6.0
-				var sa2: float = sa1 + TAU / 6.0
-				draw_line(Vector2(cos(sa1), sin(sa1)) * 20.2, Vector2(cos(sa2), sin(sa2)) * 20.2, Color(0.55, 0.96, 1.0, 0.82), 2.0)
-
-		"colossus":
-			# Wave 16+ Tier-2 Siege Boss Titan (Armored + Reflective)
-			var c_hull := [
-				Vector2(21.0, -9.0), Vector2(21.0, 9.0), Vector2(7.0, 21.5),
-				Vector2(-15.0, 19.0), Vector2(-22.0, 0.0), Vector2(-15.0, -19.0), Vector2(7.0, -21.5)
-			]
-			_draw_poly_oriented(c_hull, ang, fill_color.darkened(0.28))
-			var c_plate := [
-				Vector2(16.0, -6.5), Vector2(16.0, 6.5), Vector2(4.0, 16.0),
-				Vector2(-12.0, 14.0), Vector2(-12.0, -14.0), Vector2(4.0, -16.0)
-			]
-			_draw_poly_oriented(c_plate, ang, Color(0.88, 0.76, 0.42))
-			draw_circle(Vector2.ZERO, 11.5, fill_color)
-			var c_core: float = 5.5 + 1.6 * sin(anim_time * 7.5)
-			draw_circle(Vector2.ZERO, c_core, Color(1.0, 0.82, 0.30))
-			draw_circle(Vector2.ZERO, 2.8, Color.WHITE)
-			# 6 heavy siege horns
-			for h_side in [-1.0, 1.0]:
-				draw_line(fwd * 14.0 + side * (11.0 * h_side), fwd * 27.0 + side * (7.0 * h_side), Color(1.0, 0.86, 0.38), 3.8)
-				draw_line(fwd * 16.0 + side * (5.0 * h_side), fwd * 24.0 + side * (2.5 * h_side), Color(0.95, 0.96, 1.0), 2.6)
-			# Dual counter-rotating prismatic shields
-			for s_i in range(8):
-				var sa1: float = anim_time * 2.0 + float(s_i) * TAU / 8.0
-				var sa2: float = sa1 + TAU / 8.0
-				draw_line(Vector2(cos(sa1), sin(sa1)) * 24.5, Vector2(cos(sa2), sin(sa2)) * 24.5, Color(0.48, 0.96, 1.0, 0.85), 2.2)
-				var sb1: float = -anim_time * 1.6 + float(s_i) * TAU / 8.0
-				var sb2: float = sb1 + TAU / 12.0
-				draw_line(Vector2(cos(sb1), sin(sb1)) * 21.5, Vector2(cos(sb2), sin(sb2)) * 21.5, Color(1.0, 0.78, 0.30, 0.75), 1.8)
-
-		"stalker":
-			# Cloaked Stealth Phase-Mantis: translucent violet shimmer when cloaked, crisp lock reticle when revealed!
-			var cloak_a: float = 0.34 + 0.14 * sin(anim_time * 9.0) if is_effectively_cloaked() else 0.96
-			var s_col := Color(fill_color.r, fill_color.g, fill_color.b, cloak_a)
-			var blade_pts := [Vector2(13.5, 0.0), Vector2(-3.0, -9.5), Vector2(-9.5, -4.5), Vector2(-5.5, 0.0), Vector2(-9.5, 4.5), Vector2(-3.0, 9.5)]
-			_draw_poly_oriented(blade_pts, ang, s_col)
-			var visor_pts := [Vector2(9.0, 0.0), Vector2(1.0, -4.0), Vector2(1.0, 4.0)]
-			_draw_poly_oriented(visor_pts, ang, Color(0.72, 0.96, 1.0, cloak_a))
-			if is_effectively_cloaked():
-				draw_arc(Vector2.ZERO, 12.5, anim_time * 5.0, anim_time * 5.0 + PI * 1.1, 16, Color(0.68, 0.45, 1.0, 0.55), 1.4)
-			else:
-				# Revealed radar scan lock!
-				draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 20, Color(0.35, 0.98, 1.0, 0.92), 1.8)
-				draw_line(Vector2(-15, 0), Vector2(-10, 0), Color(0.35, 0.98, 1.0), 1.6)
-				draw_line(Vector2(10, 0), Vector2(15, 0), Color(0.35, 0.98, 1.0), 1.6)
-
-		"mender":
-			# Organic Bio-Regenerator: glowing emerald bio-core + healing pulse rings
-			var regen_active: bool = (regen_suppressed_timer <= 0.0 and decay_ticks_remaining <= 0 and armor_shred_stacks <= 0)
-			if regen_active and hp < max_hp:
-				var hp_wave: float = fmod(anim_time * 1.8, 1.0)
-				draw_arc(Vector2.ZERO, lerpf(9.0, 21.0, hp_wave), 0.0, TAU, 22, Color(0.30, 1.0, 0.55, (1.0 - hp_wave) * 0.85), 2.0)
-			var m_body := [Vector2(12.0, -4.0), Vector2(12.0, 4.0), Vector2(2.0, 11.5), Vector2(-10.5, 8.5), Vector2(-12.5, 0.0), Vector2(-10.5, -8.5), Vector2(2.0, -11.5)]
-			_draw_poly_oriented(m_body, ang, fill_color.darkened(0.22))
-			draw_circle(Vector2.ZERO, 7.5, fill_color if regen_active else fill_color.lerp(Color(0.65, 0.55, 0.35), 0.55))
-			# Bio-plus emblem on carapace
-			draw_line(Vector2(-4.5, 0.0), Vector2(4.5, 0.0), Color(0.85, 1.0, 0.88), 2.4)
-			draw_line(Vector2(0.0, -4.5), Vector2(0.0, 4.5), Color(0.85, 1.0, 0.88), 2.4)
-
-		"carrier":
-			# Armored Brood Carrier: bulky bronze-amber hive hull cradling 6 glowing spawn sacs
-			var hull_c := [Vector2(16.0, -6.5), Vector2(16.0, 6.5), Vector2(6.0, 16.0), Vector2(-12.0, 14.5), Vector2(-17.0, 0.0), Vector2(-12.0, -14.5), Vector2(6.0, -16.0)]
-			_draw_poly_oriented(hull_c, ang, fill_color.darkened(0.28))
-			var rib_c := [Vector2(11.5, -4.5), Vector2(11.5, 4.5), Vector2(2.0, 11.5), Vector2(-9.5, 10.0), Vector2(-9.5, -10.0), Vector2(2.0, -11.5)]
-			_draw_poly_oriented(rib_c, ang, Color(0.52, 0.48, 0.44))
-			for pod_i in range(6):
-				var pa: float = float(pod_i) * TAU / 6.0 + ang
-				var p_off: Vector2 = Vector2(cos(pa), sin(pa)) * 6.8
-				var p_r: float = 2.6 + 0.6 * sin(anim_time * 7.0 + float(pod_i))
-				draw_circle(p_off, p_r, Color(1.0, 0.72, 0.22) if pod_i % 2 == 0 else Color(0.28, 0.94, 1.0))
-			draw_circle(Vector2.ZERO, 4.0, Color(1.0, 0.92, 0.65))
-
-		"conduit":
-			# Aegis Conduit: projects visible 95px golden-cyan protective shield dome to nearby allies!
+	# Distinct custom sprite rendering (with procedural vector fallback)
+	var sprite_tex: Texture2D = SpriteLibrary.get_enemy_texture(enemy_type)
+	if sprite_tex != null:
+		# Keep Conduit's 95px protective dome aura and Mender's healing pulse underneath sprite
+		if enemy_type == "conduit":
 			var dome_r: float = shield_aura_radius if shield_aura_radius > 0.0 else 95.0
 			draw_circle(Vector2.ZERO, dome_r, Color(0.32, 0.88, 1.0, 0.07))
 			draw_arc(Vector2.ZERO, dome_r, 0.0, TAU, 40, Color(0.98, 0.84, 0.34, 0.42), 1.8)
 			draw_arc(Vector2.ZERO, dome_r - 3.5, anim_time * 1.4, anim_time * 1.4 + PI * 1.2, 32, Color(0.38, 0.96, 1.0, 0.52), 1.5)
-			var hex_pts := PackedVector2Array()
-			for hi in range(6):
-				var ha: float = anim_time * 1.2 + float(hi) * TAU / 6.0
-				hex_pts.append(Vector2(cos(ha), sin(ha)) * 13.5)
-			draw_colored_polygon(hex_pts, Color(0.14, 0.32, 0.46))
-			for hi in range(6):
-				draw_line(hex_pts[hi], hex_pts[(hi + 1) % 6], Color(1.0, 0.88, 0.42), 2.0)
-			draw_circle(Vector2.ZERO, 6.2 + 1.0 * sin(anim_time * 6.5), Color(0.45, 0.98, 1.0))
-			draw_circle(Vector2.ZERO, 2.8, Color.WHITE)
+		elif enemy_type == "mender":
+			var regen_active: bool = (regen_suppressed_timer <= 0.0 and decay_ticks_remaining <= 0 and armor_shred_stacks <= 0)
+			if regen_active and hp < max_hp:
+				var hp_wave: float = fmod(anim_time * 1.8, 1.0)
+				draw_arc(Vector2.ZERO, lerpf(10.0, 24.0, hp_wave), 0.0, TAU, 22, Color(0.30, 1.0, 0.55, (1.0 - hp_wave) * 0.85), 2.0)
+
+		var target_max: float = 30.0
+		match enemy_type:
+			"crawler": target_max = 28.0
+			"rusher": target_max = 28.0
+			"stalker": target_max = 34.0
+			"blitzer": target_max = 32.0
+			"mender": target_max = 34.0
+			"brute": target_max = 42.0
+			"conduit": target_max = 40.0
+			"carrier": target_max = 48.0
+			"juggernaut": target_max = 56.0
+			"colossus": target_max = 68.0
+
+		var sw: float = maxf(1.0, float(sprite_tex.get_width()))
+		var sh: float = maxf(1.0, float(sprite_tex.get_height()))
+		var sc: float = target_max / maxf(sw, sh)
+		var draw_size := Vector2(sw * sc, sh * sc)
+
+		var mod_col := Color.WHITE
+		if GameState.is_enemies_frozen:
+			mod_col = Color(0.58, 0.92, 1.0, 1.0)
+		elif enemy_type == "mender" and (regen_suppressed_timer > 0.0 or decay_ticks_remaining > 0 or armor_shred_stacks > 0):
+			mod_col = Color(0.78, 0.72, 0.62, 1.0)
+		if hit_flash_timer > 0.0:
+			mod_col = Color(1.55, 1.55, 1.55, 1.0)
+		if enemy_type == "stalker" and is_effectively_cloaked():
+			mod_col.a = 0.34 + 0.14 * sin(anim_time * 9.0)
+
+		var wobble_amp: float = 0.0 if (GameState.is_enemies_frozen or stun_remaining > 0.0) else (0.065 if enemy_type in ["crawler", "rusher", "stalker", "mender"] else 0.028)
+		var wobble_ang: float = ang + sin(anim_time * 13.0 + float(enemy_id) * 1.7) * wobble_amp
+		SpriteLibrary.draw_sprite_oriented(self, sprite_tex, Vector2.ZERO, wobble_ang, draw_size, Vector2(0.5, 0.5), mod_col)
+
+		if enemy_type == "stalker":
+			if is_effectively_cloaked():
+				draw_arc(Vector2.ZERO, 13.5, anim_time * 5.0, anim_time * 5.0 + PI * 1.1, 16, Color(0.68, 0.45, 1.0, 0.55), 1.4)
+			else:
+				draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 20, Color(0.35, 0.98, 1.0, 0.92), 1.8)
+				draw_line(Vector2(-16, 0), Vector2(-11, 0), Color(0.35, 0.98, 1.0), 1.6)
+				draw_line(Vector2(11, 0), Vector2(16, 0), Color(0.35, 0.98, 1.0), 1.6)
+	else:
+		# Procedural fallback morphology if custom sprite is missing
+		match enemy_type:
+			"crawler":
+				# 6 animated insectoid chitin legs + segmented carapace + pincer mandibles
+				for l_i in range(3):
+					var swing: float = sin(anim_time * 14.0 + float(l_i) * 2.1) * 2.6
+					var lx: float = (float(l_i) - 1.0) * 4.5
+					var root_l: Vector2 = fwd * lx + side * 5.0
+					var tip_l: Vector2 = fwd * (lx + swing) + side * (radius + 3.8)
+					var root_r: Vector2 = fwd * lx - side * 5.0
+					var tip_r: Vector2 = fwd * (lx - swing) - side * (radius + 3.8)
+					draw_line(root_l, tip_l, Color(0.45, 0.12, 0.12), 1.8)
+					draw_line(root_r, tip_r, Color(0.45, 0.12, 0.12), 1.8)
+				draw_circle(-fwd * 3.0, radius * 0.78, fill_color.darkened(0.22))
+				draw_circle(fwd * 1.5, radius * 0.82, fill_color)
+				draw_line(fwd * 7.0 + side * 3.2, fwd * 12.0 + side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
+				draw_line(fwd * 7.0 - side * 3.2, fwd * 12.0 - side * 1.2, Color(0.98, 0.85, 0.55), 1.8)
+				draw_circle(fwd * 5.5 + side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
+				draw_circle(fwd * 5.5 - side * 2.8, 1.6, Color(0.75, 1.0, 0.35))
+
+			"rusher":
+				# Swept-wing raptor swarmer with forward scythes & bio-thruster exhaust
+				var exhaust_len: float = 5.0 + 2.5 * sin(anim_time * 22.0)
+				draw_line(-fwd * 7.0, -fwd * (7.0 + exhaust_len), Color(0.45, 0.96, 1.0, 0.85), 3.2)
+				var wing_pts := [Vector2(11.0, 0.0), Vector2(-6.0, -9.5), Vector2(-3.0, 0.0), Vector2(-6.0, 9.5)]
+				_draw_poly_oriented(wing_pts, ang, fill_color)
+				var core_pts := [Vector2(8.0, 0.0), Vector2(-4.0, -4.5), Vector2(-4.0, 4.5)]
+				_draw_poly_oriented(core_pts, ang, fill_color.lightened(0.32))
+				draw_line(fwd * 5.0 + side * 4.5, fwd * 12.5 + side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
+				draw_line(fwd * 5.0 - side * 4.5, fwd * 12.5 - side * 2.0, Color(1.0, 0.95, 0.68), 1.8)
+
+			"brute":
+				# Hulking armored goliath with heavy steel dorsal plates & battering-ram horns
+				var body_pts := [
+					Vector2(13.0, -6.0), Vector2(13.0, 6.0), Vector2(3.0, 14.5),
+					Vector2(-11.0, 12.0), Vector2(-14.5, 0.0), Vector2(-11.0, -12.0), Vector2(3.0, -14.5)
+				]
+				_draw_poly_oriented(body_pts, ang, fill_color.darkened(0.18))
+				var plate_pts := [
+					Vector2(9.0, -4.5), Vector2(9.0, 4.5), Vector2(1.0, 10.5),
+					Vector2(-9.0, 8.5), Vector2(-9.0, -8.5), Vector2(1.0, -10.5)
+				]
+				_draw_poly_oriented(plate_pts, ang, Color(0.55, 0.60, 0.68) if hit_flash_timer <= 0.0 else Color.WHITE)
+				draw_circle(Vector2.ZERO, 6.5, fill_color)
+				# Ram horns
+				draw_line(fwd * 9.0 + side * 6.5, fwd * 17.5 + side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
+				draw_line(fwd * 9.0 - side * 6.5, fwd * 17.5 - side * 3.5, Color(0.88, 0.90, 0.95), 3.0)
+				draw_line(fwd * 8.5 - side * 4.0, fwd * 8.5 + side * 4.0, Color(1.0, 0.25, 0.25), 2.4)
+
+			"blitzer":
+				# Prismatic diamond interceptor with rotating reflective energy hex-shield
+				var diamond := [Vector2(12.5, 0.0), Vector2(0.0, -9.5), Vector2(-11.0, 0.0), Vector2(0.0, 9.5)]
+				_draw_poly_oriented(diamond, ang, fill_color.darkened(0.15))
+				var inner_d := [Vector2(8.5, 0.0), Vector2(0.0, -5.5), Vector2(-6.5, 0.0), Vector2(0.0, 5.5)]
+				_draw_poly_oriented(inner_d, ang, Color(0.82, 0.98, 1.0))
+				for s_i in range(6):
+					var sa1: float = anim_time * 3.5 + float(s_i) * TAU / 6.0
+					var sa2: float = sa1 + TAU / 6.0
+					draw_line(Vector2(cos(sa1), sin(sa1)) * 12.2, Vector2(cos(sa2), sin(sa2)) * 12.2, Color(0.65, 0.98, 1.0, 0.85), 1.6)
+
+			"juggernaut":
+				# Boss Dreadnought Leviathan (Armored + Reflective)
+				var hull := [
+					Vector2(17.0, -7.5), Vector2(17.0, 7.5), Vector2(5.0, 18.0),
+					Vector2(-13.0, 16.0), Vector2(-18.5, 0.0), Vector2(-13.0, -16.0), Vector2(5.0, -18.0)
+				]
+				_draw_poly_oriented(hull, ang, fill_color.darkened(0.25))
+				var armor_chevron := [
+					Vector2(13.0, -5.5), Vector2(13.0, 5.5), Vector2(3.0, 13.5),
+					Vector2(-10.0, 11.5), Vector2(-10.0, -11.5), Vector2(3.0, -13.5)
+				]
+				_draw_poly_oriented(armor_chevron, ang, Color(0.72, 0.78, 0.88))
+				draw_circle(Vector2.ZERO, 9.5, fill_color)
+				# Pulsing dark-matter reactor core
+				var core_r: float = 4.8 + 1.2 * sin(anim_time * 6.0)
+				draw_circle(Vector2.ZERO, core_r, Color(0.95, 0.52, 1.0))
+				draw_circle(Vector2.ZERO, 2.5, Color.WHITE)
+				# 4 heavy siege tusks
+				draw_line(fwd * 12.0 + side * 8.5, fwd * 22.5 + side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
+				draw_line(fwd * 12.0 - side * 8.5, fwd * 22.5 - side * 5.0, Color(0.95, 0.88, 0.45), 3.4)
+				draw_line(fwd * 14.0 + side * 4.0, fwd * 20.0 + side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
+				draw_line(fwd * 14.0 - side * 4.0, fwd * 20.0 - side * 2.0, Color(0.88, 0.94, 1.0), 2.4)
+				# Rotating outer Reflective prismatic shield
+				for s_i in range(6):
+					var sa1: float = -anim_time * 2.2 + float(s_i) * TAU / 6.0
+					var sa2: float = sa1 + TAU / 6.0
+					draw_line(Vector2(cos(sa1), sin(sa1)) * 20.2, Vector2(cos(sa2), sin(sa2)) * 20.2, Color(0.55, 0.96, 1.0, 0.82), 2.0)
+
+			"colossus":
+				# Wave 16+ Tier-2 Siege Boss Titan (Armored + Reflective)
+				var c_hull := [
+					Vector2(21.0, -9.0), Vector2(21.0, 9.0), Vector2(7.0, 21.5),
+					Vector2(-15.0, 19.0), Vector2(-22.0, 0.0), Vector2(-15.0, -19.0), Vector2(7.0, -21.5)
+				]
+				_draw_poly_oriented(c_hull, ang, fill_color.darkened(0.28))
+				var c_plate := [
+					Vector2(16.0, -6.5), Vector2(16.0, 6.5), Vector2(4.0, 16.0),
+					Vector2(-12.0, 14.0), Vector2(-12.0, -14.0), Vector2(4.0, -16.0)
+				]
+				_draw_poly_oriented(c_plate, ang, Color(0.88, 0.76, 0.42))
+				draw_circle(Vector2.ZERO, 11.5, fill_color)
+				var c_core: float = 5.5 + 1.6 * sin(anim_time * 7.5)
+				draw_circle(Vector2.ZERO, c_core, Color(1.0, 0.82, 0.30))
+				draw_circle(Vector2.ZERO, 2.8, Color.WHITE)
+				# 6 heavy siege horns
+				for h_side in [-1.0, 1.0]:
+					draw_line(fwd * 14.0 + side * (11.0 * h_side), fwd * 27.0 + side * (7.0 * h_side), Color(1.0, 0.86, 0.38), 3.8)
+					draw_line(fwd * 16.0 + side * (5.0 * h_side), fwd * 24.0 + side * (2.5 * h_side), Color(0.95, 0.96, 1.0), 2.6)
+				# Dual counter-rotating prismatic shields
+				for s_i in range(8):
+					var sa1: float = anim_time * 2.0 + float(s_i) * TAU / 8.0
+					var sa2: float = sa1 + TAU / 8.0
+					draw_line(Vector2(cos(sa1), sin(sa1)) * 24.5, Vector2(cos(sa2), sin(sa2)) * 24.5, Color(0.48, 0.96, 1.0, 0.85), 2.2)
+					var sb1: float = -anim_time * 1.6 + float(s_i) * TAU / 8.0
+					var sb2: float = sb1 + TAU / 12.0
+					draw_line(Vector2(cos(sb1), sin(sb1)) * 21.5, Vector2(cos(sb2), sin(sb2)) * 21.5, Color(1.0, 0.78, 0.30, 0.75), 1.8)
+
+			"stalker":
+				# Cloaked Stealth Phase-Mantis: translucent violet shimmer when cloaked, crisp lock reticle when revealed!
+				var cloak_a: float = 0.34 + 0.14 * sin(anim_time * 9.0) if is_effectively_cloaked() else 0.96
+				var s_col := Color(fill_color.r, fill_color.g, fill_color.b, cloak_a)
+				var blade_pts := [Vector2(13.5, 0.0), Vector2(-3.0, -9.5), Vector2(-9.5, -4.5), Vector2(-5.5, 0.0), Vector2(-9.5, 4.5), Vector2(-3.0, 9.5)]
+				_draw_poly_oriented(blade_pts, ang, s_col)
+				var visor_pts := [Vector2(9.0, 0.0), Vector2(1.0, -4.0), Vector2(1.0, 4.0)]
+				_draw_poly_oriented(visor_pts, ang, Color(0.72, 0.96, 1.0, cloak_a))
+				if is_effectively_cloaked():
+					draw_arc(Vector2.ZERO, 12.5, anim_time * 5.0, anim_time * 5.0 + PI * 1.1, 16, Color(0.68, 0.45, 1.0, 0.55), 1.4)
+				else:
+					# Revealed radar scan lock!
+					draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 20, Color(0.35, 0.98, 1.0, 0.92), 1.8)
+					draw_line(Vector2(-15, 0), Vector2(-10, 0), Color(0.35, 0.98, 1.0), 1.6)
+					draw_line(Vector2(10, 0), Vector2(15, 0), Color(0.35, 0.98, 1.0), 1.6)
+
+			"mender":
+				# Organic Bio-Regenerator: glowing emerald bio-core + healing pulse rings
+				var regen_active: bool = (regen_suppressed_timer <= 0.0 and decay_ticks_remaining <= 0 and armor_shred_stacks <= 0)
+				if regen_active and hp < max_hp:
+					var hp_wave: float = fmod(anim_time * 1.8, 1.0)
+					draw_arc(Vector2.ZERO, lerpf(9.0, 21.0, hp_wave), 0.0, TAU, 22, Color(0.30, 1.0, 0.55, (1.0 - hp_wave) * 0.85), 2.0)
+				var m_body := [Vector2(12.0, -4.0), Vector2(12.0, 4.0), Vector2(2.0, 11.5), Vector2(-10.5, 8.5), Vector2(-12.5, 0.0), Vector2(-10.5, -8.5), Vector2(2.0, -11.5)]
+				_draw_poly_oriented(m_body, ang, fill_color.darkened(0.22))
+				draw_circle(Vector2.ZERO, 7.5, fill_color if regen_active else fill_color.lerp(Color(0.65, 0.55, 0.35), 0.55))
+				# Bio-plus emblem on carapace
+				draw_line(Vector2(-4.5, 0.0), Vector2(4.5, 0.0), Color(0.85, 1.0, 0.88), 2.4)
+				draw_line(Vector2(0.0, -4.5), Vector2(0.0, 4.5), Color(0.85, 1.0, 0.88), 2.4)
+
+			"carrier":
+				# Armored Brood Carrier: bulky bronze-amber hive hull cradling 6 glowing spawn sacs
+				var hull_c := [Vector2(16.0, -6.5), Vector2(16.0, 6.5), Vector2(6.0, 16.0), Vector2(-12.0, 14.5), Vector2(-17.0, 0.0), Vector2(-12.0, -14.5), Vector2(6.0, -16.0)]
+				_draw_poly_oriented(hull_c, ang, fill_color.darkened(0.28))
+				var rib_c := [Vector2(11.5, -4.5), Vector2(11.5, 4.5), Vector2(2.0, 11.5), Vector2(-9.5, 10.0), Vector2(-9.5, -10.0), Vector2(2.0, -11.5)]
+				_draw_poly_oriented(rib_c, ang, Color(0.52, 0.48, 0.44))
+				for pod_i in range(6):
+					var pa: float = float(pod_i) * TAU / 6.0 + ang
+					var p_off: Vector2 = Vector2(cos(pa), sin(pa)) * 6.8
+					var p_r: float = 2.6 + 0.6 * sin(anim_time * 7.0 + float(pod_i))
+					draw_circle(p_off, p_r, Color(1.0, 0.72, 0.22) if pod_i % 2 == 0 else Color(0.28, 0.94, 1.0))
+				draw_circle(Vector2.ZERO, 4.0, Color(1.0, 0.92, 0.65))
+
+			"conduit":
+				# Aegis Conduit: projects visible 95px golden-cyan protective shield dome to nearby allies!
+				var dome_r: float = shield_aura_radius if shield_aura_radius > 0.0 else 95.0
+				draw_circle(Vector2.ZERO, dome_r, Color(0.32, 0.88, 1.0, 0.07))
+				draw_arc(Vector2.ZERO, dome_r, 0.0, TAU, 40, Color(0.98, 0.84, 0.34, 0.42), 1.8)
+				draw_arc(Vector2.ZERO, dome_r - 3.5, anim_time * 1.4, anim_time * 1.4 + PI * 1.2, 32, Color(0.38, 0.96, 1.0, 0.52), 1.5)
+				var hex_pts := PackedVector2Array()
+				for hi in range(6):
+					var ha: float = anim_time * 1.2 + float(hi) * TAU / 6.0
+					hex_pts.append(Vector2(cos(ha), sin(ha)) * 13.5)
+				draw_colored_polygon(hex_pts, Color(0.14, 0.32, 0.46))
+				for hi in range(6):
+					draw_line(hex_pts[hi], hex_pts[(hi + 1) % 6], Color(1.0, 0.88, 0.42), 2.0)
+				draw_circle(Vector2.ZERO, 6.2 + 1.0 * sin(anim_time * 6.5), Color(0.45, 0.98, 1.0))
+				draw_circle(Vector2.ZERO, 2.8, Color.WHITE)
 
 	# Visual indicators for Conduit protection & Concussive Stun
 	if is_shielded_by_conduit():

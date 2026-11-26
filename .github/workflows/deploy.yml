@@ -68,10 +68,11 @@ jobs:
       - name: Export Godot Web PWA build & Web ZIP archive
         run: |
           GODOT="/tmp/godot_bin/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64"
-          mkdir -p build/web/downloads
+          mkdir -p build/web/downloads build/web/assets
           touch build/web/.nojekyll
           cp tower-combinations.html build/web/tower-combinations.html
           cp analytics.html build/web/analytics.html
+          cp -r assets/sprites build/web/assets/
           "$GODOT" --headless --export-release "Web" build/web/index.html
           test -f build/web/index.manifest.json
           python3 -c 'import json; p="build/web/index.manifest.json"; m=json.loads(open(p,"rb").read().decode("utf-8",errors="replace")); m.update({"display":"fullscreen","orientation":"landscape","short_name":"TimeDefense"}); open(p,"w",encoding="utf-8").write(json.dumps(m,ensure_ascii=True,separators=(",",":"))); print("NORMALIZED_MANIFEST:", open(p,"r",encoding="utf-8").read())'

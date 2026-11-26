@@ -72,6 +72,9 @@ static func apply_right_button_theme(btn: Button, accent: Color = Color(0.36, 0.
 
 
 static func create_icon(kind: String) -> ImageTexture:
+	var sprite_badge: ImageTexture = SpriteLibrary.get_ui_badge_icon(kind, 28)
+	if sprite_badge != null:
+		return sprite_badge
 	var img := Image.create(24, 24, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	# Dark badge plate behind every icon for high contrast

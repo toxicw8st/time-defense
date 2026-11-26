@@ -1584,8 +1584,40 @@ func _test_j_v2_btd5_evolution() -> void:
 	GameState.mission.wave_number = 40
 	assert(is_equal_approx(GameState.get_enemy_bounty_multiplier(), 0.28))
 
+	# 3g) Verify all 43 custom sprites load cleanly via SpriteLibrary (27 towers + 10 enemies + 5 structures + Vex)
+	var sprite_count: int = 0
+	for tk in Balance.TOWERS.keys():
+		var t_tex: Texture2D = SpriteLibrary.get_tower_texture(tk)
+		assert(t_tex != null and t_tex.get_width() > 32 and t_tex.get_height() > 32, "Missing tower sprite for %s" % tk)
+		var t_meta: Dictionary = SpriteLibrary.get_tower_meta(tk)
+		assert(float(t_meta.get("pivot_x", 0.0)) >= 0.15 and float(t_meta.get("pivot_x", 1.0)) <= 0.60, "Invalid tower pivot for %s" % tk)
+		sprite_count += 1
+	for ek in Balance.ENEMIES.keys():
+		var e_tex: Texture2D = SpriteLibrary.get_enemy_texture(ek)
+		assert(e_tex != null and e_tex.get_width() > 32 and e_tex.get_height() > 32, "Missing enemy sprite for %s" % ek)
+		sprite_count += 1
+	for sk in ["player_base", "alien_base", "refinery", "chrono_manipulator", "hive_destroyer"]:
+		var s_tex: Texture2D = SpriteLibrary.get_structure_texture(sk)
+		assert(s_tex != null and s_tex.get_width() > 32 and s_tex.get_height() > 32, "Missing structure sprite for %s" % sk)
+		sprite_count += 1
+	var vex_tex: Texture2D = SpriteLibrary.get_character_texture("vex")
+	assert(vex_tex != null and vex_tex.get_width() > 128 and vex_tex.get_height() > 128, "Missing Vex portrait sprite")
+	sprite_count += 1
+	assert(sprite_count == 43, "Expected exactly 43 custom sprites loaded, got %d" % sprite_count)
+
+	# 3h) Verify Guide Vex ALWAYS starts enabled after load_meta_progress() even if previously muted/completed
+	var vex_save_path: String = "user://test_vex_startup_check.cfg"
+	GameState.prompts_muted = true
+	GameState.guide_completed = true
+	assert(GameState.save_meta_progress(vex_save_path))
+	assert(GameState.load_meta_progress(vex_save_path))
+	assert(not GameState.prompts_muted and not GameState.guide_completed, "Vex must always start active on fresh launch for testing")
+	var abs_vex_save: String = ProjectSettings.globalize_path(vex_save_path)
+	if FileAccess.file_exists(vex_save_path):
+		DirAccess.remove_absolute(abs_vex_save)
+
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 apex_vortex=ok apex_execute=ok")
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on" % sprite_count)
