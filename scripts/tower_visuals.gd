@@ -76,7 +76,9 @@ static func draw_turret(
 	recoil: float,
 	anim_time: float,
 	muzzle_flash_timer: float,
-	levels: Dictionary
+	levels: Dictionary,
+	charge_ratio: float = 0.0,
+	squash_vec: Vector2 = Vector2.ONE
 ) -> void:
 	var fwd: Vector2 = Vector2.RIGHT.rotated(aim_angle)
 	var side: Vector2 = Vector2(-fwd.y, fwd.x)
@@ -85,24 +87,86 @@ static func draw_turret(
 	if tex != null:
 		var meta: Dictionary = SpriteLibrary.get_tower_meta(tower_type)
 		var is_combo: bool = Balance.is_combo_tower(tower_type)
+		var accent: Color = get_accent_color(tower_type)
 		var ped_px: float = 49.0 if is_combo else 43.0
 		var max_w: float = 86.0 if is_combo else 74.0
 		var draw_size: Vector2 = SpriteLibrary.compute_tower_draw_size(tex, meta, ped_px, max_w)
 		var pivot := Vector2(float(meta.get("pivot_x", 0.5)), float(meta.get("pivot_y", 0.5)))
 		var is_radial: bool = bool(meta.get("radial", false))
-		var draw_ang: float = (anim_time * 0.35) if is_radial else aim_angle
-		var recoil_off: Vector2 = Vector2.ZERO if is_radial else (-fwd * (recoil * 0.85))
-		SpriteLibrary.draw_sprite_oriented(canvas, tex, recoil_off, draw_ang, draw_size, pivot, Color.WHITE)
+		var draw_ang: float = (anim_time * 0.42) if is_radial else aim_angle
+		var recoil_off: Vector2 = Vector2.ZERO if is_radial else (-fwd * (recoil * 1.15))
+
+		# 1) Stationary anchored ground pedestal ring (stays bolted down while turret head recoils!)
+		var ped_r: float = 17.5 if is_combo else 15.0
+		var idle_breath: float = 0.5 + 0.5 * sin(anim_time * 3.4)
+		canvas.draw_arc(Vector2.ZERO, ped_r, 0.0, TAU, 24, Color(accent.r, accent.g, accent.b, 0.28 + 0.14 * idle_breath), 2.0)
+		canvas.draw_circle(Vector2.ZERO, ped_r * 0.72, Color(accent.r, accent.g, accent.b, 0.08 + 0.06 * idle_breath))
+
+		# 2) Charge-up anticipation halo for heavy/slow weapons (Mortar, Railgun, Annihilator, Slow)
+		if charge_ratio > 0.65:
+			var c_prog: float = clampf((charge_ratio - 0.65) / 0.35, 0.0, 1.0)
+			var c_r: float = lerpf(24.0, 9.0, c_prog)
+			canvas.draw_arc(Vector2.ZERO, c_r, anim_time * 4.0, anim_time * 4.0 + PI * 1.35, 20, Color(accent.r, accent.g, accent.b, c_prog * 0.65), 1.8)
+
+		# 3) Main custom sprite rendered with elastic anisotropic squash-and-stretch + recoil!
+		var spr_scale: Vector2 = squash_vec
+		if is_radial:
+			var rad_breath: float = 1.0 + 0.03 * sin(anim_time * 4.2) + (0.09 * clampf(muzzle_flash_timer / 0.14, 0.0, 1.0))
+			spr_scale = Vector2(rad_breath, rad_breath)
+		var spr_mod := Color.WHITE
 		if muzzle_flash_timer > 0.0:
-			var accent: Color = get_accent_color(tower_type)
+			var flash_boost: float = clampf(muzzle_flash_timer / 0.14, 0.0, 1.0) * 0.24
+			spr_mod = Color(1.0 + flash_boost, 1.0 + flash_boost, 1.0 + flash_boost * 0.7, 1.0)
+		SpriteLibrary.draw_sprite_oriented(canvas, tex, recoil_off, draw_ang, draw_size, pivot, spr_mod, Vector2.ZERO, spr_scale)
+
+		# 4) Standby living energy motes (Lasers, Chrono Slow, Railguns, Combos)
+		if is_radial or tower_type.contains("laser") or tower_type.contains("slow") or tower_type.contains("railgun"):
+			var mote_cnt: int = 3 if is_combo else 2
+			for mi in range(mote_cnt):
+				var ma: float = anim_time * (2.6 if is_radial else 2.0) + float(mi) * TAU / float(mote_cnt)
+				var mp: Vector2 = Vector2(cos(ma), sin(ma)) * (13.0 + 2.5 * sin(anim_time * 4.0 + float(mi)))
+				canvas.draw_circle(mp, 1.8, Color(accent.r, accent.g, accent.b, 0.72))
+
+		# 5) Visual Range Lv2+ Camo Radar Dish (instant visual proof tower can spot Cloaked Stalkers!)
+		if int(levels.get("range", 0)) >= 2:
+			var dish_pos := Vector2(-10.0, -10.0)
+			var radar_a: float = anim_time * 4.2
+			canvas.draw_circle(dish_pos, 4.4, Color(0.05, 0.12, 0.18, 0.90))
+			canvas.draw_arc(dish_pos, 4.4, 0.0, TAU, 16, Color(0.35, 0.98, 1.0, 0.90), 1.3)
+			canvas.draw_line(dish_pos, dish_pos + Vector2(cos(radar_a), sin(radar_a)) * 4.2, Color(0.65, 1.0, 1.0), 1.5)
+
+		# 6) Tailored weapon-class shooting animation VFX!
+		if muzzle_flash_timer > 0.0:
 			var mf_a: float = clampf(muzzle_flash_timer / 0.14, 0.0, 1.0)
-			if is_radial:
-				canvas.draw_arc(Vector2.ZERO, 18.0 + (1.0 - mf_a) * 6.0, 0.0, TAU, 28, Color(accent.r, accent.g, accent.b, mf_a * 0.92), 2.5)
+			if is_radial or tower_type == "slow" or tower_type == "slow+slow":
+				canvas.draw_arc(Vector2.ZERO, 16.0 + (1.0 - mf_a) * 14.0, 0.0, TAU, 28, Color(accent.r, accent.g, accent.b, mf_a * 0.95), 2.8)
+				canvas.draw_arc(Vector2.ZERO, 10.0 + (1.0 - mf_a) * 8.0, 0.0, TAU, 24, Color(1.0, 1.0, 1.0, mf_a * 0.72), 1.6)
 			else:
-				var tip_dist: float = maxf(14.0, (1.0 - pivot.x) * draw_size.x - recoil * 0.5)
+				var tip_dist: float = maxf(14.0, (1.0 - pivot.x) * draw_size.x - recoil * 0.65)
 				var tip_pos: Vector2 = fwd * tip_dist
-				canvas.draw_circle(tip_pos, 6.2 * mf_a + 1.8, Color(accent.r, accent.g, accent.b, mf_a * 0.85))
-				canvas.draw_circle(tip_pos, 3.0 * mf_a + 0.8, Color(1.0, 0.98, 0.86, mf_a))
+				if tower_type.contains("mortar"):
+					# Heavy mortar blast cone + expanding smoke ring
+					var smoke_r: float = 5.0 + (1.0 - mf_a) * 12.0
+					canvas.draw_arc(tip_pos, smoke_r, 0.0, TAU, 18, Color(0.85, 0.88, 0.90, mf_a * 0.65), 2.4)
+					canvas.draw_circle(tip_pos + fwd * 3.0, 7.5 * mf_a + 2.0, Color(1.0, 0.72, 0.25, mf_a * 0.90))
+					canvas.draw_circle(tip_pos + fwd * 3.0, 3.6 * mf_a + 1.0, Color.WHITE)
+				elif tower_type.contains("railgun") or tower_type.contains("annihilator"):
+					# Electric rail discharge + wide shock flash
+					canvas.draw_line(tip_pos - side * (9.0 * mf_a), tip_pos + side * (9.0 * mf_a), Color(1.0, 0.95, 0.75, mf_a), 2.4)
+					canvas.draw_line(tip_pos - fwd * 10.0, tip_pos + fwd * (8.0 * mf_a), Color(accent.r, accent.g, accent.b, mf_a), 3.4)
+					canvas.draw_circle(tip_pos, 8.0 * mf_a + 2.0, Color(accent.r, accent.g, accent.b, mf_a * 0.88))
+					canvas.draw_circle(tip_pos, 3.8 * mf_a + 1.0, Color.WHITE)
+				elif tower_type.contains("laser"):
+					# Shimmering prism lens flare
+					canvas.draw_circle(tip_pos, 6.8 * mf_a + 2.0, Color(accent.r, accent.g, accent.b, mf_a * 0.92))
+					canvas.draw_line(tip_pos - side * (8.0 * mf_a), tip_pos + side * (8.0 * mf_a), Color(1.0, 0.85, 1.0, mf_a), 2.0)
+					canvas.draw_circle(tip_pos, 3.2 * mf_a + 0.8, Color.WHITE)
+				else:
+					# Blaster / kinetic star muzzle flash + twin flare spikes
+					canvas.draw_line(tip_pos - side * (6.5 * mf_a), tip_pos + side * (6.5 * mf_a), Color(1.0, 0.92, 0.62, mf_a), 2.0)
+					canvas.draw_line(tip_pos, tip_pos + fwd * (9.5 * mf_a), Color(1.0, 0.94, 0.68, mf_a), 2.6)
+					canvas.draw_circle(tip_pos, 6.2 * mf_a + 1.6, Color(accent.r, accent.g, accent.b, mf_a * 0.86))
+					canvas.draw_circle(tip_pos, 3.0 * mf_a + 0.8, Color(1.0, 0.98, 0.86, mf_a))
 		return
 
 	match tower_type:

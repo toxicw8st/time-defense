@@ -4,6 +4,7 @@ class_name GameMap
 signal pad_selected(pad_index: int)
 signal tower_selected(tower: TowerUnit)
 signal enemy_inspected(enemy: EnemyUnit)
+signal citadel_clicked
 signal selection_cleared
 
 const MAP_WIDTH: float = 940.0
@@ -104,6 +105,9 @@ var pad_occupancy: Array[TowerUnit] = []
 var placed_towers: Array[TowerUnit] = []
 var floating_texts: Array[Dictionary] = []
 var apex_shockwaves: Array[Dictionary] = []
+var death_bursts: Array[Dictionary] = []
+var citadel_beams: Array[Dictionary] = []
+var rewind_trails: Array[Dictionary] = []
 var economy_ref: Node = null
 var extra_left_margin: float = 0.0
 var extra_right_margin: float = 0.0
@@ -852,6 +856,28 @@ func _process(delta: float) -> void:
 			if apex_shockwaves[i]["timer"] <= 0.0:
 				apex_shockwaves.remove_at(i)
 
+	if not death_bursts.is_empty():
+		for i in range(death_bursts.size() - 1, -1, -1):
+			var db: Dictionary = death_bursts[i]
+			db["timer"] = float(db["timer"]) - delta
+			for sh in db["shards"]:
+				sh["pos"] = (sh["pos"] as Vector2) + (sh["vel"] as Vector2) * delta
+				sh["vel"] = (sh["vel"] as Vector2) * pow(0.14, delta)
+			if float(db["timer"]) <= 0.0:
+				death_bursts.remove_at(i)
+
+	if not citadel_beams.is_empty():
+		for i in range(citadel_beams.size() - 1, -1, -1):
+			citadel_beams[i]["timer"] = float(citadel_beams[i]["timer"]) - delta
+			if float(citadel_beams[i]["timer"]) <= 0.0:
+				citadel_beams.remove_at(i)
+
+	if not rewind_trails.is_empty():
+		for i in range(rewind_trails.size() - 1, -1, -1):
+			rewind_trails[i]["timer"] = float(rewind_trails[i]["timer"]) - delta
+			if float(rewind_trails[i]["timer"]) <= 0.0:
+				rewind_trails.remove_at(i)
+
 	queue_redraw()
 
 
@@ -998,6 +1024,14 @@ func _on_map_gui_input(event: InputEvent) -> void:
 			map_click_area.accept_event()
 			return
 		inspect_enemy(null)
+
+		# 2c) Check if clicking the Player Citadel Base to open Chrono-Citadel Ascension & Time Abilities!
+		if local_pos.distance_to(active_player_base_pos) <= 44.0:
+			pending_build_type = ""
+			inspect_enemy(null)
+			citadel_clicked.emit()
+			map_click_area.accept_event()
+			return
 
 		# 3) Check if clicking a pad or a placement zone
 		var clicked_pad: int = _find_pad_at(local_pos)
@@ -1398,6 +1432,9 @@ func _on_mission_reset() -> void:
 	clear_all_projectiles()
 	floating_texts.clear()
 	apex_shockwaves.clear()
+	death_bursts.clear()
+	citadel_beams.clear()
+	rewind_trails.clear()
 	leak_flash_timer = 0.0
 	hive_beam_timer = 0.0
 	surge_explosion_timer = 0.0
@@ -1535,7 +1572,82 @@ func _on_unit_leaked(enemy: EnemyUnit) -> void:
 	GameState.lose_lives(enemy.leak_cost, enemy.enemy_type, enemy.global_position)
 
 
+func spawn_death_burst(world_pos: Vector2, enemy_type: String) -> void:
+	var is_boss: bool = (enemy_type == "juggernaut" or enemy_type == "colossus")
+	var col := Color(0.95, 0.34, 0.28)
+	match enemy_type:
+		"rusher": col = Color(1.0, 0.68, 0.22)
+		"brute": col = Color(0.88, 0.24, 0.42)
+		"blitzer": col = Color(0.32, 0.94, 1.0)
+		"stalker": col = Color(0.78, 0.42, 1.0)
+		"mender": col = Color(0.32, 0.96, 0.54)
+		"carrier": col = Color(1.0, 0.56, 0.18)
+		"conduit": col = Color(0.38, 0.92, 1.0)
+		"juggernaut": col = Color(1.0, 0.58, 0.24)
+		"colossus": col = Color(1.0, 0.38, 0.32)
+	var shard_cnt: int = 16 if is_boss else 7
+	var shards: Array[Dictionary] = []
+	for si in range(shard_cnt):
+		var sa: float = float(si) * TAU / float(shard_cnt) + randf_range(-0.25, 0.25)
+		var spd: float = randf_range(70.0, 175.0) if is_boss else randf_range(38.0, 96.0)
+		shards.append({
+			"pos": world_pos,
+			"vel": Vector2(cos(sa), sin(sa)) * spd,
+			"size": randf_range(2.8, 5.2) if is_boss else randf_range(1.8, 3.2),
+		})
+	var dur: float = 0.62 if is_boss else 0.34
+	death_bursts.append({
+		"pos": world_pos,
+		"color": col,
+		"max_rad": 58.0 if is_boss else 22.0,
+		"timer": dur,
+		"max_timer": dur,
+		"shards": shards,
+	})
+	if is_boss:
+		spawn_apex_shockwave(world_pos, col, 96.0, 0.55)
+		trigger_screen_shake(0.22, 3.2)
+
+
+func spawn_citadel_beam(from_pos: Vector2, to_pos: Vector2, col: Color, width: float = 3.5) -> void:
+	citadel_beams.append({
+		"from": from_pos,
+		"to": to_pos,
+		"color": col,
+		"width": width,
+		"timer": 0.20,
+		"max_timer": 0.20,
+	})
+
+
+func spawn_rewind_trail(old_pos: Vector2, new_pos: Vector2) -> void:
+	rewind_trails.append({
+		"from": old_pos,
+		"to": new_pos,
+		"timer": 0.45,
+		"max_timer": 0.45,
+	})
+
+
+func absorb_tower_into_citadel(tower: TowerUnit) -> void:
+	if tower == null or not is_instance_valid(tower):
+		return
+	var tpos: Vector2 = tower.position
+	spawn_citadel_beam(tpos, active_player_base_pos, Color(1.0, 0.88, 0.34), 6.5)
+	spawn_apex_shockwave(tpos, Color(1.0, 0.86, 0.34), 56.0, 0.48)
+	var pad_idx: int = tower.pad_index
+	if pad_idx >= 0 and pad_idx < pad_occupancy.size() and pad_occupancy[pad_idx] == tower:
+		pad_occupancy[pad_idx] = null
+	placed_towers.erase(tower)
+	if selected_tower == tower:
+		selected_tower = null
+		clear_selection()
+	tower.queue_free()
+	queue_redraw()
+
+
 func _on_unit_died(enemy: EnemyUnit) -> void:
+	spawn_death_burst(enemy.position, enemy.enemy_type)
 	var prog_pct: float = enemy.get_path_progress_pct()
 	if AnalyticsManager != null:
 		AnalyticsManager.record_enemy_progress(enemy.enemy_type, prog_pct, false)
@@ -2012,7 +2124,7 @@ func _draw() -> void:
 	if ability_fx_timer > 0.0:
 		_draw_ability_fx()
 
-	# 8c) Combine / Tier-4 / Tier-5 Apex Overdrive & Slag Nova Shockwave Rings
+	# 8c) Combine / Tier-4 / Tier-5 Apex Overdrive, Death Bursts, Citadel Beams & Rewind Trails
 	for sw in apex_shockwaves:
 		var prog: float = clampf(1.0 - (float(sw["timer"]) / maxf(0.01, float(sw["max_timer"]))), 0.0, 1.0)
 		var alpha: float = clampf(1.0 - prog, 0.0, 1.0)
@@ -2021,6 +2133,29 @@ func _draw() -> void:
 		draw_circle(sw["pos"], rad * 0.65, Color(col.r, col.g, col.b, alpha * 0.18))
 		draw_arc(sw["pos"], rad, 0.0, TAU, 36, Color(col.r, col.g, col.b, alpha * 0.92), 3.2 * alpha + 1.0)
 		draw_arc(sw["pos"], rad * 0.72, 0.0, TAU, 28, Color(1.0, 0.98, 0.85, alpha * 0.75), 1.6)
+
+	for db in death_bursts:
+		var d_prog: float = clampf(1.0 - (float(db["timer"]) / maxf(0.01, float(db["max_timer"]))), 0.0, 1.0)
+		var d_a: float = clampf(1.0 - d_prog, 0.0, 1.0)
+		var d_col: Color = db["color"]
+		draw_arc(db["pos"], lerpf(4.0, float(db["max_rad"]), d_prog), 0.0, TAU, 20, Color(d_col.r, d_col.g, d_col.b, d_a * 0.78), 2.2 * d_a + 0.8)
+		for sh in db["shards"]:
+			draw_circle(sh["pos"], float(sh["size"]) * d_a + 0.6, Color(d_col.r, d_col.g, d_col.b, d_a))
+			draw_circle(sh["pos"], float(sh["size"]) * 0.45 * d_a, Color(1.0, 0.96, 0.86, d_a * 0.85))
+
+	for rt in rewind_trails:
+		var r_a: float = clampf(float(rt["timer"]) / maxf(0.01, float(rt["max_timer"])), 0.0, 1.0)
+		draw_line(rt["from"], rt["to"], Color(0.84, 0.46, 1.0, r_a * 0.78), 3.0 * r_a + 1.0)
+		draw_circle(rt["to"], 8.0 * r_a, Color(0.52, 0.96, 1.0, r_a * 0.75))
+
+	for cb in citadel_beams:
+		var c_a: float = clampf(float(cb["timer"]) / maxf(0.01, float(cb["max_timer"])), 0.0, 1.0)
+		var c_col: Color = cb["color"]
+		var cw: float = float(cb["width"])
+		draw_line(cb["from"], cb["to"], Color(c_col.r, c_col.g, c_col.b, c_a * 0.35), cw * 2.4)
+		draw_line(cb["from"], cb["to"], Color(c_col.r, c_col.g, c_col.b, c_a * 0.92), cw)
+		draw_line(cb["from"], cb["to"], Color(1.0, 0.98, 0.88, c_a), maxf(1.2, cw * 0.42))
+		draw_circle(cb["to"], 8.0 * c_a + 2.0, Color(c_col.r, c_col.g, c_col.b, c_a * 0.85))
 
 	# 9) Global Time Power Battlefield Border FX (Pause Stasis Frost / Haste Overclock)
 	if GameState.is_enemies_frozen:
@@ -2155,29 +2290,12 @@ func _draw_enemy_base(font: Font) -> void:
 			var ep: Vector2 = eb_pos + Vector2(cos(ea), sin(ea)) * 15.5
 			draw_circle(ep, 2.6, Color(1.0, 0.85, 0.32, hive_pulse))
 
-	# Circular Hive HP Arc around Alien Base
-	var hp_col := Color(0.95, 0.26, 0.34) if not is_crit else Color(1.0, 0.52, 0.18, hive_pulse)
-	draw_arc(eb_pos, 33.5, -PI * 0.5, -PI * 0.5 + TAU * hp_ratio, 32, hp_col, 2.6)
-
-	# Hive Destroyer Orbital Target-Lock Animation while player is charging a shot
-	if bool(eb_state["target_locked"]):
-		var lock_rot: float = visual_time * 2.6
-		var lock_r: float = 41.0 + 3.0 * sin(visual_time * 8.0)
-		var lock_col := Color(0.38, 0.95, 1.0, 0.92)
-		for b_i in range(4):
-			var a0: float = lock_rot + float(b_i) * PI * 0.5 - 0.32
-			var a1: float = lock_rot + float(b_i) * PI * 0.5 + 0.32
-			draw_arc(eb_pos, lock_r, a0, a1, 10, lock_col, 2.4)
-			var tick_in: Vector2 = eb_pos + Vector2(cos(lock_rot + float(b_i) * PI * 0.5), sin(lock_rot + float(b_i) * PI * 0.5)) * (lock_r - 7.0)
-			var tick_out: Vector2 = eb_pos + Vector2(cos(lock_rot + float(b_i) * PI * 0.5), sin(lock_rot + float(b_i) * PI * 0.5)) * (lock_r + 5.0)
-			draw_line(tick_in, tick_out, Color(1.0, 0.82, 0.28), 2.0)
-
-	# Hive Tag Banner
-	var hive_tag: String = "HIVE CRIT!" if is_crit else ("HIVE %d%%" % int(round(hp_ratio * 100.0)))
-	var h_box_w: float = 64.0
-	draw_rect(Rect2(eb_pos + Vector2(-h_box_w * 0.5, -49.0), Vector2(h_box_w, 14.0)), Color(0.08, 0.05, 0.08, 0.90))
-	draw_rect(Rect2(eb_pos + Vector2(-h_box_w * 0.5, -49.0), Vector2(h_box_w, 14.0)), hp_col, false, 1.0)
-	draw_string(font, eb_pos + Vector2(-h_box_w * 0.5 + 5.0, -38.0), hive_tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.72, 0.68))
+	# Swirling Rift Halo + Alien Rift Banner (v3.0: Invasion Portal, no Hive Destroyer HP bar!)
+	draw_arc(eb_pos, 34.5, visual_time * 1.3, visual_time * 1.3 + PI * 1.5, 32, Color(0.95, 0.32, 0.56, 0.78), 2.2)
+	var h_box_w: float = 68.0
+	draw_rect(Rect2(eb_pos + Vector2(-h_box_w * 0.5, -49.0), Vector2(h_box_w, 14.0)), Color(0.08, 0.05, 0.10, 0.90))
+	draw_rect(Rect2(eb_pos + Vector2(-h_box_w * 0.5, -49.0), Vector2(h_box_w, 14.0)), Color(0.95, 0.34, 0.54), false, 1.0)
+	draw_string(font, eb_pos + Vector2(-h_box_w * 0.5 + 5.0, -38.0), "ALIEN RIFT", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.74, 0.86))
 
 
 func _draw_player_base(font: Font) -> void:
@@ -2286,138 +2404,83 @@ func _draw_player_base(font: Font) -> void:
 			var sp_p2: Vector2 = sp_p1 + Vector2(cos(sp_ang), sin(sp_ang)) * 5.5
 			draw_line(sp_p1, sp_p2, Color(1.0, 0.85, 0.28, 1.0 - sp_phase), 2.0)
 
-	# --- D) Time Manipulator Chronosphere Dome & Progressively Growing Lightning Arcs ---
-	var spin_mult: float = lerpf(1.0, 4.4, buildup)
-	var manip_col := Color(0.45, 0.94, 1.0).lerp(Color(0.88, 0.42, 1.0), buildup)
-	if GameState.is_base_locked():
-		manip_col = Color(1.0, 0.75, 0.28)
-	draw_arc(pb_pos, 16.5 + buildup * 2.5, visual_time * 1.8 * spin_mult, visual_time * 1.8 * spin_mult + PI * 1.35, 24, manip_col, 2.2 + buildup * 0.8)
-	draw_arc(pb_pos, 11.5 + buildup * 1.5, -visual_time * 2.5 * spin_mult, -visual_time * 2.5 * spin_mult + PI * 1.35, 20, Color(0.75, 0.55, 1.0, 0.9).lerp(Color(1.0, 0.82, 0.28, 0.98), buildup), 2.0)
+	# --- D) v3.0 3-Stage Chrono-Citadel Ascension ("Sun God" Transformation!) ---
+	var c_stage: int = GameState.mission.citadel_stage if GameState.mission != null else 0
+	var sacs: Dictionary = GameState.mission.citadel_sacrifices if GameState.mission != null else {}
+	var spin_mult: float = 1.0 + float(c_stage) * 0.85
+	var manip_col := Color(0.42, 0.94, 1.0) if c_stage <= 1 else (Color(1.0, 0.86, 0.32) if c_stage >= 3 else Color(0.52, 0.98, 0.88))
 
-	if surge_stage >= 1:
-		# Lightning bolts grow in count (2 -> 4 -> 6 -> 8), reach (14px -> 24px -> 34px -> 45px), thickness, and branching!
-		var bolt_count: int = 2 + surge_stage * 2
-		var bolt_reach: float = lerpf(14.0, 44.0, buildup)
-		var bolt_width: float = lerpf(1.3, 2.5, buildup)
-		for b_i in range(bolt_count):
-			var b_ang: float = float(b_i) * TAU / float(bolt_count) + visual_time * (1.2 + buildup * 2.5) + sin(visual_time * 8.0 + float(b_i)) * 0.25
-			var b_end: Vector2 = pb_pos + Vector2(cos(b_ang), sin(b_ang)) * bolt_reach
-			var b_col := Color(0.45, 0.96, 1.0, 0.88) if b_i % 3 == 0 else (Color(0.88, 0.45, 1.0, 0.95) if b_i % 3 == 1 else Color(1.0, 0.86, 0.32, 0.95))
-			_draw_lightning_bolt(pb_pos, b_end, b_col, bolt_width, float(b_i) * 1.9, surge_stage >= 3)
+	# Stage 2 & Stage 3 Radiant Event-Horizon Aura + Counter-Rotating Temporal Rings!
+	if c_stage >= 2:
+		var god_pulse: float = 0.65 + 0.35 * sin(visual_time * (6.5 if c_stage >= 3 else 4.0))
+		var aura_rad: float = (58.0 if c_stage >= 3 else 46.0) + 3.5 * god_pulse
+		draw_circle(pb_pos, aura_rad, Color(1.0, 0.86, 0.32, (0.16 if c_stage >= 3 else 0.09) * god_pulse))
+		draw_arc(pb_pos, aura_rad, visual_time * 1.4, visual_time * 1.4 + PI * 1.65, 42, Color(1.0, 0.88, 0.34, 0.90), 3.0 if c_stage >= 3 else 2.2)
+		draw_arc(pb_pos, aura_rad - 6.0, -visual_time * 2.1, -visual_time * 2.1 + PI * 1.5, 36, Color(0.42, 0.96, 1.0, 0.86), 2.4)
+		# Grafted Sacrifice Weapon Orbital Pylons!
+		var sac_cols := {
+			"kinetic": Color(1.0, 0.72, 0.28),
+			"explosive": Color(1.0, 0.48, 0.24),
+			"energy": Color(1.0, 0.42, 0.94),
+			"chrono": Color(0.36, 0.96, 1.0),
+			"economy": Color(0.42, 1.0, 0.64),
+		}
+		var active_sacs: Array[String] = []
+		for sk in ["kinetic", "explosive", "energy", "chrono", "economy"]:
+			if int(sacs.get(sk, 0)) > 0:
+				active_sacs.append(sk)
+		for si in range(active_sacs.size()):
+			var sk: String = active_sacs[si]
+			var sa: float = visual_time * 1.9 + float(si) * TAU / float(maxi(1, active_sacs.size()))
+			var sp: Vector2 = pb_pos + Vector2(cos(sa), sin(sa)) * (44.0 if c_stage >= 3 else 38.0)
+			var scol: Color = sac_cols[sk]
+			draw_circle(sp, 5.2 if c_stage >= 3 else 4.0, scol)
+			draw_circle(sp, 2.2, Color.WHITE)
+		# Stage 3 ★ True Chrono-Singularity crackling golden lightning arcs!
+		if c_stage >= 3:
+			for b_i in range(6):
+				var b_ang: float = float(b_i) * TAU / 6.0 + visual_time * 1.6
+				var b_end: Vector2 = pb_pos + Vector2(cos(b_ang), sin(b_ang)) * 52.0
+				_draw_lightning_bolt(pb_pos, b_end, Color(1.0, 0.90, 0.38, 0.85) if b_i % 2 == 0 else Color(0.45, 0.98, 1.0, 0.85), 2.0, float(b_i) * 2.1, true)
 
-		# Orbiting electrical plasma nodes appear at Stage 2+ and multiply as charge builds
-		if surge_stage >= 2:
-			var node_count: int = surge_stage + 1
-			var orbit_r: float = lerpf(22.0, 32.0, buildup)
-			for n_i in range(node_count):
-				var na: float = float(n_i) * TAU / float(node_count) + visual_time * (2.5 + buildup * 3.0)
-				var np: Vector2 = pb_pos + Vector2(cos(na), sin(na)) * orbit_r
-				draw_circle(np, 2.2 + buildup * 1.8, Color(0.85, 0.48, 1.0, 0.9))
-				draw_circle(np, 1.2 + buildup * 0.8, Color(1.0, 0.95, 0.75))
+	draw_arc(pb_pos, 16.5, visual_time * 1.8 * spin_mult, visual_time * 1.8 * spin_mult + PI * 1.35, 24, manip_col, 2.2)
+	draw_arc(pb_pos, 11.5, -visual_time * 2.5 * spin_mult, -visual_time * 2.5 * spin_mult + PI * 1.35, 20, Color(0.75, 0.55, 1.0, 0.90), 2.0)
 
-	# Swelling Chronosphere Core + Custom Chrono-Manipulator Dome & Hive Destroyer Turret
+	# Chrono-Manipulator Core Dome (grows brighter & golden as Citadel ascends!)
 	var cm_tex: Texture2D = SpriteLibrary.get_structure_texture("chrono_manipulator")
 	if cm_tex != null:
-		var cm_sz: float = lerpf(38.0, 46.0, buildup)
-		var cm_mod := Color(1.0, 0.82, 0.45, 0.95) if GameState.is_base_locked() else Color.WHITE
-		SpriteLibrary.draw_sprite_oriented(self, cm_tex, pb_pos, visual_time * 0.45 * spin_mult, Vector2(cm_sz, cm_sz), Vector2(0.5, 0.5), cm_mod, _draw_shake_offset)
-	else:
-		var core_rad: float = lerpf(6.2, 10.6, buildup) + (2.0 * sin(visual_time * 16.0) if buildup >= 0.5 else 0.0)
-		draw_circle(pb_pos, core_rad, manip_col)
-		draw_circle(pb_pos, core_rad * 0.48, Color.WHITE)
+		var cm_sz: float = 38.0 + float(c_stage) * 4.5
+		var cm_mod := Color(1.25, 1.15, 0.72, 1.0) if c_stage >= 3 else (Color(1.05, 1.08, 1.15, 1.0) if c_stage >= 1 else Color.WHITE)
+		SpriteLibrary.draw_sprite_oriented(self, cm_tex, pb_pos, visual_time * 0.55 * spin_mult, Vector2(cm_sz, cm_sz), Vector2(0.5, 0.5), cm_mod, _draw_shake_offset)
 
-	# Mounted Hive Destroyer siege rail aiming toward the Alien Hive!
-	var hd_tex: Texture2D = SpriteLibrary.get_structure_texture("hive_destroyer")
-	if hd_tex != null:
-		var to_hive: Vector2 = (active_enemy_base_pos - pb_pos).normalized()
-		var hd_ang: float = to_hive.angle() + PI # Sprite natively faces LEFT (-X)
-		var hd_w: float = maxf(1.0, float(hd_tex.get_width()))
-		var hd_h: float = maxf(1.0, float(hd_tex.get_height()))
-		var hd_sc: float = 54.0 / maxf(hd_w, hd_h)
-		var hd_pos: Vector2 = pb_pos + to_hive * 18.0
-		var hd_mod := Color(1.35, 1.35, 1.0, 1.0) if (hive_beam_timer > 0.0 or GameState.is_base_charging()) else Color(0.95, 0.98, 1.0, 0.96)
-		if GameState.is_base_charging():
-			var ch_glow: float = 0.55 + 0.45 * sin(visual_time * 12.0)
-			draw_circle(hd_pos + to_hive * 14.0, 9.0 + 3.0 * ch_glow, Color(0.38, 0.95, 1.0, 0.45 * ch_glow))
-		SpriteLibrary.draw_sprite_oriented(self, hd_tex, hd_pos, hd_ang, Vector2(hd_w * hd_sc, hd_h * hd_sc), Vector2(0.5, 0.5), hd_mod, _draw_shake_offset)
-
-	# --- E) ELECTRICAL SURGE EXPLOSION DETONATION (When Surge Triggers!) ---
-	if is_exploding:
-		var exp_prog: float = clampf(1.0 - (surge_explosion_timer / maxf(0.01, surge_explosion_max_timer)), 0.0, 1.0)
-		var exp_alpha: float = clampf(1.0 - exp_prog, 0.0, 1.0)
-
-		# 1) Blinding high-voltage core detonation flash dome
-		if exp_prog < 0.45:
-			var flash_a: float = clampf(1.0 - (exp_prog / 0.45), 0.0, 1.0)
-			draw_circle(pb_pos, 28.0 + exp_prog * 95.0, Color(0.75, 0.42, 1.0, flash_a * 0.52))
-			draw_circle(pb_pos, 18.0 + exp_prog * 55.0, Color(0.55, 0.98, 1.0, flash_a * 0.78))
-			draw_circle(pb_pos, 14.0 + exp_prog * 25.0, Color(1.0, 1.0, 1.0, flash_a * 0.95))
-
-		# 2) 3 Concentric High-Voltage Expanding EMP Blast Shockwaves across the battlefield
-		for w_i in range(3):
-			var w_delay: float = float(w_i) * 0.14
-			var w_p: float = clampf((exp_prog - w_delay) / (1.0 - w_delay), 0.0, 1.0)
-			if w_p > 0.0 and w_p < 1.0:
-				var w_rad: float = 24.0 + w_p * 340.0
-				var w_a: float = (1.0 - w_p) * 0.92
-				var w_col := Color(0.45, 0.96, 1.0, w_a) if w_i == 0 else (Color(0.88, 0.42, 1.0, w_a) if w_i == 1 else Color(1.0, 0.86, 0.32, w_a))
-				draw_arc(pb_pos, w_rad, 0.0, TAU, 64, w_col, 4.2 * (1.0 - w_p * 0.5))
-
-		# 3) 12 Giant Radial Branched Lightning Bolts erupting outward from the Player Base
-		for eb_i in range(12):
-			var eb_ang: float = float(eb_i) * TAU / 12.0 + sin(visual_time * 19.0 + float(eb_i)) * 0.18
-			var eb_len: float = (70.0 + float((eb_i * 29) % 85)) * (0.35 + 0.65 * sin(minf(1.0, exp_prog * 2.2) * PI * 0.5))
-			var eb_end: Vector2 = pb_pos + Vector2(cos(eb_ang), sin(eb_ang)) * eb_len
-			var eb_col := Color(0.52, 0.98, 1.0, exp_alpha) if eb_i % 3 == 0 else (Color(0.92, 0.45, 1.0, exp_alpha) if eb_i % 3 == 1 else Color(1.0, 0.92, 0.45, exp_alpha))
-			_draw_lightning_bolt(pb_pos, eb_end, eb_col, 3.0 * exp_alpha + 1.0, float(eb_i) * 3.1, true)
-
-		# 4) Chain-Lightning Surge Arcs striking every built Player Tower on the map (-5% speed shock visual!)
-		for t_unit in get_all_towers():
-			var t_pos: Vector2 = t_unit.position
-			_draw_lightning_bolt(pb_pos, t_pos, Color(0.78, 0.45, 1.0, exp_alpha * 0.85), 2.2 * exp_alpha, float(t_unit.tower_id) * 2.7, true)
-			draw_arc(t_pos, 20.0 + 4.0 * sin(visual_time * 25.0), 0.0, TAU, 24, Color(0.48, 0.96, 1.0, exp_alpha * 0.9), 2.2)
-
-		# 5) 28 Flying High-Voltage Electric Spark Particles
-		for sp in surge_explosion_sparks:
-			var sp_pos: Vector2 = sp["pos"]
-			var sp_vel: Vector2 = sp["vel"]
-			var sp_col: Color = sp["color"]
-			sp_col.a = exp_alpha
-			var tail: Vector2 = sp_pos - sp_vel.normalized() * 8.0
-			draw_line(tail, sp_pos, sp_col, 2.2)
-			draw_circle(sp_pos, 2.4, Color(1.0, 1.0, 1.0, exp_alpha))
+	# Stage 1+: Unfolded Rotating Twin Point-Defense Cannons & Stage 2+ Orbital Lance!
+	if c_stage >= 1:
+		var aim_a: float = PI + sin(visual_time * 1.4) * 0.55
+		var c_fwd: Vector2 = Vector2.RIGHT.rotated(aim_a)
+		var c_side: Vector2 = Vector2(-c_fwd.y, c_fwd.x)
+		var barrel_len: float = 28.0 if c_stage >= 2 else 22.0
+		var barrel_col := Color(1.0, 0.88, 0.34) if c_stage >= 3 else Color(0.42, 0.96, 1.0)
+		draw_line(pb_pos + c_side * 9.0, pb_pos + c_side * 9.0 + c_fwd * barrel_len, barrel_col, 3.4)
+		draw_line(pb_pos - c_side * 9.0, pb_pos - c_side * 9.0 + c_fwd * barrel_len, barrel_col, 3.4)
+		if c_stage >= 2:
+			draw_line(pb_pos, pb_pos + c_fwd * (barrel_len + 8.0), Color(1.0, 0.94, 0.55), 4.6)
 
 	# Circular Lives Integrity Arc around the Player Base
-	var life_arc_col := Color(0.35, 0.95, 0.75) if not is_damaged else (Color(1.0, 0.25, 0.25) if is_almost_dead else Color(1.0, 0.78, 0.28))
+	var life_arc_col := Color(1.0, 0.88, 0.34) if c_stage >= 3 else (Color(0.35, 0.95, 0.75) if not is_damaged else (Color(1.0, 0.25, 0.25) if is_almost_dead else Color(1.0, 0.78, 0.28)))
 	draw_arc(pb_pos, 37.5, -PI * 0.5, -PI * 0.5 + TAU * lives_ratio, 32, life_arc_col, 2.4)
 
-	# Status Badges above/below Player Base
+	# Status Badge above Player Base
 	if is_almost_dead:
 		var c_box := Rect2(pb_pos + Vector2(-42.0, -52.0), Vector2(84.0, 14.0))
 		draw_rect(c_box, Color(0.22, 0.04, 0.06, 0.94))
 		draw_rect(c_box, Color(1.0, 0.28, 0.28), false, 1.2)
 		draw_string(font, c_box.position + Vector2(5.0, 11.0), "CRITICAL %d HP" % int(pb_state["lives"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.75, 0.75))
 	else:
-		draw_rect(Rect2(pb_pos + Vector2(-22, -50), Vector2(44, 14)), Color(0.05, 0.09, 0.16, 0.88))
-		draw_string(font, pb_pos + Vector2(-16, -39), "BASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.78, 0.94, 1.0))
-
-	if is_exploding:
-		var e_box := Rect2(pb_pos + Vector2(-52.0, 40.0), Vector2(104.0, 15.0))
-		draw_rect(e_box, Color(0.24, 0.06, 0.34, 0.96))
-		draw_rect(e_box, Color(0.55, 0.98, 1.0), false, 1.5)
-		draw_string(font, e_box.position + Vector2(5.0, 11.0), "ELECTRICAL SURGE!", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.92, 0.45))
-	elif is_surge_imminent:
-		var s_pulse: float = 0.65 + 0.35 * sin(visual_time * 12.0)
-		var s_box := Rect2(pb_pos + Vector2(-46.0, 40.0), Vector2(92.0, 14.0))
-		draw_rect(s_box, Color(0.16, 0.06, 0.26, 0.94))
-		draw_rect(s_box, Color(0.88, 0.45, 1.0, s_pulse), false, 1.2)
-		draw_string(font, s_box.position + Vector2(5.0, 11.0), "SURGE IMMINENT!", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.86, 0.42))
-	elif surge_stage >= 2:
-		var chg_pct: int = int(round(buildup * 100.0))
-		var b_box := Rect2(pb_pos + Vector2(-46.0, 40.0), Vector2(92.0, 14.0))
-		draw_rect(b_box, Color(0.10, 0.06, 0.20, 0.90))
-		draw_rect(b_box, Color(0.68, 0.42, 0.98, 0.82), false, 1.0)
-		draw_string(font, b_box.position + Vector2(5.0, 11.0), "SURGE CHARGE %d%%" % chg_pct, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.75, 1.0))
+		var b_lbl: String = "★ TIME GOD" if c_stage >= 3 else ("CITADEL S%d" % c_stage if c_stage >= 1 else "CITADEL")
+		var bw_b: float = 76.0 if c_stage >= 2 else 58.0
+		draw_rect(Rect2(pb_pos + Vector2(-bw_b * 0.5, -50.0), Vector2(bw_b, 14.0)), Color(0.05, 0.09, 0.16, 0.90))
+		draw_rect(Rect2(pb_pos + Vector2(-bw_b * 0.5, -50.0), Vector2(bw_b, 14.0)), life_arc_col, false, 1.0)
+		draw_string(font, pb_pos + Vector2(-bw_b * 0.5 + 6.0, -39.0), b_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45) if c_stage >= 2 else Color(0.78, 0.94, 1.0))
 
 
 func _draw_ability_fx() -> void:

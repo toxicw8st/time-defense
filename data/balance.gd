@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v2.5-chrono-comedy"
+const BALANCE_VERSION: String = "v3.0-chrono-ascension"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
@@ -1392,98 +1392,177 @@ const RESEARCH_NODES: Dictionary = {
 		"cooldown_reduction": 0.10,
 	},
 	"hive_breaker": {
-		"name": "Hive Breaker",
+		"name": "Citadel Core",
 		"cost": 100,
 		"rank_costs": RESEARCH_RANK_COSTS,
-		"description": "+10% base-attack damage per rank",
+		"description": "+10% Chrono-Citadel weapon damage & Time Ability power per rank",
 		"base_attack_bonus": 0.10,
 	},
 }
 
-# --- Time Powers & Mutations ---
-## Rewind: +5% HP (next wave). Pause: +5% HP (x1.10 total by W11). Haste: +50% tower spd & +50% build for 30s, +5% speed.
+# --- v3.0 Paid, Upgradable Time Abilities (T1..T5 — Zero Surge, Zero Permanent Mutations!) ---
+const TIME_ABILITY_MAX_TIER: int = 5
+const TIME_ABILITIES: Dictionary = {
+	"pause": {
+		"name": "Time Freeze",
+		"cast_cost": 75,
+		"cooldown": 45.0,
+		"short_effect": "Freeze all aliens; turrets keep firing",
+		"tiers": {
+			1: {"upgrade_cost": 0, "title": "Stasis Lock", "duration": 6.0, "brittle_pct": 0.0, "cd_mult": 1.0, "reveals_cloaked": false, "shatter_pct": 0.0, "desc": "Freeze all aliens 6s while turrets fire."},
+			2: {"upgrade_cost": 220, "title": "Cryo Optics", "duration": 7.5, "brittle_pct": 0.0, "cd_mult": 1.0, "reveals_cloaked": true, "shatter_pct": 0.0, "desc": "7.5s freeze + exposes ALL Cloaked aliens!"},
+			3: {"upgrade_cost": 480, "title": "Brittle Lattice", "duration": 8.0, "brittle_pct": 0.20, "cd_mult": 1.0, "reveals_cloaked": true, "shatter_pct": 0.0, "desc": "8s freeze + frozen aliens take +20% damage!"},
+			4: {"upgrade_cost": 950, "title": "Zero-Kelvin Field", "duration": 9.5, "brittle_pct": 0.30, "cd_mult": 0.85, "reveals_cloaked": true, "shatter_pct": 0.0, "desc": "9.5s freeze, +30% brittle dmg, -15% cooldown."},
+			5: {"upgrade_cost": 2200, "title": "Absolute Zero", "duration": 12.0, "brittle_pct": 0.40, "cd_mult": 0.80, "reveals_cloaked": true, "shatter_pct": 0.15, "desc": "12s freeze, +40% dmg, shatters non-bosses <15% HP!"},
+		},
+	},
+	"haste": {
+		"name": "Overclock",
+		"cast_cost": 60,
+		"cooldown": 40.0,
+		"short_effect": "Supercharge all tower fire & build speed",
+		"tiers": {
+			1: {"upgrade_cost": 0, "title": "Turbo Feed", "duration": 16.0, "speed_bonus": 0.50, "build_mult": 1.50, "crit_bonus": 0.0, "cd_mult": 1.0, "instant_builds": false, "desc": "+50% tower fire & build speed for 16s."},
+			2: {"upgrade_cost": 200, "title": "Twin Capacitors", "duration": 18.0, "speed_bonus": 0.65, "build_mult": 1.75, "crit_bonus": 0.0, "cd_mult": 1.0, "instant_builds": false, "desc": "+65% fire speed & +75% build speed for 18s."},
+			3: {"upgrade_cost": 450, "title": "Overcharged Slugs", "duration": 20.0, "speed_bonus": 0.80, "build_mult": 2.00, "crit_bonus": 0.15, "cd_mult": 1.0, "instant_builds": false, "desc": "+80% fire speed & +15% bonus damage for 20s."},
+			4: {"upgrade_cost": 900, "title": "Chrono-Dynamo", "duration": 22.0, "speed_bonus": 1.00, "build_mult": 2.25, "crit_bonus": 0.20, "cd_mult": 0.85, "instant_builds": false, "desc": "+100% fire speed, +20% dmg, -15% cooldown."},
+			5: {"upgrade_cost": 2000, "title": "Hyper-Dilation", "duration": 26.0, "speed_bonus": 1.25, "build_mult": 3.00, "crit_bonus": 0.30, "cd_mult": 0.80, "instant_builds": true, "desc": "+125% speed, +30% dmg & instantly finishes active builds!"},
+		},
+	},
+	"rewind": {
+		"name": "Temporal Rewind",
+		"cast_cost": 100,
+		"cooldown": 55.0,
+		"short_effect": "Yank ALL aliens backward along path!",
+		"tiers": {
+			1: {"upgrade_cost": 0, "title": "Slipstream Yank", "pushback_pct": 0.18, "paradox_dmg_pct": 0.0, "strip_buffs": false, "stun_sec": 0.0, "cd_mult": 1.0, "desc": "Yanks all active aliens 18% backward along the track!"},
+			2: {"upgrade_cost": 260, "title": "Disruption Pull", "pushback_pct": 0.24, "paradox_dmg_pct": 0.0, "strip_buffs": true, "stun_sec": 0.0, "cd_mult": 1.0, "desc": "24% path pushback + strips Bio-Mender regen & shields!"},
+			3: {"upgrade_cost": 550, "title": "Paradox Whiplash", "pushback_pct": 0.30, "paradox_dmg_pct": 0.12, "strip_buffs": true, "stun_sec": 0.0, "cd_mult": 1.0, "desc": "30% pushback + deals 12% current HP Paradox damage!"},
+			4: {"upgrade_cost": 1100, "title": "Temporal Snap", "pushback_pct": 0.38, "paradox_dmg_pct": 0.15, "strip_buffs": true, "stun_sec": 2.0, "cd_mult": 0.88, "desc": "38% pushback, 15% HP dmg + 2s landing stun!"},
+			5: {"upgrade_cost": 2600, "title": "Chrono-Snapback", "pushback_pct": 0.48, "paradox_dmg_pct": 0.22, "strip_buffs": true, "stun_sec": 3.0, "cd_mult": 0.80, "desc": "48% pushback, 22% HP dmg + 3s stun & buff strip!"},
+		},
+	},
+}
+
+# Legacy alias retained for backward-safe reads in older tooling/tests
 const TIME_POWERS: Dictionary = {
 	"rewind": {
-		"name": "Rewind",
-		"short_effect": "Replay prev wave (no mut); keep b$",
-		"cost_label": "Cost: next wave +5% HP",
-		"cooldown": 65.0,
+		"name": "Temporal Rewind",
+		"short_effect": "Yank aliens backward",
+		"cost_label": "Cast: $100",
+		"cooldown": 55.0,
 		"post_wave_window": 9999.0,
 		"mutation": "armoured",
 		"mutation_label": "Armoured",
-		"hp_bonus_per_stack": 0.05,
+		"hp_bonus_per_stack": 0.0,
 	},
 	"pause": {
-		"name": "Pause",
-		"short_effect": "Freeze aliens 8s; towers fire",
-		"cost_label": "Cost: aliens +5% HP",
-		"duration": 8.0,
-		"cooldown": 55.0,
+		"name": "Time Freeze",
+		"short_effect": "Freeze aliens; towers fire",
+		"cost_label": "Cast: $75",
+		"duration": 6.0,
+		"cooldown": 45.0,
 		"mutation": "thaw_hardened",
 		"mutation_label": "Thaw-hardened",
-		"eff_hp_bonus_per_stack": 0.05,
-		"frozen_damage_reduction_per_stack": 0.10,
-		"frozen_damage_reduction_cap": 0.50,
+		"eff_hp_bonus_per_stack": 0.0,
+		"frozen_damage_reduction_per_stack": 0.0,
+		"frozen_damage_reduction_cap": 0.0,
 	},
 	"haste": {
-		"name": "Haste",
-		"short_effect": "Towers +50% spd & build +50% (30s)",
-		"cost_label": "Cost: aliens +5% speed",
-		"duration": 30.0,
-		"cooldown": 50.0,
+		"name": "Overclock",
+		"short_effect": "Towers +50% fire & build",
+		"cost_label": "Cast: $60",
+		"duration": 16.0,
+		"cooldown": 40.0,
 		"tower_attack_speed_bonus": 0.50,
 		"construction_speed_multiplier": 1.50,
 		"mutation": "swift",
 		"mutation_label": "Swift",
-		"speed_bonus_per_stack": 0.05,
+		"speed_bonus_per_stack": 0.0,
 	},
 }
 
-# --- Surge (5-Wave Deadline + Time Countdown) ---
-## Surge deadline: beginning of Wave 6 if no time ability used in Waves 1-5; resets to +5 waves on any use.
-const SURGE_WAVE_SPAN: int = 5
-const SURGE_BASE_WINDOW: float = 950.0 # ~5 full waves of active combat (fallback timer; wave deadline = Wave 6)
-const SURGE_WARNING_AMBER: float = 15.0
-const SURGE_WARNING_RED: float = 7.0
-const SURGE_ATTACK_SPEED_FACTOR: float = 0.95 # -5% tower attack speed per surge, permanent for mission
-
-# --- Manipulator Upgrades ($ costs, Lv 1..5) ---
-const MANIPULATOR_MAX_LEVEL: int = 5
-const MANIPULATOR_UPGRADES: Dictionary = {
+# --- v3.0 3-Stage Chrono-Citadel Ascension ("Sun God" Base Super-Weapon) ---
+const CITADEL_MAX_STAGE: int = 3
+const CITADEL_SACRIFICE_THRESHOLD: int = 1200 # $1,200+ tower value sacrificed in a category unlocks its super-weapon!
+const CITADEL_STAGES: Dictionary = {
+	1: {
+		"name": "Fortified Citadel",
+		"cost": 1500,
+		"heal_lives": 3,
+		"global_speed_bonus": 0.0,
+		"supports_sacrifice": false,
+		"desc": "Deploys twin Point-Defense Pulse Cannons (240px) + restores +3 Lives!",
+	},
 	2: {
-		"cost": 150,
-		"build_time": 10.0,
-		"benefit_text": "All power cooldowns -15%",
-		"cooldown_multiplier": 0.85,
+		"name": "Chrono-Dreadnought",
+		"cost": 6500,
+		"heal_lives": 5,
+		"global_speed_bonus": 0.15,
+		"supports_sacrifice": true,
+		"desc": "Global Orbital Chrono-Lance, +15% global tower speed, +5 Lives + absorbs optional Tower Sacrifices!",
 	},
 	3: {
-		"cost": 250,
-		"build_time": 15.0,
-		"benefit_text": "Pause 8 s -> 10 s; Haste 30 s -> 36 s",
-		"pause_duration": 10.0,
-		"haste_duration": 36.0,
-	},
-	4: {
-		"cost": 400,
-		"build_time": 20.0,
-		"benefit_text": "Surge deadline +1 wave (6 waves)",
-		"surge_window": 1140.0,
-		"surge_wave_span": 6,
-	},
-	5: {
-		"cost": 600,
-		"build_time": 25.0,
-		"benefit_text": "Base-attack charge time -20%",
-		"base_attack_charge_multiplier": 0.80,
+		"name": "★ True Chrono-Singularity",
+		"cost": 18000,
+		"heal_lives": 20,
+		"global_speed_bonus": 0.30,
+		"supports_sacrifice": true,
+		"desc": "2.2x Citadel power, +30% global tower speed, full heal, Hyper-Apex sacrifice weapons & 10s Singularity Pulse (<15% Boss Execute)!",
 	},
 }
 
-# --- Enemy Base & Hive Destroyer ($450 charge cost, 1/N rule across 5 Levels) ---
+const CITADEL_SACRIFICES: Dictionary = {
+	"kinetic": {
+		"name": "Quad Sabot Autocannons",
+		"source_hint": "Blaster / Annihilator ($1,200+)",
+		"desc": "Global anti-boss sabot barrage (180% vs Boss, shreds armor, ignores Shield Auras).",
+	},
+	"explosive": {
+		"name": "Orbital Cluster Barrage",
+		"source_hint": "Mortar ($1,200+)",
+		"desc": "Map-wide 3-shell heavy AoE bombardment every 2.8s.",
+	},
+	"energy": {
+		"name": "Triple Prismatic Sunbeams",
+		"source_hint": "Laser ($1,200+)",
+		"desc": "Chaining sunbeams hitting 3 foes + GLOBAL Camo Reveal across entire map!",
+	},
+	"chrono": {
+		"name": "Global Time-Dilation Field",
+		"source_hint": "Chrono Slow / Railgun ($1,200+)",
+		"desc": "All enemies on map slowed -20% + constant flat Time Decay!",
+	},
+	"economy": {
+		"name": "Chrono-Mint Core",
+		"source_hint": "Sacrifice 1 Refinery (or own T3+ Bank)",
+		"desc": "Generates +$350/wave (+$700 at Stage 3) bonus cash on every wave clear!",
+	},
+}
+
+# Surge disabled in v3.0 (constants retained cleanly for zero-break compatibility)
+const SURGE_ENABLED: bool = false
+const SURGE_WAVE_SPAN: int = 5
+const SURGE_BASE_WINDOW: float = 950.0
+const SURGE_WARNING_AMBER: float = 15.0
+const SURGE_WARNING_RED: float = 7.0
+const SURGE_ATTACK_SPEED_FACTOR: float = 1.0
+
+# --- Manipulator Upgrades (legacy constants retained for compatibility) ---
+const MANIPULATOR_MAX_LEVEL: int = 5
+const MANIPULATOR_UPGRADES: Dictionary = {
+	2: {"cost": 150, "build_time": 10.0, "benefit_text": "All power cooldowns -15%", "cooldown_multiplier": 0.85},
+	3: {"cost": 250, "build_time": 15.0, "benefit_text": "Extended ability durations", "pause_duration": 10.0, "haste_duration": 36.0},
+	4: {"cost": 400, "build_time": 20.0, "benefit_text": "Enhanced Chrono Core", "surge_window": 1140.0, "surge_wave_span": 6},
+	5: {"cost": 600, "build_time": 25.0, "benefit_text": "Citadel Overdrive", "base_attack_charge_multiplier": 0.80},
+}
+
+# --- Enemy Rift & Mission Levels (Wave 40 Milestone -> Endless Freeplay!) ---
 const ENEMY_BASE_MAX_HP: int = 500
 const MAX_MISSION_LEVELS: int = 5
-const BASE_ATTACK_DEFAULT_LEVEL: int = 3 # Default 3 shots (167 dmg/shot) for baseline test suite; Levels 1..5 use 1/N rule
+const BASE_ATTACK_DEFAULT_LEVEL: int = 3
 const BASE_ATTACK_TEST_DAMAGE_OVERRIDE: int = 167
-const BASE_ATTACK_COST: int = 450 # $450 per shot (requires multiple waves of savings / Rewind farming)
+const BASE_ATTACK_COST: int = 450
 const BASE_ATTACK_CHARGE_TIME: float = 30.0
 const BASE_ATTACK_FIRE_WARNING_TIME: float = 1.0
 
@@ -1499,7 +1578,7 @@ const LEVELS: Dictionary = {
 		"blitzer_speed_bonus": 0.0,
 		"bounty_bonus": 0.0,
 		"starting_money_bonus": 0,
-		"description": "Classic S-trench battlefield. Drag & drop towers anywhere along the 4 horizontal row zones (ROW 1-4). 3 Hive Destroyer shots (167 dmg/shot) destroy the Alien Base.",
+		"description": "Classic S-trench battlefield across 4 horizontal row zones. Clear Wave 40 for the Sector Medal, then awaken your Chrono-Citadel and push Endless Freeplay!",
 	},
 	2: {
 		"name": "Level 2: Vertical Corridors",
@@ -1512,7 +1591,7 @@ const LEVELS: Dictionary = {
 		"blitzer_speed_bonus": 0.12,
 		"bounty_bonus": 0.0,
 		"starting_money_bonus": 0,
-		"description": "Vertical canyon switchbacks. Drag & drop towers inside the 3 tall vertical corridor columns (COL 1-3). Blitzers surge +12% faster. 3 Hive Destroyer shots required.",
+		"description": "Vertical canyon switchbacks with 3 tall corridor columns. Blitzers surge +12% faster. Clear Wave 40 for your Medal, then test your build in Endless!",
 	},
 	3: {
 		"name": "Level 3: Twin Citadel Islands",
@@ -1525,7 +1604,7 @@ const LEVELS: Dictionary = {
 		"blitzer_speed_bonus": 0.0,
 		"bounty_bonus": 0.0,
 		"starting_money_bonus": 0,
-		"description": "Wide perimeter loops around 4 elevated central island plazas (all towers +8% range). 4 Hive Destroyer shots (125 dmg/shot) required.",
+		"description": "Wide perimeter loops around 4 elevated central island plazas (all towers +8% range). Clear Wave 40, then push Endless Freeplay!",
 	},
 	4: {
 		"name": "Level 4: Spiral Labyrinth",
@@ -1538,7 +1617,7 @@ const LEVELS: Dictionary = {
 		"blitzer_speed_bonus": 0.0,
 		"bounty_bonus": 0.0,
 		"starting_money_bonus": 40,
-		"description": "Aliens spiral clockwise into the central Citadel (+$40 start, aliens +8% HP). Drop towers inside 4 inner bastion pockets. 4 Hive Destroyer shots required.",
+		"description": "Aliens spiral clockwise into your central Citadel (+$40 start, aliens +8% HP). Clear Wave 40 and ascend your Citadel to hold Endless!",
 	},
 	5: {
 		"name": "Level 5: Omega Gauntlet",
@@ -1551,7 +1630,7 @@ const LEVELS: Dictionary = {
 		"blitzer_speed_bonus": 0.0,
 		"bounty_bonus": 0.10,
 		"starting_money_bonus": 0,
-		"description": "High-threat 5-turn switchback gauntlet (aliens +15% HP, +10% kill bounty). Drop towers into the 5 hairpin pillboxes. 5 Hive Destroyer shots required.",
+		"description": "High-threat 5-turn switchback gauntlet (aliens +15% HP, +10% kill bounty). Clear Wave 40 and unleash True Chrono-Singularity in Endless!",
 	},
 }
 
@@ -1671,3 +1750,30 @@ static func get_combo_evolution_cfg(combo_type: String, target_apex_tier: int) -
 
 static func get_refinery_tier_cfg(tier: int) -> Dictionary:
 	return REFINERY_TIERS.get(clampi(tier, 1, REFINERY_MAX_TIER), REFINERY_TIERS[1])
+
+
+static func get_time_ability_tier_cfg(ability_key: String, tier: int) -> Dictionary:
+	var ab: Dictionary = TIME_ABILITIES.get(ability_key, {})
+	if ab.is_empty():
+		return {}
+	var tiers: Dictionary = ab.get("tiers", {})
+	var t: int = clampi(tier, 1, TIME_ABILITY_MAX_TIER)
+	return tiers.get(t, {})
+
+
+static func get_tower_sacrifice_categories(tower_type: String) -> Array[String]:
+	var cats: Array[String] = []
+	var parts: PackedStringArray = tower_type.split("+")
+	for p in parts:
+		var c: String = ""
+		if p == "blaster" or p == "annihilator":
+			c = "kinetic"
+		elif p == "mortar":
+			c = "explosive"
+		elif p == "laser":
+			c = "energy"
+		elif p == "slow" or p == "railgun":
+			c = "chrono"
+		if c != "" and not cats.has(c):
+			cats.append(c)
+	return cats

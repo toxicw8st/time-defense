@@ -321,6 +321,10 @@ func _sync_run_snapshot() -> void:
 	# Sticky sandbox taint: once a run has used Sandbox mode, it never pollutes real balance telemetry
 	current_run["is_sandbox"] = bool(current_run.get("is_sandbox", false)) or GameState.is_sandbox_mode
 	current_run["max_wave_reached"] = maxi(int(current_run.get("max_wave_reached", 1)), int(m.wave_number))
+	current_run["citadel_stage"] = int(m.citadel_stage)
+	current_run["citadel_sacrifices"] = m.citadel_sacrifices.duplicate()
+	current_run["citadel_damage"] = int(round(m.citadel_total_damage))
+	current_run["ability_levels"] = m.ability_levels.duplicate()
 	current_run["waves_completed"] = maxi(int(current_run.get("waves_completed", 0)), int(m.stats.get("waves_completed", 0)))
 	current_run["endless_reached"] = bool(current_run.get("endless_reached", false)) or GameState.is_endless_mode
 	current_run["duration_sim_sec"] = snappedf(GameState.mission_elapsed_seconds, 0.1)

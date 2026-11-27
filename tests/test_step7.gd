@@ -1,11 +1,10 @@
 extends Node
 
-## Headless Step 7 acceptance verification:
-## - Charge ($450) armed in BUILD does NOT tick in BUILD (anti-exploit), advances during active waves
-## - Charging Hive Destroyer PAUSES all time abilities (Rewind, Pause, Haste locked & cooldowns paused) AND pauses Surge
-## - Haste cannot speed up the 30.0 s Hive Destroyer charge
-## - 1/N rule verified (Level 1 = 1 shot/500 dmg, Level 2 = 2 shots/250 dmg, Level 3 = 3 shots/167 dmg)
-## - 3 charges on Level 3 win mid-wave; Restart resets mission state cleanly while preserving meta_research
+## Headless Step 7 acceptance verification (v3.0 Chrono-Citadel Ascension "Sun God" + Wave 40 Milestone -> Endless Freeplay):
+## - Stage 1 ($1,500): Point-Defense Pulse Cannons fire & restore +3 Lives
+## - Stage 2 ($6,500 + Opt-In Tower Sacrifices): Absorbs ONLY chosen towers, grafts Super-Weapons, grants +15% Global Speed & Global Camo Reveal (Energy)
+## - Stage 3 ($18,000): ★ True Chrono-Singularity ("Time God") — +30% Global Speed, Hyper-Apex Grafts, 10s Singularity Pulse (<15% Boss Execute!)
+## - Clearing Wave 40 awards Sector Milestone Victory & unlocks Endless Freeplay + persists Best Wave; Restart cleans mission while keeping Meta-Research
 
 func _ready() -> void:
 	GameState.reset_meta_progression()
@@ -16,134 +15,72 @@ func _ready() -> void:
 
 	var map: GameMap = inst.get_node("Map")
 	var wm: WaveManager = inst.get_node("WaveManager")
-	var econ: EconomyManager = inst.get_node("EconomyManager")
-	var surge: SurgeManager = inst.get_node("SurgeManager")
-	var tp: TimePowersManager = inst.get_node("TimePowersManager")
 	var ba: BaseAttackManager = inst.get_node("BaseAttackManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	# Verify 1/N rule across Levels 1, 2, 3
-	GameState.selected_mission_level = 1
-	assert(ba.get_shot_damage() == 500 and ba.get_shots_to_destroy_remaining() == 1)
-	GameState.selected_mission_level = 2
-	assert(ba.get_shot_damage() == 250 and ba.get_shots_to_destroy_remaining() == 2)
-	GameState.selected_mission_level = 3
-	assert(ba.get_shot_damage() == 167 and ba.get_shots_to_destroy_remaining() == 3)
+	# 1) Starting $200 cannot afford Stage 1 ($1,500)
+	assert(not ba.can_ascend_citadel())
 
-	# Verify $200 starting money cannot afford $450 Hive Destroyer early
-	assert(not ba.can_start_charge(), "Starting $200 must NOT afford $450 Hive Destroyer")
+	# 2) Stage 1: Fortified Citadel ($1,500) restores +3 lives & fires Point-Defense Cannons!
+	GameState.mission.lives = 14
+	GameState.mission.economy["money"] = 30000
+	assert(ba.ascend_citadel())
+	assert(GameState.mission.citadel_stage == 1 and GameState.mission.lives == 17, "Stage 1 must heal +3 lives (14 -> 17)")
+	GameState.is_wave_active = true
+	var near_e: EnemyUnit = map.spawn_enemy("brute", 5)
+	near_e.distance_along_path = maxf(0.0, map.get_path_length() - 90.0)
+	near_e._sync_transform_to_path()
+	var hp_b1: float = near_e.hp
+	ba.step_base_attack(0.6)
+	assert(near_e.hp < hp_b1 and GameState.mission.citadel_total_damage > 0.0, "Stage 1 Point-Defense Cannons must damage enemies near Citadel")
+	map.clear_all_enemies()
 
-	GameState.mission.economy["money"] = 3000
-	var b1: TowerUnit = map.build_tower_on_pad(4, "blaster")
-	var b2: TowerUnit = map.build_tower_on_pad(5, "laser")
-	map.build_tower_on_pad(3, "blaster")
-	map.build_tower_on_pad(10, "mortar")
-	map.build_tower_on_pad(9, "mortar")
+	# 3) Stage 2: Chrono-Dreadnought ($6,500) + Opt-In Sun-God Tower Sacrifices (keeps unchosen towers safe!)
+	var t_keep: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	t_keep.current_job = null; t_keep.is_built = true
+	var t_sac_laser: TowerUnit = map.build_tower_on_pad(1, "laser")
+	t_sac_laser.current_job = null; t_sac_laser.is_built = true; t_sac_laser.total_spent = 1350
+	var t_sac_kin: TowerUnit = map.build_tower_on_pad(2, "annihilator")
+	t_sac_kin.current_job = null; t_sac_kin.is_built = true; t_sac_kin.total_spent = 1400
+	var prev_sac: Dictionary = ba.preview_sacrifice_unlocks([t_sac_laser, t_sac_kin], false)
+	assert(bool(prev_sac["unlocked"]["energy"]) and bool(prev_sac["unlocked"]["kinetic"]) and not bool(prev_sac["unlocked"]["explosive"]))
+	assert(ba.ascend_citadel([t_sac_laser, t_sac_kin], false))
+	assert(GameState.mission.citadel_stage == 2)
+	assert(is_instance_valid(t_keep) and map.get_all_towers().has(t_keep), "Unchosen towers MUST NOT be sacrificed!")
+	assert(not map.get_all_towers().has(t_sac_laser) and not map.get_all_towers().has(t_sac_kin), "Chosen sacrifice towers must be absorbed!")
+	assert(int(GameState.mission.citadel_sacrifices["energy"]) == 1 and int(GameState.mission.citadel_sacrifices["kinetic"]) == 1)
+	assert(GameState.has_global_camo_reveal() and t_keep.can_detect_cloaked(), "Energy sacrifice must grant GLOBAL Camo Reveal to all towers!")
+	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.15), "Stage 2 Citadel must grant +15%% global tower attack speed!")
 
-	# 1) Arm Charge #1 in BUILD: must stay at 30.0 s in BUILD, then advance during wave while pausing time abilities & Surge!
-	assert(ba.start_charge())
-	assert(not ba.can_start_charge(), "Cannot start 2nd charge while charging")
-	assert(not tp.can_upgrade_manipulator(), "Manipulator upgrade blocked while Hive Destroyer is charging")
-	_step(map, wm, econ, surge, tp, ba, 20.0)
-	assert(is_equal_approx(ba.charge_remaining, 30.0), "Hive charge must NOT advance in BUILD phase")
+	# 4) Stage 3: ★ True Chrono-Singularity ("Time God", $18,000) — +30% Global Speed, Hyper-Apex Grafts, <15% Boss Execute Pulse!
+	assert(ba.ascend_citadel([], false))
+	assert(GameState.mission.citadel_stage == 3 and GameState.mission.lives == 20)
+	assert(int(GameState.mission.citadel_sacrifices["energy"]) == 2 and int(GameState.mission.citadel_sacrifices["kinetic"]) == 2, "Stage 3 must promote grafted weapons to Hyper-Apex (Lv2)")
+	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.30), "Stage 3 Citadel must grant +30%% global tower attack speed!")
+	var low_boss: EnemyUnit = map.spawn_enemy("juggernaut", 30)
+	low_boss.hp = low_boss.max_hp * 0.12 # <15% HP execute threshold!
+	ba.pulse_cooldown = 0.05
+	ba.step_base_attack(0.1)
+	assert(low_boss.is_dead_or_leaked, "Stage 3 Singularity Pulse must EXECUTE bosses below 15%% HP!")
+	map.clear_all_enemies()
 
-	GameState.mission.wave_number = 6
-	wm.start_wave()
-	tp.cooldowns["pause"] = 20.0
-	tp.haste_remaining = 4.0
-	assert(not tp.can_use_power("rewind") and not tp.can_use_power("pause") and not tp.can_use_power("haste"), "All time powers MUST be paused while Hive charging")
-	assert(surge.is_surge_paused(), "Surge MUST pause while Hive charging")
-	hud._refresh_power_buttons()
-	assert(hud.rewind_button.text.contains("PAUSED (HIVE)"))
+	# 5) Clearing Wave 40 awards Sector Milestone Victory & unlocks Endless Freeplay + persists Best Wave!
+	GameState.mission.wave_number = WavesData.MISSION_TARGET_WAVE
+	wm._complete_current_wave()
+	assert(GameState.mission.is_over and GameState.mission.outcome == "won", "Clearing Wave 40 must award Sector Milestone Victory!")
+	assert(GameState.get_level_best_wave(GameState.selected_map_level) >= 40)
+	assert(hud.end_overlay.visible and hud.end_endless_button.visible)
+	GameState.continue_into_endless()
+	assert(not GameState.mission.is_over and GameState.is_endless_mode and GameState.mission.wave_number == 41)
 
-	var surge_before_charge: float = GameState.mission.surge_timer_seconds
-	_step(map, wm, econ, surge, tp, ba, 29.9)
-	assert(not GameState.is_haste_active, "Haste must stay suspended while Hive charging")
-	assert(is_equal_approx(tp.cooldowns["pause"], 20.0), "Power cooldowns must pause while Hive charging")
-	assert(is_equal_approx(GameState.mission.surge_timer_seconds, surge_before_charge), "Surge must stay paused while Hive charging")
-	assert(ba.is_charging and GameState.mission.enemy_base_hp == 500, "Must take full 30.0 s")
-
-	_step(map, wm, econ, surge, tp, ba, 0.15)
-	assert(not ba.is_charging)
-	assert(GameState.mission.enemy_base_hp == 333, "1st hit must deal 167 dmg -> 333 HP")
-	assert(GameState.mission.stats["charges_fired"] == 1)
-
-	# 2) Verify Manipulator upgrade blocks starting Base Attack charge
-	tp.cooldowns["pause"] = 0.0
-	tp.haste_remaining = 0.0
-	GameState.mission.wave_number = 7
-	wm.state = WaveManager.State.BUILD
-	GameState.is_wave_active = false
-	wm.start_wave()
-	assert(tp.start_manipulator_upgrade())
-	assert(not ba.can_start_charge(), "Hive charge blocked while Manipulator upgrading")
-	_step(map, wm, econ, surge, tp, ba, 10.1)
-	assert(not GameState.is_base_locked())
-
-	b1.start_upgrade("damage")
-	b2.start_upgrade("damage")
-	_step(map, wm, econ, surge, tp, ba, 3.5)
-
-	# 3) Fire Charge #2 on Wave 9
-	GameState.mission.wave_number = 9
-	wm.state = WaveManager.State.BUILD
-	GameState.is_wave_active = false
-	assert(ba.start_charge())
-	wm.start_wave()
-	_step(map, wm, econ, surge, tp, ba, 30.05)
-	assert(GameState.mission.enemy_base_hp == 166)
-	assert(GameState.mission.stats["charges_fired"] == 2)
-
-	# 4) Fire Charge #3 on Wave 10 and verify Win triggers mid-wave!
-	GameState.mission.wave_number = 10
-	wm.state = WaveManager.State.BUILD
-	GameState.is_wave_active = false
-	assert(ba.start_charge())
-	wm.start_wave()
-	_step(map, wm, econ, surge, tp, ba, 30.05)
-	assert(GameState.mission.enemy_base_hp == 0)
-	assert(GameState.mission.stats["charges_fired"] == 3)
-	assert(GameState.mission.is_over and GameState.mission.outcome == "won")
-	assert(hud.end_overlay.visible and hud.end_title_label.text.contains("VICTORY"))
-
-	# 5) Restart resets mission state cleanly while preserving persistent meta_research
-	GameState.reset_mission()
+	# 6) Restart resets mission cleanly while preserving persistent meta_research & Best Wave!
 	GameState.add_research(40, false)
-	var expected_meta_res: int = GameState.meta_research
-	assert(expected_meta_res >= 40)
-	GameState.mission.wave_number = 7
-	GameState.mission.mutations["armoured_stacks"] = 3
-	GameState.mission.surge_count = 4
-	GameState.mission.manipulator_level = 3
-	GameState.mission.economy["money"] = 999
-	GameState.lose_lives(20)
-	assert(GameState.mission.is_over and GameState.mission.outcome == "lost")
+	var expected_res: int = GameState.meta_research
 	hud._on_restart_pressed()
 	var m := GameState.mission
-	assert(not m.is_over and m.wave_number == 1 and m.lives == 20)
-	assert(m.economy["money"] == 200 and m.economy["refineries_owned"] == 0)
-	assert(GameState.meta_research == expected_meta_res, "Persistent meta_research must survive mission restart")
-	assert(m.mutations["armoured_stacks"] == 0 and m.mutations["thaw_stacks"] == 0 and m.mutations["swift_stacks"] == 0)
-	assert(m.surge_count == 0 and m.manipulator_level == 1 and m.enemy_base_hp == 500)
+	assert(not m.is_over and m.wave_number == 1 and m.lives == 20 and m.citadel_stage == 0)
+	assert(GameState.meta_research == expected_res and GameState.get_level_best_wave(1) >= 40)
 
 	GameState.reset_meta_progression()
-	print("STEP7_TEST_PASS charges_fired=3 1_over_N=ok restart_clean=true")
+	print("STEP7_TEST_PASS citadel_s1_s2_s3=ok sacrifices=ok milestone_w40_endless=ok restart_clean=true")
 	get_tree().quit(0)
-
-
-func _step(map: GameMap, wm: WaveManager, econ: EconomyManager, surge: SurgeManager, tp: TimePowersManager, ba: BaseAttackManager, duration: float) -> void:
-	var dt: float = 0.05
-	var steps: int = int(round(duration / dt))
-	for _i in range(steps):
-		tp.step_powers(dt)
-		surge.step_surge(dt)
-		ba.step_base_attack(dt)
-		wm.step_wave(dt)
-		econ.step_economy(dt)
-		for enemy in map.get_active_enemies():
-			enemy.advance_along_path(dt)
-		for tower in map.get_all_towers():
-			tower.advance_tower(dt)
-		for proj in map.projectiles_container.get_children():
-			if proj is ProjectileEffect:
-				proj.advance_projectile(dt)

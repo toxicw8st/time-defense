@@ -180,6 +180,16 @@ var comms_text_label: Label = null
 var _comms_timer: float = 0.0
 var _comms_cooldown: float = 0.0
 var _comms_last_wave_banter: int = -1
+var citadel_overlay: PanelContainer = null
+var citadel_ability_cards: Dictionary = {}
+var citadel_status_label: Label = null
+var citadel_next_label: Label = null
+var citadel_sac_box: VBoxContainer = null
+var citadel_sac_preview_label: Label = null
+var citadel_ascend_button: Button = null
+var citadel_close_button: Button = null
+var _selected_sacrifice_ids: Dictionary = {}
+var _sacrifice_refinery_checked: bool = false
 var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
@@ -342,6 +352,10 @@ func _ready() -> void:
 	_build_zoom_controls_ui()
 	_build_wave_intel_ui()
 	_build_comms_toast_ui()
+	_build_citadel_overlay_ui()
+	var surge_row_node := get_node_or_null("BottomBar/VBox/SurgeRow") as Control
+	if surge_row_node != null:
+		surge_row_node.visible = false
 	_setup_responsive_grids()
 	_build_guide_ui()
 	_setup_right_panel_buttons()
@@ -381,6 +395,10 @@ func open_start_menu() -> void:
 		recipes_overlay.visible = false
 	if analytics_overlay != null:
 		analytics_overlay.visible = false
+	if citadel_overlay != null:
+		citadel_overlay.visible = false
+	_selected_sacrifice_ids.clear()
+	_sacrifice_refinery_checked = false
 	if enemy_inspector_panel != null:
 		enemy_inspector_panel.visible = false
 	_guide_paused_game = false
@@ -1288,6 +1306,10 @@ func open_recipes_overlay() -> void:
 		return
 	if analytics_overlay != null:
 		analytics_overlay.visible = false
+	if citadel_overlay != null:
+		citadel_overlay.visible = false
+	_selected_sacrifice_ids.clear()
+	_sacrifice_refinery_checked = false
 	if AnalyticsManager != null:
 		AnalyticsManager.record_feature_used("recipes_opened")
 	_populate_recipes_list()
@@ -1990,8 +2012,332 @@ func _on_lives_lost_comms(_enemy_type: String, _amount: int, _world_pos: Vector2
 		show_chrono_comms("leak", false)
 
 
+func _build_citadel_overlay_ui() -> void:
+	if citadel_overlay != null:
+		return
+	citadel_overlay = PanelContainer.new()
+	citadel_overlay.name = "CitadelCommandOverlay"
+	citadel_overlay.visible = false
+	citadel_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	citadel_overlay.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.04, 0.07, 0.13, 0.97), Color(1.0, 0.86, 0.34), 12, 16.0, 12.0))
+	add_child(citadel_overlay)
+
+	var main_vb := VBoxContainer.new()
+	main_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vb.add_theme_constant_override("separation", 8)
+	citadel_overlay.add_child(main_vb)
+
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 10)
+	main_vb.add_child(hdr)
+
+	var title_l := Label.new()
+	title_l.text = "★ CHRONO-CITADEL ASCENSION & TIME ABILITY LAB"
+	title_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_l.add_theme_font_size_override("font_size", 17)
+	title_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.40))
+	hdr.add_child(title_l)
+
+	citadel_close_button = Button.new()
+	citadel_close_button.name = "CitadelCloseButton"
+	citadel_close_button.text = "Close ✕"
+	citadel_close_button.custom_minimum_size = Vector2(96.0, 34.0)
+	citadel_close_button.pressed.connect(func() -> void:
+		citadel_overlay.visible = false
+		_refresh_all()
+	)
+	UIIcons.apply_right_button_theme(citadel_close_button, Color(0.92, 0.45, 0.45))
+	hdr.add_child(citadel_close_button)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	main_vb.add_child(scroll)
+
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 10)
+	scroll.add_child(body)
+
+	# --- SECTION A: PAID TIME ABILITY UPGRADES (T1 -> T5) ---
+	var ab_hdr := Label.new()
+	ab_hdr.text = "TIME ABILITY UPGRADES (ZERO SURGE, ZERO MUTATIONS — PAY CASH TO CAST & UPGRADE T1→T5)"
+	ab_hdr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ab_hdr.add_theme_font_size_override("font_size", 12)
+	ab_hdr.add_theme_color_override("font_color", Color(0.45, 0.96, 1.0))
+	body.add_child(ab_hdr)
+
+	var ab_row := HBoxContainer.new()
+	ab_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_row.add_theme_constant_override("separation", 8)
+	body.add_child(ab_row)
+
+	for ak in ["pause", "haste", "rewind"]:
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var card_col := Color(0.36, 0.90, 1.0) if ak == "pause" else (Color(0.38, 1.0, 0.72) if ak == "haste" else Color(0.86, 0.50, 1.0))
+		card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.07, 0.11, 0.19, 0.95), card_col, 8, 9.0, 7.0))
+		ab_row.add_child(card)
+
+		var cvb := VBoxContainer.new()
+		cvb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cvb.add_theme_constant_override("separation", 4)
+		card.add_child(cvb)
+
+		var t_lbl := Label.new()
+		t_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t_lbl.add_theme_font_size_override("font_size", 13)
+		t_lbl.add_theme_color_override("font_color", card_col)
+		cvb.add_child(t_lbl)
+
+		var d_lbl := Label.new()
+		d_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		d_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d_lbl.add_theme_font_size_override("font_size", 11)
+		d_lbl.add_theme_color_override("font_color", Color(0.88, 0.94, 1.0))
+		cvb.add_child(d_lbl)
+
+		var u_btn := Button.new()
+		u_btn.name = "UpgradeAbility_%s" % ak
+		u_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		u_btn.custom_minimum_size = Vector2(0.0, 38.0)
+		var captured_k: String = ak
+		u_btn.pressed.connect(func() -> void:
+			if time_powers_ref != null and time_powers_ref.upgrade_ability(captured_k):
+				_refresh_citadel_overlay()
+				_refresh_all()
+		)
+		UIIcons.apply_right_button_theme(u_btn, card_col)
+		cvb.add_child(u_btn)
+
+		citadel_ability_cards[ak] = {"title": t_lbl, "desc": d_lbl, "btn": u_btn}
+
+	var sep := HSeparator.new()
+	body.add_child(sep)
+
+	# --- SECTION B: 3-STAGE CHRONO-CITADEL ASCENSION ("SUN GOD") + OPT-IN SACRIFICE PICKER ---
+	var cit_hdr := Label.new()
+	cit_hdr.text = "CHRONO-CITADEL ASCENSION (AWAKEN YOUR BASE INTO AN ENDGAME SUPER-WEAPON!)"
+	cit_hdr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cit_hdr.add_theme_font_size_override("font_size", 13)
+	cit_hdr.add_theme_color_override("font_color", Color(1.0, 0.88, 0.36))
+	body.add_child(cit_hdr)
+
+	citadel_status_label = Label.new()
+	citadel_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	citadel_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	citadel_status_label.add_theme_font_size_override("font_size", 12)
+	citadel_status_label.add_theme_color_override("font_color", Color(0.85, 0.96, 1.0))
+	body.add_child(citadel_status_label)
+
+	citadel_next_label = Label.new()
+	citadel_next_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	citadel_next_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	citadel_next_label.add_theme_font_size_override("font_size", 12)
+	citadel_next_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.56))
+	body.add_child(citadel_next_label)
+
+	citadel_sac_box = VBoxContainer.new()
+	citadel_sac_box.name = "CitadelSacrificeBox"
+	citadel_sac_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	citadel_sac_box.add_theme_constant_override("separation", 4)
+	body.add_child(citadel_sac_box)
+
+	citadel_sac_preview_label = Label.new()
+	citadel_sac_preview_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	citadel_sac_preview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	citadel_sac_preview_label.add_theme_font_size_override("font_size", 12)
+	citadel_sac_preview_label.add_theme_color_override("font_color", Color(0.65, 1.0, 0.82))
+	body.add_child(citadel_sac_preview_label)
+
+	citadel_ascend_button = Button.new()
+	citadel_ascend_button.name = "CitadelAscendButton"
+	citadel_ascend_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	citadel_ascend_button.custom_minimum_size = Vector2(0.0, 48.0)
+	citadel_ascend_button.add_theme_font_size_override("font_size", 15)
+	citadel_ascend_button.pressed.connect(_on_citadel_ascend_pressed)
+	UIIcons.apply_right_button_theme(citadel_ascend_button, Color(1.0, 0.84, 0.28), true)
+	body.add_child(citadel_ascend_button)
+
+
+func open_citadel_overlay() -> void:
+	if citadel_overlay == null:
+		return
+	_selected_sacrifice_ids.clear()
+	_sacrifice_refinery_checked = false
+	citadel_overlay.visible = true
+	_refresh_citadel_overlay()
+	_reapply_overlay_bounds()
+	call_deferred("_reapply_overlay_bounds")
+
+
+func _get_chosen_sacrifice_towers() -> Array:
+	var out: Array = []
+	if map_ref == null:
+		return out
+	for t in map_ref.get_all_towers():
+		if t != null and is_instance_valid(t) and bool(_selected_sacrifice_ids.get(t.tower_id, false)):
+			out.append(t)
+	return out
+
+
+func _refresh_citadel_overlay() -> void:
+	if citadel_overlay == null or not citadel_overlay.visible:
+		return
+	var money: int = GameState.mission.economy["money"]
+	# 1) Refresh Time Ability T1->T5 upgrade cards
+	for ak in ["pause", "haste", "rewind"]:
+		var card: Dictionary = citadel_ability_cards[ak]
+		var ab: Dictionary = Balance.TIME_ABILITIES[ak]
+		var cur_t: int = GameState.get_ability_level(ak)
+		var cur_cfg: Dictionary = Balance.get_time_ability_tier_cfg(ak, cur_t)
+		(card["title"] as Label).text = "%s [T%d/5] (Cast $%d)" % [str(ab["name"]), cur_t, int(ab["cast_cost"])]
+		var btn: Button = card["btn"]
+		if cur_t >= Balance.TIME_ABILITY_MAX_TIER:
+			(card["desc"] as Label).text = "MAX %s: %s" % [str(cur_cfg["title"]), str(cur_cfg["desc"])]
+			btn.text = "★ MAX TIER 5"
+			btn.disabled = true
+			btn.modulate = Color(0.55, 1.0, 0.80)
+		else:
+			var nxt_cfg: Dictionary = Balance.get_time_ability_tier_cfg(ak, cur_t + 1)
+			var ucost: int = int(nxt_cfg["upgrade_cost"])
+			(card["desc"] as Label).text = "Now: %s\nNext T%d (%s): %s" % [
+				str(cur_cfg["desc"]), cur_t + 1, str(nxt_cfg["title"]), str(nxt_cfg["desc"])
+			]
+			var can_u: bool = time_powers_ref != null and time_powers_ref.can_upgrade_ability(ak)
+			btn.text = "UPGRADE T%d ($%d)" % [cur_t + 1, ucost]
+			btn.disabled = not can_u
+			btn.modulate = Color(0.65, 1.0, 0.85) if can_u else Color(1.0, 0.65, 0.65)
+
+	# 2) Refresh Chrono-Citadel Ascension status & opt-in sacrifice picker
+	var m := GameState.mission
+	var stage: int = m.citadel_stage
+	var grafted: PackedStringArray = []
+	for sk in ["kinetic", "explosive", "energy", "chrono", "economy"]:
+		var sl: int = int(m.citadel_sacrifices.get(sk, 0))
+		if sl > 0:
+			grafted.append("%s%s" % [str(Balance.CITADEL_SACRIFICES[sk]["name"]), " ★HYPER" if sl >= 2 else ""])
+	var graft_txt: String = ", ".join(grafted) if not grafted.is_empty() else "None yet (Stage 2+ unlocks Sacrifices)"
+	var stage_name: String = "Unawakened Base (Stage 0)" if stage == 0 else ("Stage %d: %s" % [stage, str(Balance.CITADEL_STAGES[stage]["name"])])
+	citadel_status_label.text = "Current: %s  |  Citadel Dmg: %d  |  Kills: %d  |  Global Spd Aura: +%d%%\nGrafted Super-Weapons: %s" % [
+		stage_name, int(round(m.citadel_total_damage)), m.citadel_total_kills,
+		int(round(GameState.get_citadel_global_speed_bonus() * 100.0)), graft_txt
+	]
+
+	for ch in citadel_sac_box.get_children():
+		ch.queue_free()
+
+	var nxt_stage: int = base_attack_ref.get_next_citadel_stage() if base_attack_ref != null else -1
+	if nxt_stage < 0:
+		citadel_next_label.text = "★ MAXIMUM ASCENSION REACHED — TRUE CHRONO-SINGULARITY ONLINE!"
+		citadel_sac_preview_label.text = ""
+		citadel_ascend_button.text = "★ TRUE CHRONO-SINGULARITY MAX"
+		citadel_ascend_button.disabled = true
+		citadel_ascend_button.modulate = Color(1.0, 0.90, 0.42)
+		return
+
+	var scfg: Dictionary = Balance.CITADEL_STAGES[nxt_stage]
+	var scost: int = int(scfg["cost"])
+	citadel_next_label.text = "NEXT -> Stage %d: %s ($%d) — %s" % [nxt_stage, str(scfg["name"]), scost, str(scfg["desc"])]
+
+	if bool(scfg.get("supports_sacrifice", false)) and map_ref != null and base_attack_ref != null:
+		var sac_hdr := Label.new()
+		sac_hdr.text = "OPTIONAL SUN-GOD SACRIFICES (Toggle placed towers to absorb; $%d+ in a category grafts its permanent super-weapon!):" % Balance.CITADEL_SACRIFICE_THRESHOLD
+		sac_hdr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sac_hdr.add_theme_font_size_override("font_size", 11)
+		sac_hdr.add_theme_color_override("font_color", Color(1.0, 0.84, 0.40))
+		citadel_sac_box.add_child(sac_hdr)
+
+		var t_flow := HFlowContainer.new()
+		t_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t_flow.add_theme_constant_override("h_separation", 6)
+		t_flow.add_theme_constant_override("v_separation", 4)
+		citadel_sac_box.add_child(t_flow)
+
+		var built_towers: Array[TowerUnit] = map_ref.get_all_towers()
+		if built_towers.is_empty():
+			var empty_l := Label.new()
+			empty_l.text = "(No placed towers to sacrifice yet — you can still ascend without sacrifices!)"
+			empty_l.add_theme_font_size_override("font_size", 11)
+			t_flow.add_child(empty_l)
+		else:
+			for t in built_towers:
+				if not t.is_built:
+					continue
+				var cb := CheckBox.new()
+				var cats: Array[String] = Balance.get_tower_sacrifice_categories(t.tower_type)
+				cb.text = "%s ($%d • %s)" % [str(Balance.TOWERS[t.tower_type]["name"]), t.total_spent, "+".join(cats).to_upper()]
+				cb.button_pressed = bool(_selected_sacrifice_ids.get(t.tower_id, false))
+				cb.add_theme_font_size_override("font_size", 11)
+				var tid: int = t.tower_id
+				cb.toggled.connect(func(on: bool) -> void:
+					_selected_sacrifice_ids[tid] = on
+					_update_sacrifice_preview_text()
+				)
+				t_flow.add_child(cb)
+
+		if int(m.economy.get("refineries_owned", 0)) >= 1:
+			var rcb := CheckBox.new()
+			rcb.text = "Sacrifice 1 Refinery for Chrono-Mint Core (+$350/w, +$700/w at S3)"
+			rcb.button_pressed = _sacrifice_refinery_checked
+			rcb.add_theme_font_size_override("font_size", 11)
+			rcb.toggled.connect(func(on: bool) -> void:
+				_sacrifice_refinery_checked = on
+				_update_sacrifice_preview_text()
+			)
+			citadel_sac_box.add_child(rcb)
+
+		_update_sacrifice_preview_text()
+	else:
+		citadel_sac_preview_label.text = "Stage 1 deploys directly — no sacrifices required! (Stage 2 & 3 unlock optional Sun-God Sacrifices.)"
+
+	var can_asc: bool = base_attack_ref != null and base_attack_ref.can_ascend_citadel()
+	citadel_ascend_button.text = "★ ASCEND TO STAGE %d: %s ($%d)" % [nxt_stage, str(scfg["name"]).to_upper(), scost]
+	citadel_ascend_button.disabled = not can_asc
+	citadel_ascend_button.modulate = Color(1.0, 0.94, 0.48) if can_asc else Color(1.0, 0.65, 0.65)
+	if not can_asc and not GameState.is_sandbox_mode:
+		citadel_ascend_button.text += "  [Need $%d more]" % maxi(0, scost - money)
+
+
+func _update_sacrifice_preview_text() -> void:
+	if base_attack_ref == null or citadel_sac_preview_label == null:
+		return
+	var chosen: Array = _get_chosen_sacrifice_towers()
+	var prev: Dictionary = base_attack_ref.preview_sacrifice_unlocks(chosen, _sacrifice_refinery_checked)
+	var spent: Dictionary = prev["spent_by_cat"]
+	var unl: Dictionary = prev["unlocked"]
+	var lines: PackedStringArray = ["LIVE SACRIFICE WEAPON PREVIEW (%d tower(s) selected):" % chosen.size()]
+	for c in ["kinetic", "explosive", "energy", "chrono"]:
+		var cfg_c: Dictionary = Balance.CITADEL_SACRIFICES[c]
+		var ok: bool = bool(unl.get(c, false))
+		lines.append("  %s %s ($%d/$%d) -> %s" % [
+			"✓ UNLOCKED:" if ok else "•",
+			c.to_upper(), int(spent.get(c, 0)), Balance.CITADEL_SACRIFICE_THRESHOLD,
+			str(cfg_c["name"]) if ok else str(cfg_c["source_hint"]),
+		])
+	var eco_ok: bool = bool(unl.get("economy", false))
+	lines.append("  %s ECONOMY -> %s" % [
+		"✓ UNLOCKED:" if eco_ok else "•",
+		str(Balance.CITADEL_SACRIFICES["economy"]["name"]) if eco_ok else str(Balance.CITADEL_SACRIFICES["economy"]["source_hint"]),
+	])
+	citadel_sac_preview_label.text = "\n".join(lines)
+
+
+func _on_citadel_ascend_pressed() -> void:
+	if base_attack_ref == null:
+		return
+	var chosen: Array = _get_chosen_sacrifice_towers()
+	if base_attack_ref.ascend_citadel(chosen, _sacrifice_refinery_checked):
+		_selected_sacrifice_ids.clear()
+		_sacrifice_refinery_checked = false
+		_refresh_citadel_overlay()
+		_refresh_all()
+
+
 func _is_any_blocking_overlay_visible() -> bool:
-	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay, guide_panel]:
+	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay, citadel_overlay, guide_panel]:
 		if ov != null and ov.visible:
 			return true
 	return false
@@ -2369,6 +2715,7 @@ func set_references(
 		map_ref.tower_selected.connect(_on_tower_selected)
 		map_ref.selection_cleared.connect(_on_selection_cleared)
 		map_ref.enemy_inspected.connect(_on_enemy_inspected)
+		map_ref.citadel_clicked.connect(open_citadel_overlay)
 	if wave_manager_ref != null:
 		wave_manager_ref.wave_summary_updated.connect(_on_wave_summary_updated)
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
@@ -2376,9 +2723,11 @@ func set_references(
 		surge_ref.surge_banner_triggered.connect(_on_surge_banner_triggered)
 	if time_powers_ref != null:
 		time_powers_ref.power_activated.connect(func(pname: String) -> void: show_chrono_comms(pname, true))
+		time_powers_ref.ability_upgraded.connect(func(_pk: String, _nt: int) -> void: show_chrono_comms("ability_upgrade", true))
 	if base_attack_ref != null:
-		base_attack_ref.charge_started.connect(func() -> void: show_chrono_comms("hive_charge", true))
-		base_attack_ref.base_attack_fired.connect(func(_dmg: int, _rem: int) -> void: show_chrono_comms("hive_fire", true))
+		base_attack_ref.citadel_ascended.connect(func(st: int, _sacs: Dictionary) -> void:
+			show_chrono_comms("citadel_s%d" % clampi(st, 1, 3), true)
+		)
 	if get_viewport() != null:
 		apply_responsive_layout(_get_effective_viewport_size())
 	_check_teaching_prompt()
@@ -2587,34 +2936,20 @@ func _process(delta: float) -> void:
 func _refresh_all() -> void:
 	var m := GameState.mission
 	top_status_label.text = "Lives: %d / %d" % [m.lives, Balance.PLAYER_STARTING_LIVES]
-	enemy_base_bar.max_value = Balance.ENEMY_BASE_MAX_HP
-	enemy_base_bar.value = m.enemy_base_hp
-
-	var shot_dmg: int = base_attack_ref.get_shot_damage() if base_attack_ref != null else Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE
-	var shots_left: int = base_attack_ref.get_shots_to_destroy_remaining() if base_attack_ref != null else int(ceil(float(m.enemy_base_hp) / float(shot_dmg)))
-	var charge_pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0)) if base_attack_ref != null else 0
-	if _current_layout_mode == "portrait":
-		enemy_base_label.text = "Base: %d/%d HP | Chg %d%% | $%d | %d shots" % [
-			m.enemy_base_hp,
-			Balance.ENEMY_BASE_MAX_HP,
-			charge_pct,
-			Balance.BASE_ATTACK_COST,
-			shots_left,
-		]
-	else:
-		enemy_base_label.text = "Enemy Base: %d / %d HP | Charge: %d%% | Cost: $%d | Dmg: %d/shot | Charges needed: %d" % [
-			m.enemy_base_hp,
-			Balance.ENEMY_BASE_MAX_HP,
-			charge_pct,
-			Balance.BASE_ATTACK_COST,
-			shot_dmg,
-			shots_left,
-		]
-
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
+	var best_w: int = maxi(GameState.get_level_best_wave(GameState.selected_map_level), int(m.stats.get("waves_completed", 0)))
+	enemy_base_bar.max_value = float(max_w)
+	enemy_base_bar.value = float(mini(m.wave_number, max_w))
+	var c_stage: int = m.citadel_stage
+	var c_tag: String = "★TIME GOD" if c_stage >= 3 else ("Stage %d" % c_stage if c_stage >= 1 else "Base")
+	if _current_layout_mode == "portrait":
+		enemy_base_label.text = ("ENDLESS W%d | Best W%d | Cit:%s" % [m.wave_number, best_w, c_tag]) if GameState.is_endless_mode else ("Goal W%d/%d | Best W%d | Cit:%s" % [m.wave_number, max_w, best_w, c_tag])
+	else:
+		enemy_base_label.text = ("★ ENDLESS FREEPLAY: Wave %d  |  Best: W%d  |  Chrono-Citadel: %s" % [m.wave_number, best_w, c_tag]) if GameState.is_endless_mode else ("Sector Milestone: Wave %d / %d  |  Best: W%d  |  Chrono-Citadel: %s" % [m.wave_number, max_w, best_w, c_tag])
+
 	var mode_tag: String = " [SANDBOX]" if GameState.is_sandbox_mode else (" [ENDLESS]" if GameState.is_endless_mode else "")
 	_refresh_zoom_controls()
-	wave_label.text = "Wave %d / %d (Lv %d)%s" % [m.wave_number, max_w, GameState.selected_mission_level, mode_tag]
+	wave_label.text = "Wave %d / %d (Sector %d)%s" % [m.wave_number, max_w, GameState.selected_map_level, mode_tag]
 	money_label.text = "Money: $INF (SANDBOX)" if GameState.is_sandbox_mode else ("Money: $%d" % m.economy["money"])
 	research_label.text = "Research: %d R (%d/%d)" % [
 		GameState.meta_research,
@@ -2739,41 +3074,46 @@ func _refresh_power_buttons() -> void:
 	_style_power_button(haste_button, "haste", offline, offline_str, hive_charging)
 
 
-func _style_power_button(btn: Button, power_name: String, offline: bool, offline_str: String, hive_charging: bool) -> void:
-	var cfg: Dictionary = Balance.TIME_POWERS[power_name]
-	var title: String = cfg["name"].to_upper()
-	var effect: String = cfg["short_effect"]
-	var cost: String = cfg["cost_label"]
-	var status_line: String = "READY"
+func _style_power_button(btn: Button, power_name: String, _offline: bool, _offline_str: String, _hive_charging: bool) -> void:
+	var ab: Dictionary = Balance.TIME_ABILITIES[power_name]
+	var tier: int = GameState.get_ability_level(power_name)
+	var tcfg: Dictionary = GameState.get_ability_tier_cfg(power_name)
+	var cast_cost: int = int(ab["cast_cost"])
+	var title: String = "%s T%d" % [str(ab["name"]).to_upper(), tier]
+	var effect: String = ""
+	if power_name == "pause":
+		effect = "Freeze %.0fs%s" % [float(tcfg.get("duration", 6.0)), " +%d%% dmg" % int(round(float(tcfg.get("brittle_pct", 0.0)) * 100.0)) if float(tcfg.get("brittle_pct", 0.0)) > 0.0 else ""]
+	elif power_name == "haste":
+		effect = "+%d%% spd %.0fs" % [int(round(float(tcfg.get("speed_bonus", 0.50)) * 100.0)), float(tcfg.get("duration", 16.0))]
+	else:
+		effect = "Pull -%d%% back!" % int(round(float(tcfg.get("pushback_pct", 0.18)) * 100.0))
 
-	if offline:
-		status_line = "OFFLINE %s" % offline_str
-	elif hive_charging:
-		status_line = "PAUSED (HIVE)"
-	elif power_name == "pause" and time_powers_ref.pause_remaining > 0.0:
+	var money: int = GameState.mission.economy["money"]
+	var status_line: String = "$%d READY" % cast_cost
+	if power_name == "pause" and time_powers_ref.pause_remaining > 0.0:
 		status_line = "ACTIVE %.1fs" % time_powers_ref.pause_remaining
 	elif power_name == "haste" and time_powers_ref.haste_remaining > 0.0:
 		status_line = "ACTIVE %.1fs" % time_powers_ref.haste_remaining
-	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.is_replaying_wave():
-		status_line = "REPLAYING"
-	elif power_name == "rewind" and wave_manager_ref != null and wave_manager_ref.state == WaveManager.State.BUILD and GameState.mission.rewound_in_current_build_phase:
-		status_line = "USED THIS BUILD"
 	elif time_powers_ref.cooldowns.get(power_name, 0.0) > 0.0:
 		status_line = "CD %.0fs" % ceilf(time_powers_ref.cooldowns[power_name])
-	elif not time_powers_ref.can_use_power(power_name):
-		status_line = "WAIT FOR WAVE"
+	elif not GameState.is_wave_active:
+		status_line = "$%d (IN WAVE)" % cast_cost
+	elif not GameState.is_sandbox_mode and money < cast_cost:
+		status_line = "NEED $%d" % cast_cost
+	elif power_name == "rewind" and not time_powers_ref.can_use_power("rewind"):
+		status_line = "NO TARGETS"
 
-	btn.text = "%s [%s]\n%s\n%s" % [title, status_line, effect, cost]
+	btn.text = "%s\n[%s]\n%s" % [title, status_line, effect]
 	var usable: bool = time_powers_ref.can_use_power(power_name)
 	btn.disabled = not usable
-	if offline or hive_charging:
-		btn.modulate = Color(0.55, 0.55, 0.6)
-	elif (power_name == "pause" and time_powers_ref.pause_remaining > 0.0) or (power_name == "haste" and time_powers_ref.haste_remaining > 0.0):
+	if (power_name == "pause" and time_powers_ref.pause_remaining > 0.0) or (power_name == "haste" and time_powers_ref.haste_remaining > 0.0):
 		btn.modulate = Color(0.45, 0.95, 1.0)
 	elif usable:
 		btn.modulate = Color.WHITE
+	elif not GameState.is_sandbox_mode and GameState.is_wave_active and money < cast_cost:
+		btn.modulate = Color(1.0, 0.58, 0.58)
 	else:
-		btn.modulate = Color(0.72, 0.72, 0.75)
+		btn.modulate = Color(0.72, 0.76, 0.82)
 
 
 func _format_mmss(seconds: float) -> String:
@@ -2783,53 +3123,24 @@ func _format_mmss(seconds: float) -> String:
 
 func _refresh_manipulator_panel() -> void:
 	var m := GameState.mission
-	if m.manipulator_upgrading_remaining > 0.0:
-		var phase_note: String = "OFFLINE %.1fs (Surge paused, Base locked)" % m.manipulator_upgrading_remaining
-		if not GameState.is_wave_active:
-			phase_note = "QUEUED %.1fs (builds in wave; powers OFFLINE)" % m.manipulator_upgrading_remaining
-		manip_status_label.text = "Manipulator Lv %d -> %d | %s" % [
-			m.manipulator_level,
-			m.manipulator_level + 1,
-			phase_note,
-		]
-		manip_status_label.modulate = Color(1.0, 0.78, 0.35)
-		manip_upgrade_button.text = "Manipulator (%s)" % _format_mmss(m.manipulator_upgrading_remaining)
-		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.85, 0.85, 0.88)
-		_set_button_description(manip_upgrade_button, "Upgrading Manipulator: all time powers OFFLINE, Base locked, Surge paused.")
-		return
-
-	if m.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
-		manip_status_label.text = "Manipulator Lv %d / %d" % [m.manipulator_level, Balance.MANIPULATOR_MAX_LEVEL]
-		manip_status_label.modulate = Color(0.55, 0.95, 0.65)
-		manip_upgrade_button.text = "Manipulator MAX"
-		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.75, 0.95, 0.78)
-		_set_button_description(manip_upgrade_button, "Manipulator is at maximum prototype level (Lv 5).")
-		return
-
-	var next_lvl: int = m.manipulator_level + 1
-	var cfg: Dictionary = Balance.MANIPULATOR_UPGRADES[next_lvl]
-	var cost: int = int(cfg["cost"])
-	var btime: int = int(cfg["build_time"])
-	manip_status_label.text = "Manipulator Lv %d" % m.manipulator_level
-	manip_status_label.modulate = Color(0.85, 0.9, 1.0)
-	_set_button_description(manip_upgrade_button, "Lv%d ($%d, %ds): %s. Powers OFFLINE & Surge paused." % [
-		next_lvl,
-		cost,
-		btime,
-		cfg["benefit_text"],
-	])
-	if GameState.is_base_charging():
-		manip_upgrade_button.text = "Manipulator Lv%d ($%d) [BUSY]" % [next_lvl, cost]
-		manip_upgrade_button.disabled = true
-		manip_upgrade_button.modulate = Color(0.78, 0.78, 0.82)
-		return
-
-	var can_buy: bool = time_powers_ref != null and time_powers_ref.can_upgrade_manipulator()
-	manip_upgrade_button.text = "Manipulator Lv%d ($%d)" % [next_lvl, cost]
-	manip_upgrade_button.disabled = not can_buy
-	manip_upgrade_button.modulate = Color.WHITE if can_buy else Color(1.0, 0.65, 0.65)
+	var st: int = m.citadel_stage
+	var st_lbl: String = "★TIME GOD" if st >= 3 else ("Stage %d/3" % st)
+	manip_status_label.text = "Citadel %s | Frz T%d • Ovr T%d • Rew T%d" % [
+		st_lbl,
+		GameState.get_ability_level("pause"),
+		GameState.get_ability_level("haste"),
+		GameState.get_ability_level("rewind"),
+	]
+	manip_status_label.modulate = Color(1.0, 0.90, 0.42) if st >= 2 else Color(0.78, 0.92, 1.0)
+	var nxt_c: int = base_attack_ref.get_next_citadel_cost() if base_attack_ref != null else -1
+	var can_asc: bool = base_attack_ref != null and base_attack_ref.can_ascend_citadel()
+	if nxt_c > 0:
+		manip_upgrade_button.text = "Citadel S%d ($%d) & Abilities..." % [st + 1, nxt_c]
+	else:
+		manip_upgrade_button.text = "★ Citadel MAX & Abilities..."
+	manip_upgrade_button.disabled = GameState.mission.is_over
+	manip_upgrade_button.modulate = Color(1.0, 0.94, 0.48) if can_asc else Color.WHITE
+	_set_button_description(manip_upgrade_button, "Upgrade Time Abilities (T1-T5) or Ascend Chrono-Citadel into a Super-Weapon!")
 
 
 func _refresh_refinery_tech_button() -> void:
@@ -3111,12 +3422,11 @@ func _refresh_research_panel() -> void:
 	var sel_lvl: int = GameState.selected_mission_level
 	var sel_map: int = GameState.selected_map_level
 	var map_cfg: Dictionary = Balance.LEVELS.get(sel_map, Balance.LEVELS[1])
-	meta_research_status_label.text = "Persistent Meta-Research: %d R | Selected: %s (%s | %d shot%s to destroy Hive)" % [
+	meta_research_status_label.text = "Persistent Meta-Research: %d R | Selected: %s (%s | Goal: Wave %d -> Endless)" % [
 		res,
 		map_cfg["name"],
 		map_cfg["zone_type"],
-		sel_lvl,
-		"s" if sel_lvl > 1 else "",
+		WavesData.MISSION_TARGET_WAVE,
 	]
 	var lvl_btns: Array[Button] = [level_1_button, level_2_button, level_3_button, level_4_button, level_5_button]
 	for idx in range(lvl_btns.size()):
@@ -3125,11 +3435,11 @@ func _refresh_research_panel() -> void:
 
 	if start_menu_overlay != null:
 		var short_zone_tags: Dictionary = {
-			1: "4 Rows | 3 Blasts",
-			2: "3 Columns | 3 Blasts",
-			3: "4 Islands | 4 Blasts",
-			4: "4 Bastions | 4 Blasts",
-			5: "5 Pillboxes | 5 Blasts",
+			1: "4 Rows",
+			2: "3 Columns",
+			3: "4 Islands",
+			4: "4 Bastions",
+			5: "5 Pillboxes",
 		}
 		for idx in range(start_level_buttons.size()):
 			var sbtn: Button = start_level_buttons[idx]
@@ -3137,17 +3447,21 @@ func _refresh_research_panel() -> void:
 			var lcfg: Dictionary = Balance.LEVELS[lid]
 			var is_active: bool = (sel_map == lid)
 			var cleared_tag: String = " [★]" if bool(GameState.level_medals.get(lid, {}).get("cleared", false)) else ""
-			sbtn.text = "%s%s\n(%s)" % [lcfg["short_name"], cleared_tag, str(short_zone_tags.get(lid, lcfg["zone_type"]))]
+			var bw: int = GameState.get_level_best_wave(lid)
+			var best_tag: String = (" | Best W%d" % bw) if bw > 0 else " | Goal W40"
+			sbtn.text = "%s%s\n(%s%s)" % [lcfg["short_name"], cleared_tag, str(short_zone_tags.get(lid, lcfg["zone_type"])), best_tag]
 			sbtn.modulate = Color(0.45, 0.98, 1.0) if is_active else Color.WHITE
 		for dk in start_diff_buttons.keys():
 			var dbtn: Button = start_diff_buttons[dk]
 			dbtn.modulate = Color(0.45, 0.98, 1.0) if GameState.difficulty_key == dk else Color(0.76, 0.80, 0.86)
 		if start_level_title_label != null:
-			start_level_title_label.text = "%s  —  %s (%d Hive Destroyer Shot%s)" % [
+			start_level_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var sel_bw: int = GameState.get_level_best_wave(sel_map)
+			var bw_str: String = (" | Best W%d" % sel_bw) if sel_bw > 0 else ""
+			start_level_title_label.text = "%s — Goal: W%d -> Endless%s" % [
 				str(map_cfg["name"]).to_upper(),
-				str(map_cfg["zone_type"]),
-				int(map_cfg["shots_required"]),
-				"s" if int(map_cfg["shots_required"]) > 1 else "",
+				WavesData.MISSION_TARGET_WAVE,
+				bw_str,
 			]
 		if start_level_desc_label != null:
 			var mod_txt: String = str(map_cfg.get("modifier_label", ""))
@@ -3193,38 +3507,31 @@ func _refresh_charge_button() -> void:
 	if base_attack_ref == null:
 		charge_button.disabled = true
 		return
-	if base_attack_ref.is_charging:
-		var pct: int = int(round(base_attack_ref.get_charge_progress() * 100.0))
-		if not GameState.is_wave_active:
-			charge_button.text = "HIVE DESTROYER\nARMED (%.1fs in wave)" % base_attack_ref.charge_remaining
-			charge_button.modulate = Color(0.7, 0.9, 1.0)
-		elif base_attack_ref.is_in_firing_warning():
-			var flash: float = 0.65 + 0.35 * sin(_pulse_accum * 16.0)
-			charge_button.text = "HIVE DESTROYER\nREADY - firing (%.1fs)" % base_attack_ref.charge_remaining
-			charge_button.modulate = Color(1.0, 0.85, 0.25, flash)
-		else:
-			charge_button.text = "HIVE DESTROYER\nCHARGING %d%% (%.1fs)" % [pct, base_attack_ref.charge_remaining]
-			charge_button.modulate = Color(0.45, 0.9, 1.0)
-		charge_button.disabled = true
-		return
-
-	var cost: int = Balance.BASE_ATTACK_COST
-	var dur: int = int(round(base_attack_ref.get_charge_duration()))
-	if GameState.is_base_locked():
-		charge_button.text = "Hive Destroyer ($%d, %ds)\n[BASE LOCKED]" % [cost, dur]
-		charge_button.disabled = true
-		charge_button.modulate = Color(0.7, 0.7, 0.7)
-		return
-	var affordable: bool = base_attack_ref.can_start_charge()
-	charge_button.text = "Hive Destroyer ($%d, %ds)\nDeals %d dmg (no Haste)" % [cost, dur, base_attack_ref.get_shot_damage()]
-	charge_button.disabled = not affordable
-	charge_button.modulate = Color.WHITE if affordable else Color(1.0, 0.45, 0.45)
+	var st: int = GameState.mission.citadel_stage
+	var nxt_s: int = base_attack_ref.get_next_citadel_stage()
+	var can_asc: bool = base_attack_ref.can_ascend_citadel()
+	var can_ab_u: bool = time_powers_ref != null and (
+		time_powers_ref.can_upgrade_ability("pause") or
+		time_powers_ref.can_upgrade_ability("haste") or
+		time_powers_ref.can_upgrade_ability("rewind")
+	)
+	if nxt_s > 0:
+		var ncost: int = int(Balance.CITADEL_STAGES[nxt_s]["cost"])
+		var nname: String = "TIME GOD S3" if nxt_s >= 3 else ("CITADEL S%d" % nxt_s)
+		charge_button.text = "★ %s ($%d)\nAbilities & Sacrifices" % [nname, ncost]
+	else:
+		charge_button.text = "★ TIME GOD MAX\nUpgrade Abilities"
+	charge_button.disabled = GameState.mission.is_over
+	if can_asc:
+		charge_button.modulate = Color(1.0, 0.94, 0.44)
+	elif can_ab_u:
+		charge_button.modulate = Color(0.55, 0.96, 1.0)
+	else:
+		charge_button.modulate = Color(0.86, 0.90, 0.96)
 
 
 func _on_charge_button_pressed() -> void:
-	if base_attack_ref != null:
-		base_attack_ref.start_charge()
-		_refresh_all()
+	open_citadel_overlay()
 
 
 func _refresh_refinery_button() -> void:
@@ -3415,9 +3722,7 @@ func _activate_power(power_name: String) -> void:
 
 
 func _on_manip_upgrade_pressed() -> void:
-	if time_powers_ref != null:
-		time_powers_ref.start_manipulator_upgrade()
-		_refresh_all()
+	open_citadel_overlay()
 
 
 func _on_surge_banner_triggered(banner_text: String) -> void:
@@ -4163,6 +4468,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 22.0), Vector2(920.0, 548.0))
 		_place_overlay_exact(recipes_overlay, Vector2(150.0, 74.0), Vector2(980.0, 560.0))
 		_place_overlay_exact(analytics_overlay, Vector2(140.0, 68.0), Vector2(1000.0, 570.0))
+		_place_overlay_exact(citadel_overlay, Vector2(140.0, 68.0), Vector2(1000.0, 560.0))
 		_position_guide_panel(vp_size)
 		debug_panel.position = Vector2(16.0, 74.0)
 		if sandbox_panel != null:
@@ -4178,7 +4484,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	if vp_size.x >= vp_size.y:
 		_apply_responsive_ergonomics("landscape_wide")
 		var top_h: float = 74.0
-		var bot_h: float = 132.0
+		var bot_h: float = 108.0
 		var rp_w: float = 460.0 if vp_size.x >= 1460.0 else (420.0 if vp_size.x >= 1360.0 else 368.0)
 		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.06, 0.0, 24.0)
 		_apply_bar_safe_margins(top_bar, safe_x)
@@ -4235,6 +4541,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		_place_overlay_exact(start_menu_overlay, Vector2(floorf((vp_size.x - sm_w) * 0.5), 22.0), Vector2(sm_w, 546.0))
 		_center_overlay(recipes_overlay, vp_size, Vector2(1040.0, 560.0))
 		_center_overlay(analytics_overlay, vp_size, Vector2(1060.0, 570.0))
+		_center_overlay(citadel_overlay, vp_size, Vector2(1060.0, 570.0))
 		_position_guide_panel(vp_size)
 		debug_panel.position = Vector2(safe_x + 16.0, top_h + 10.0)
 		if sandbox_panel != null:
@@ -4301,6 +4608,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	_place_overlay_exact(start_menu_overlay, Vector2(40.0, 280.0), Vector2(vp_size.x - 80.0, 1480.0))
 	_center_overlay(recipes_overlay, vp_size, Vector2(1180.0, 1460.0))
 	_center_overlay(analytics_overlay, vp_size, Vector2(1180.0, 1520.0))
+	_center_overlay(citadel_overlay, vp_size, Vector2(1180.0, 1520.0))
 	_position_guide_panel(vp_size)
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 	if sandbox_panel != null:
@@ -4349,13 +4657,13 @@ func _on_wave_state_changed(new_state: int) -> void:
 
 func _populate_how_time_works() -> void:
 	how_time_works_label.text = "\n".join([
-		"HOW TIME WORKS:",
-		"1. REWIND (BUILD phase): Replay previous wave once (no new mut); next NEW wave gets Armoured (+5% alien HP).",
-		"2. PAUSE: Freeze aliens 8s while towers keep firing. Cost: Thaw-hardened (+5% HP next wave, -10% frozen dmg).",
-		"3. HASTE: Towers +50% attack speed & +50% build speed for 30s. Cost: Swift (+5% alien speed).",
-		"4. SURGE: Miss the 5-wave deadline (Wave 6 start) and all towers lose 5% attack speed for the rest of this mission.",
-		"5. MANIPULATOR: Upgrading pauses Surge & locks powers/Base while building.",
-		"6. WIN: Charge the Hive Destroyer ($450, 30s; Haste cannot speed it up) to destroy the Enemy Base.",
+		"HOW TIME DEFENSE WORKS (v3.0):",
+		"1. TIME FREEZE ($75): Freeze all aliens while towers keep firing! Upgrade T1-T5 for Cloaked reveal, +40% brittle dmg & shatter.",
+		"2. OVERCLOCK ($60): Supercharge tower fire & build speed! Upgrade T1-T5 for +125% speed, +30% bonus dmg & instant builds.",
+		"3. TEMPORAL REWIND ($100): Yank ALL active aliens 18%-48% BACKWARD along the path! Upgrades strip shields/regen, deal Paradox dmg & stun.",
+		"4. ZERO SURGE & ZERO MUTATIONS: Time Abilities are purely tactical — no reactor penalties or permanent alien buffs!",
+		"5. CHRONO-CITADEL ASCENSION: Tap your Base or the Citadel button to awaken Stage 1-3 Super-Weapons (with optional Sun-God Tower Sacrifices!).",
+		"6. MILESTONE & ENDLESS: Clear Wave 40 to earn your Sector Medal, then push Endless Freeplay for your Best Wave record!",
 	])
 
 
@@ -4466,13 +4774,14 @@ func _check_teaching_prompt() -> void:
 		mood = "excited"
 	elif w == 2 and st == WaveManager.State.SPAWNING:
 		beat_id = "w2_combat"
-		title_txt = "VEX (4/8)  —  BENDING TIME"
-		body_txt = "Meet your Time Powers below: PAUSE freezes aliens cold while towers keep firing, HASTE supercharges fire & build speed, and REWIND replays a wave. Fair warning: aliens mutate slightly whenever you mess with time!"
+		title_txt = "VEX (4/8)  —  PAID TIME ABILITIES"
+		body_txt = "Meet your Time Abilities below: TIME FREEZE ($75) locks aliens solid, OVERCLOCK ($60) supercharges fire & build speed, and TEMPORAL REWIND ($100) yanks aliens backward down the track! Zero Surges, zero permanent mutations!"
 		mood = "smirk"
 	elif w == 3 and st == WaveManager.State.BUILD:
 		beat_id = "w3_build"
-		title_txt = "VEX (5/8)  —  DON'T LET IT SURGE!"
-		body_txt = "See that glowing SURGE countdown bar? Ignore your Time Powers for 5 straight waves and our reactor snaps — docking -5% tower speed permanently per Surge. Pop ANY power every 5 waves to discharge it safely!"
+		title_txt = "VEX (5/8)  —  UPGRADE YOUR ABILITIES!"
+		body_txt = "Tap your Citadel Base (or the Citadel button below) anytime to upgrade Time Freeze, Overclock & Temporal Rewind from Tier 1 all the way to Tier 5 — adding Brittle Freeze damage, Cloak reveal, and massive Path-Pushback!"
+		mood = "excited"
 		mood = "alert"
 	elif w == 4 and st == WaveManager.State.BUILD:
 		beat_id = "w4_build"
@@ -4486,8 +4795,8 @@ func _check_teaching_prompt() -> void:
 		mood = "proud"
 	elif w == 6 and st == WaveManager.State.BUILD:
 		beat_id = "w6_build"
-		title_txt = "VEX (8/8)  —  BLOW UP THE HIVE!"
-		body_txt = "Final lesson before I graduate you: surviving waves alone won't win! Charge the Hive Destroyer ($450, 30s — Haste can't rush it) 3 times to vaporize the Alien Hive before Wave 10's boss shows up. You've got this, Commander!"
+		title_txt = "VEX (8/8)  —  AWAKEN THE CHRONO-CITADEL!"
+		body_txt = "Final lesson: Clear Wave 40 for your Sector Medal, then keep pushing Endless Freeplay! Save up with Temporal Banks to awaken your Base itself through Stages 1-3 — even sacrificing towers to forge the ★ TRUE CHRONO-SINGULARITY!"
 		mood = "proud"
 	elif w == 10 and st == WaveManager.State.BUILD:
 		trigger_guide_beat("first_boss")
@@ -4578,41 +4887,36 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 	_reapply_overlay_bounds()
 	call_deferred("_reapply_overlay_bounds")
 	if outcome == "won":
-		end_title_label.text = "VICTORY - ENEMY BASE DESTROYED"
-	elif outcome == "stalled":
-		end_title_label.text = "MISSION STALLED - FINAL WAVE ENDED"
+		end_title_label.text = "★ SECTOR MILESTONE CLEARED (WAVE 40)!"
 	else:
-		end_title_label.text = "DEFEAT - BASE LOST"
+		end_title_label.text = "DEFEAT - CITADEL LOST (WAVE %d)" % GameState.mission.wave_number
 
 	var m := GameState.mission
-	var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
+	var best_w: int = GameState.get_level_best_wave(GameState.selected_map_level)
 	var review: Dictionary = ComedyLines.get_end_of_run_review(outcome, m)
 	end_stats_label.text = "\n".join([
 		"★ PERFORMANCE REVIEW: %s" % str(review.get("badge", "")),
 		str(review.get("note", "")),
 		"",
 		reason,
-		"Mission Time: %.1f s | Wave: %d | Waves Cleared: %d" % [
+		"Mission Time: %.1f s | Wave: %d | Waves Cleared: %d | Sector Best: Wave %d" % [
 			GameState.mission_elapsed_seconds,
 			m.wave_number,
 			m.stats["waves_completed"],
+			best_w,
 		],
-		"Powers Used -> Rewind: %d | Pause: %d | Haste: %d" % [
-			m.stats["powers_used"]["rewind"],
-			m.stats["powers_used"]["pause"],
-			m.stats["powers_used"]["haste"],
+		"Time Abilities -> Freeze: %d (T%d) | Overclock: %d (T%d) | Rewind: %d (T%d)" % [
+			m.stats["powers_used"]["pause"], GameState.get_ability_level("pause"),
+			m.stats["powers_used"]["haste"], GameState.get_ability_level("haste"),
+			m.stats["powers_used"]["rewind"], GameState.get_ability_level("rewind"),
 		],
-		"Mutations -> Armoured x%d | Thaw-hardened x%d | Swift x%d" % [
-			m.mutations["armoured_stacks"],
-			m.mutations["thaw_stacks"],
-			m.mutations["swift_stacks"],
+		"Chrono-Citadel -> Stage %d / 3 | Citadel Dmg: %d | Kills: %d" % [
+			m.citadel_stage, int(round(m.citadel_total_damage)), m.citadel_total_kills
 		],
-		"Surges Suffered: %d (Towers at %d%% speed)" % [m.surge_count, pct],
-		"Money Earned: $%d | Research Earned: %d R (Persistent Total: %d R) | Charges Fired: %d" % [
+		"Money Earned: $%d | Research Earned: %d R (Persistent Total: %d R)" % [
 			m.stats["money_earned"],
 			m.stats["research_earned"],
 			GameState.meta_research,
-			m.stats["charges_fired"],
 		],
 	])
 
@@ -4631,6 +4935,10 @@ func _on_mission_reset() -> void:
 		recipes_overlay.visible = false
 	if analytics_overlay != null:
 		analytics_overlay.visible = false
+	if citadel_overlay != null:
+		citadel_overlay.visible = false
+	_selected_sacrifice_ids.clear()
+	_sacrifice_refinery_checked = false
 	if enemy_inspector_panel != null:
 		enemy_inspector_panel.visible = false
 	_guide_paused_game = false

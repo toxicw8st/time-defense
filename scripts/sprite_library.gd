@@ -80,11 +80,12 @@ static func draw_sprite_oriented(
 	draw_size: Vector2,
 	pivot_norm: Vector2 = Vector2(0.5, 0.5),
 	modulate: Color = Color.WHITE,
-	restore_offset: Vector2 = Vector2.ZERO
+	restore_offset: Vector2 = Vector2.ZERO,
+	scale_mult: Vector2 = Vector2.ONE
 ) -> void:
 	if tex == null or draw_size.x <= 0.0 or draw_size.y <= 0.0:
 		return
-	canvas.draw_set_transform(center + restore_offset, angle, Vector2.ONE)
+	canvas.draw_set_transform(center + restore_offset, angle, scale_mult)
 	var rect := Rect2(-draw_size * pivot_norm, draw_size)
 	canvas.draw_texture_rect(tex, rect, false, modulate)
 	canvas.draw_set_transform(restore_offset, 0.0, Vector2.ONE)

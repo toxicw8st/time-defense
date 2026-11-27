@@ -19,6 +19,8 @@ signal time_power_used(power_name: String)
 signal surge_triggered(surge_count: int)
 signal speed_changed(new_speed: float, is_paused: bool)
 signal event_logged(message: String)
+signal citadel_upgraded(new_stage: int)
+signal ability_upgraded(ability_key: String, new_tier: int)
 
 class MissionState:
 	var wave_number: int = 1
@@ -45,6 +47,11 @@ class MissionState:
 		"refineries_owned": Balance.STARTING_REFINERIES,
 		"refinery_tier": 1,
 	}
+	var ability_levels: Dictionary = {"pause": 1, "haste": 1, "rewind": 1}
+	var citadel_stage: int = 0 # 0=Base, 1=Fortified, 2=Chrono-Dreadnought, 3=True Chrono-Singularity
+	var citadel_sacrifices: Dictionary = {"kinetic": 0, "explosive": 0, "energy": 0, "chrono": 0, "economy": 0}
+	var citadel_total_damage: float = 0.0
+	var citadel_total_kills: int = 0
 	var owned_research: Dictionary = {}
 	var cleared_waves: Dictionary = {}
 	var shown_prompts: Dictionary = {}
@@ -167,6 +174,71 @@ func get_difficulty_cfg() -> Dictionary:
 
 func get_level_cfg() -> Dictionary:
 	return Balance.LEVELS.get(selected_map_level, Balance.LEVELS[1])
+
+
+func record_best_wave(lvl_id: int, wave_reached: int) -> void:
+	if is_sandbox_mode or wave_reached <= 0:
+		return
+	var prev: Dictionary = level_medals.get(lvl_id, {"cleared": false, "best_difficulty": difficulty_key, "best_wave": 0})
+	if wave_reached > int(prev.get("best_wave", 0)):
+		level_medals[lvl_id] = {
+			"cleared": bool(prev.get("cleared", false)),
+			"best_difficulty": str(prev.get("best_difficulty", difficulty_key)),
+			"best_wave": wave_reached,
+		}
+		save_meta_progress()
+
+
+func get_level_best_wave(lvl_id: int) -> int:
+	return int(level_medals.get(lvl_id, {}).get("best_wave", 0))
+
+
+func restore_lives(amount: int) -> void:
+	if amount <= 0 or mission == null:
+		return
+	mission.lives = mini(Balance.PLAYER_STARTING_LIVES, mission.lives + amount)
+	lives_changed.emit(mission.lives)
+
+
+func get_ability_level(ability_key: String) -> int:
+	if mission == null:
+		return 1
+	return clampi(int(mission.ability_levels.get(ability_key, 1)), 1, Balance.TIME_ABILITY_MAX_TIER)
+
+
+func get_ability_tier_cfg(ability_key: String) -> Dictionary:
+	return Balance.get_time_ability_tier_cfg(ability_key, get_ability_level(ability_key))
+
+
+func get_citadel_damage_multiplier() -> float:
+	var ranks: int = get_research_rank("hive_breaker")
+	if ranks <= 0 and mission != null and mission.owned_research.get("hive_breaker", false):
+		ranks = 1
+	return 1.0 + float(ranks) * float(Balance.RESEARCH_NODES["hive_breaker"]["base_attack_bonus"])
+
+
+func get_citadel_global_speed_bonus() -> float:
+	if mission == null or mission.citadel_stage <= 0:
+		return 0.0
+	return float(Balance.CITADEL_STAGES.get(mission.citadel_stage, {}).get("global_speed_bonus", 0.0))
+
+
+func get_overclock_crit_bonus() -> float:
+	if not is_haste_active:
+		return 0.0
+	return float(get_ability_tier_cfg("haste").get("crit_bonus", 0.0))
+
+
+func get_freeze_brittle_bonus() -> float:
+	if not is_enemies_frozen:
+		return 0.0
+	return float(get_ability_tier_cfg("pause").get("brittle_pct", 0.0))
+
+
+func has_global_camo_reveal() -> bool:
+	if mission == null:
+		return false
+	return int(mission.citadel_sacrifices.get("energy", 0)) > 0
 
 
 func record_level_clear(lvl_id: int, diff_key: String, wave_reached: int) -> void:
@@ -401,7 +473,9 @@ func end_mission(outcome: String, reason: String) -> void:
 	mission.end_reason = reason
 	is_clock_paused = true
 	if outcome == "won":
-		record_level_clear(selected_map_level, difficulty_key, mission.wave_number)
+		record_level_clear(selected_map_level, difficulty_key, maxi(1, mission.wave_number - 1))
+	else:
+		record_best_wave(selected_map_level, maxi(1, int(mission.stats.get("waves_completed", 0))))
 	mission_ended.emit(outcome, reason)
 
 
@@ -413,23 +487,17 @@ func normalize_enemy_type(enemy_type: String) -> String:
 	return enemy_type
 
 
-## Stacked HP multiplier from Rewind (+5%), Pause (+5%), Difficulty preset, and Sector modifier.
+## Stacked HP multiplier from Difficulty preset and Sector modifier (v3.0: zero permanent Time Power mutations!).
 func get_enemy_hp_multiplier() -> float:
-	var arm_stacks: int = mission.mutations.get("armoured_active_stacks", 0)
-	var thaw_hp_stacks: int = mission.mutations.get("thaw_hp_stacks", 0)
-	var arm_mult: float = pow(1.0 + Balance.TIME_POWERS["rewind"]["hp_bonus_per_stack"], arm_stacks)
-	var thaw_mult: float = pow(1.0 + Balance.TIME_POWERS["pause"]["eff_hp_bonus_per_stack"], thaw_hp_stacks)
 	var diff_mult: float = float(get_difficulty_cfg().get("hp_mult", 1.0))
 	var lvl_mult: float = 1.0 + float(get_level_cfg().get("enemy_hp_bonus", 0.0))
-	return arm_mult * thaw_mult * diff_mult * lvl_mult
+	return diff_mult * lvl_mult
 
 
 func get_enemy_speed_multiplier() -> float:
 	if is_enemies_frozen:
 		return 0.0
-	var stacks: int = mission.mutations.get("swift_stacks", 0)
-	var diff_mult: float = float(get_difficulty_cfg().get("speed_mult", 1.0))
-	return pow(1.0 + Balance.TIME_POWERS["haste"]["speed_bonus_per_stack"], stacks) * diff_mult
+	return float(get_difficulty_cfg().get("speed_mult", 1.0))
 
 
 func get_enemy_bounty_multiplier() -> float:
@@ -501,20 +569,21 @@ func get_tower_attack_speed_multiplier() -> float:
 	if ranks <= 0 and mission.owned_research.get("rapid_cycling", false):
 		ranks = 1
 	var research_bonus: float = 1.0 + float(ranks) * float(Balance.RESEARCH_NODES["rapid_cycling"]["fire_rate_bonus"])
-	var surge_penalty: float = pow(Balance.SURGE_ATTACK_SPEED_FACTOR, mission.surge_count)
-	var haste_mult: float = (1.0 + float(Balance.TIME_POWERS["haste"]["tower_attack_speed_bonus"])) if is_haste_active else 1.0
-	return research_bonus * surge_penalty * haste_mult
+	var citadel_mult: float = 1.0 + get_citadel_global_speed_bonus()
+	var overclock_bonus: float = float(get_ability_tier_cfg("haste").get("speed_bonus", 0.50))
+	var haste_mult: float = (1.0 + overclock_bonus) if is_haste_active else 1.0
+	return research_bonus * citadel_mult * haste_mult
 
 
 func get_construction_speed_multiplier() -> float:
 	if is_haste_active:
-		return float(Balance.TIME_POWERS["haste"]["construction_speed_multiplier"])
+		return float(get_ability_tier_cfg("haste").get("build_mult", 1.50))
 	return 1.0
 
 
 func is_base_locked() -> bool:
-	return mission.manipulator_upgrading_remaining > 0.0
+	return false
 
 
 func is_base_charging() -> bool:
-	return base_attack_charging_active
+	return false

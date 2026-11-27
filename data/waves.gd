@@ -8,7 +8,7 @@ extends RefCounted
 ## $  = player money (starting $, tower $, refinery $, base-attack $)
 ## s$ and b$ are strictly separate numbers.
 
-const MISSION_TARGET_WAVE: int = 45
+const MISSION_TARGET_WAVE: int = 40
 
 ## Exact Locked Compositions for Waves 1-10 from user specification:
 ## 1: 20 Crawlers — s$20, b$80, HP 1,000, DPS needed 27, ratio 1.02

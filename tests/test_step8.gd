@@ -134,14 +134,14 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 		await get_tree().process_frame
 
 	# Verify mobile tap-to-inspect works even on disabled buttons (no hover required)
-	GameState.mission.economy["money"] = 100 # Less than Manipulator Lv2 ($150) so button is disabled
+	GameState.mission.economy["money"] = 100 # Less than Railgun ($375) so button is disabled
 	hud._refresh_all()
-	assert(hud.manip_upgrade_button.disabled)
+	assert(hud.build_railgun_button.disabled)
 	var tap_ev := InputEventScreenTouch.new()
 	tap_ev.pressed = true
-	hud.manip_upgrade_button.gui_input.emit(tap_ev)
+	hud.build_railgun_button.gui_input.emit(tap_ev)
 	await get_tree().process_frame
-	assert(hud.hover_info_label.text.contains("Lv2"), "Tapping disabled button on touch must show its description: %s" % hud.hover_info_label.text)
+	assert(hud.hover_info_label.text.contains("375"), "Tapping disabled button on touch must show its description: %s" % hud.hover_info_label.text)
 	GameState.mission.economy["money"] = Balance.STARTING_MONEY
 	hud._refresh_all()
 
@@ -213,11 +213,11 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	wm.state = WaveManager.State.BUILD
 	GameState.is_wave_active = false
 
-	# Check How Time Works <= 9 lines & names all 3 mutations + Surge
+	# Check How Time Works <= 9 lines & names all 3 v3.0 Paid Time Abilities + Citadel Ascension
 	var htw: String = hud.how_time_works_label.text
 	var lines: PackedStringArray = htw.split("\n", false)
 	assert(lines.size() <= 9)
-	assert(htw.contains("Armoured") and htw.contains("Thaw-hardened") and htw.contains("Swift") and htw.contains("SURGE"))
+	assert(htw.contains("TIME FREEZE") and htw.contains("OVERCLOCK") and htw.contains("TEMPORAL REWIND") and htw.contains("CITADEL"))
 
 	# Verify Wave 1 combat & Wave 2 combat Vex beats interpose and unpause cleanly
 	wm.start_wave()
@@ -263,7 +263,7 @@ func _test_real_ui_clicks_and_hud_requirements() -> bool:
 	# Verify Pixel 11 Pro responsive aspect modes: 20:9 Landscape (1600x720) & 9:20 Portrait Phone (1280x2844)
 	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
 	assert(is_equal_approx(hud.top_bar.size.x, 1600.0) and is_equal_approx(hud.bottom_bar.size.x, 1600.0))
-	assert(is_equal_approx(hud.bottom_bar.size.y, 132.0), "Phone Landscape BottomBar must be compact 132px to zoom battlefield up, got %.1f" % hud.bottom_bar.size.y)
+	assert(is_equal_approx(hud.bottom_bar.size.y, 108.0), "Phone Landscape BottomBar must be sleek 108px (Surge row removed!) to zoom battlefield up, got %.1f" % hud.bottom_bar.size.y)
 	assert(hud.right_panel.position == Vector2(1140.0, 74.0) and hud.right_panel.size.x == 460.0, "Wide phone RightPanel must be spacious 460px, got pos=%s size=%s" % [str(hud.right_panel.position), str(hud.right_panel.size)])
 	assert(hud.build_buttons_grid.columns == 2 and hud.tower_buttons_grid.columns == 2, "Phone Landscape must use 2-col shop & tower grids to eliminate vertical scrolling")
 	assert(hud.build_blaster_button.custom_minimum_size.y >= 48.0, "Phone landscape shop buttons must be bigger (>=48px)")
@@ -517,15 +517,13 @@ func _test_d_enemy_base_hud_and_multi_wave_cost() -> void:
 	hud._refresh_all()
 
 	var txt: String = hud.enemy_base_label.text
-	assert(hud.enemy_base_bar.visible and hud.enemy_base_bar.value == 500.0)
-	assert(txt.contains("500 / 500 HP"), "HUD must show Enemy Base HP numbers: %s" % txt)
-	assert(txt.contains("Charge: 0%"), "HUD must show charge progress %%: %s" % txt)
-	assert(txt.contains("Cost: $450"), "HUD must show cost to fire ($450): %s" % txt)
-	assert(txt.contains("Dmg: 167/shot"), "HUD must show damage per shot: %s" % txt)
-	assert(txt.contains("Charges needed: 3"), "HUD must show charges needed to kill: %s" % txt)
-	assert(Balance.BASE_ATTACK_COST == 450 and not ba.can_start_charge(), "First shot ($450) cannot be fired early with $200 starting money")
+	assert(hud.enemy_base_bar.visible and is_equal_approx(hud.enemy_base_bar.max_value, float(WavesData.MISSION_TARGET_WAVE)))
+	assert(txt.contains("Milestone: Wave 1 / 40"), "HUD must show Wave 40 Milestone progress: %s" % txt)
+	assert(txt.contains("Best: W"), "HUD must show Best Wave record: %s" % txt)
+	assert(txt.contains("Chrono-Citadel:"), "HUD must show Chrono-Citadel status: %s" % txt)
+	assert(not ba.can_ascend_citadel(), "Citadel Stage 1 ($1,500) cannot be bought early with $200 starting money")
 
-	print("CHECK_D_PASS hud_base_text='%s'" % txt)
+	print("CHECK_D_PASS hud_milestone_text='%s'" % txt)
 	remove_child(inst)
 	inst.queue_free()
 
@@ -761,13 +759,11 @@ func _test_slow_railgun_decay_and_wave10_package() -> void:
 	hud_ref.open_start_menu()
 	assert(hud_ref.start_menu_overlay != null and hud_ref.start_menu_overlay.visible, "Start Menu must open")
 	assert(hud_ref.start_level_buttons.size() == 5, "Start Menu must have 5 level buttons")
-	var expected_shots_dmg: Array[int] = [167, 167, 125, 125, 100]
-	var expected_shots_count: Array[int] = [3, 3, 4, 4, 5]
 	for lvl_id in range(1, 6):
 		hud_ref._select_level(lvl_id)
 		map.load_level(lvl_id)
-		assert(GameState.selected_map_level == lvl_id and GameState.selected_mission_level == expected_shots_count[lvl_id - 1])
-		assert(ba_ref.get_shot_damage() == expected_shots_dmg[lvl_id - 1], "Level %d shot dmg expected %d, got %d" % [lvl_id, expected_shots_dmg[lvl_id - 1], ba_ref.get_shot_damage()])
+		assert(GameState.selected_map_level == lvl_id)
+		assert(ba_ref.get_next_citadel_stage() == 1 and ba_ref.get_next_citadel_cost() == 1500)
 		var plen_lvl: float = map.get_path_length()
 		assert(plen_lvl >= 1800.0 and plen_lvl <= 2000.0, "Level %d path length must be ~1900px, got %.1f" % [lvl_id, plen_lvl])
 		assert(map.active_placement_zones.size() >= 3, "Level %d must define placement zones" % lvl_id)
@@ -1317,8 +1313,7 @@ func _test_i_analytics_telemetry_and_ui() -> void:
 	GameState.lose_lives(1, "crawler", Vector2.ZERO)
 	assert(tp.activate_power("pause"))
 	assert(econ.start_build_refinery())
-	assert(ba.start_charge())
-	ba.step_base_attack(ba.get_charge_duration() + 0.5)
+	assert(ba.ascend_citadel())
 	GameState.end_mission("won", "Analytics test victory")
 
 	var summary: Dictionary = AnalyticsManager.compute_aggregate_summary(false)
@@ -1753,10 +1748,28 @@ func _test_j_v2_btd5_evolution() -> void:
 	var rev_w10: Dictionary = ComedyLines.get_end_of_run_review("lost", GameState.mission)
 	assert(str(rev_w10.get("badge", "")) != "" and str(rev_w10.get("note", "")) != "", "End-of-run Temporal Performance Review must return badge & note")
 
+	# 3m) Verify v3.0 Sprite Animations (elastic recoil, shell casings, death burst particles) & CitadelCommandOverlay UI!
+	GameState.mission.economy["money"] = 30000
+	var anim_b: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	anim_b.current_job = null; anim_b.is_built = true
+	var anim_e: EnemyUnit = map.spawn_enemy("crawler", 1)
+	anim_b._fire_at(anim_e)
+	assert(anim_b._recoil_spring > 0.5 and anim_b._shell_casings.size() >= 1, "Shooting must trigger elastic recoil spring & brass shell casings!")
+	var db_pre: int = map.death_bursts.size()
+	anim_e.take_damage(9999.0, "Piercing", anim_b)
+	assert(map.death_bursts.size() > db_pre, "Enemy death must spawn animated death burst shards!")
+	hud.open_citadel_overlay()
+	assert(hud.citadel_overlay != null and hud.citadel_overlay.visible, "CitadelCommandOverlay must open cleanly")
+	hud.citadel_ascend_button.pressed.emit()
+	assert(GameState.mission.citadel_stage == 1, "CitadelAscendButton must ascend Base to Stage 1 Fortified Citadel")
+	hud.citadel_close_button.pressed.emit()
+	assert(not hud.citadel_overlay.visible)
+	map.sell_tower(anim_b)
+
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
 
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok wave_intel_v24=ok comedy_v25=ok" % sprite_count)
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok wave_intel_v24=ok comedy_v25=ok v3_ascension_anim=ok" % sprite_count)

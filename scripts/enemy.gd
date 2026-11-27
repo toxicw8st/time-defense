@@ -55,6 +55,7 @@ var is_split_child: bool = false
 var _slag_nova_dmg: float = 0.0
 var _slag_nova_source_ref: WeakRef = null
 var _shiny_ping_cd: float = 0.0
+var _hit_squish_timer: float = 0.0
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D, p_map: Node = null) -> void:
@@ -340,6 +341,8 @@ func _process(delta: float) -> void:
 		hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
 	if _shiny_ping_cd > 0.0:
 		_shiny_ping_cd = maxf(0.0, _shiny_ping_cd - delta)
+	if _hit_squish_timer > 0.0:
+		_hit_squish_timer = maxf(0.0, _hit_squish_timer - delta)
 	advance_along_path(GameState.get_sim_delta(delta))
 	queue_redraw()
 
@@ -373,12 +376,10 @@ func take_damage(amount: float, damage_type: String = "", source_tower: Node = n
 	if not ignores_aura and is_shielded_by_conduit():
 		dmg *= (1.0 - 0.35)
 	if GameState.is_enemies_frozen:
-		var thaw_stacks: int = GameState.mission.mutations.get("thaw_stacks", 0)
-		var reduction: float = minf(
-			Balance.TIME_POWERS["pause"]["frozen_damage_reduction_cap"],
-			Balance.TIME_POWERS["pause"]["frozen_damage_reduction_per_stack"] * float(thaw_stacks)
-		)
-		dmg *= (1.0 - reduction)
+		var brittle_bonus: float = GameState.get_freeze_brittle_bonus()
+		if brittle_bonus > 0.0:
+			dmg *= (1.0 + brittle_bonus)
+	_hit_squish_timer = 0.12
 	# Time/Laser/Reveal impacts strip Phase Stalker cloak
 	if is_cloaked_type and (damage_type == "Time" or damage_type == "Laser" or (source_tower != null and source_tower.has_method("has_apex_mod") and source_tower.has_apex_mod("reveals_cloaked"))):
 		reveal_cloak(4.0)
@@ -524,9 +525,71 @@ func _draw() -> void:
 		if enemy_type == "stalker" and is_effectively_cloaked():
 			mod_col.a = 0.34 + 0.14 * sin(anim_time * 9.0)
 
-		var wobble_amp: float = 0.0 if (GameState.is_enemies_frozen or stun_remaining > 0.0) else (0.065 if enemy_type in ["crawler", "rusher", "stalker", "mender"] else 0.028)
-		var wobble_ang: float = ang + sin(anim_time * 13.0 + float(enemy_id) * 1.7) * wobble_amp
-		SpriteLibrary.draw_sprite_oriented(self, sprite_tex, Vector2.ZERO, wobble_ang, draw_size, Vector2(0.5, 0.5), mod_col)
+		var is_stopped: bool = GameState.is_enemies_frozen or stun_remaining > 0.0
+		var phase_t: float = anim_time + float(enemy_id) * 1.13
+		var stride_scale := Vector2.ONE
+		var draw_off := Vector2.ZERO
+		var wobble_ang: float = ang
+
+		# Per-species real locomotion animations + articulated limbs / jet exhaust / stomp rings!
+		if not is_stopped:
+			if enemy_type in ["crawler", "brute", "carrier"]:
+				# Insectoid / heavy-legged scuttle: animated chitin legs beneath sprite + stride squash-and-stretch!
+				var leg_spd: float = 16.0 if enemy_type == "crawler" else (10.5 if enemy_type == "brute" else 8.5)
+				var leg_pairs: int = 3 if enemy_type != "brute" else 2
+				var leg_reach: float = target_max * 0.44
+				var leg_col := Color(0.42, 0.14, 0.18, 0.90) if enemy_type == "crawler" else (Color(0.32, 0.18, 0.28, 0.92) if enemy_type == "brute" else Color(0.54, 0.28, 0.12, 0.90))
+				for li in range(leg_pairs):
+					var swing: float = sin(phase_t * leg_spd + float(li) * 2.1) * (4.2 if enemy_type == "crawler" else 5.0)
+					var lx: float = (float(li) - float(leg_pairs - 1) * 0.5) * (target_max * 0.22)
+					draw_line(fwd * lx + side * 4.0, fwd * (lx + swing) + side * leg_reach, leg_col, 2.2 if enemy_type == "crawler" else 3.0)
+					draw_line(fwd * lx - side * 4.0, fwd * (lx - swing) - side * leg_reach, leg_col, 2.2 if enemy_type == "crawler" else 3.0)
+				var st_wave: float = sin(phase_t * leg_spd)
+				stride_scale = Vector2(1.0 + 0.065 * st_wave, 1.0 - 0.055 * st_wave)
+				wobble_ang = ang + cos(phase_t * leg_spd * 0.5) * 0.045
+			elif enemy_type in ["rusher", "blitzer", "conduit"]:
+				# Hover / Jet glide: flickering rear plasma thrusters + smooth hover-bob & bank!
+				var jet_flick: float = 0.7 + 0.3 * sin(phase_t * 28.0)
+				var jet_len: float = (target_max * 0.46) * jet_flick
+				var jet_col := Color(1.0, 0.62, 0.20, 0.85) if enemy_type == "rusher" else Color(0.32, 0.96, 1.0, 0.90)
+				var rear_p: Vector2 = -fwd * (target_max * 0.34)
+				draw_line(rear_p, rear_p - fwd * jet_len, jet_col, 4.5 if enemy_type == "rusher" else 5.5)
+				draw_line(rear_p, rear_p - fwd * (jet_len * 0.6), Color(1.0, 0.98, 0.88, 0.92), 2.2)
+				draw_off = side * (sin(phase_t * 7.5) * 1.8)
+				stride_scale = Vector2(1.04 + 0.03 * sin(phase_t * 14.0), 0.96 - 0.02 * sin(phase_t * 14.0))
+			elif enemy_type in ["juggernaut", "colossus"]:
+				# Heavy Mech Stomp: deliberate alternating footfall dust rings + heavy shoulder vent pulses!
+				var stomp_spd: float = 5.2 if enemy_type == "juggernaut" else 4.2
+				var stomp_s: float = sin(phase_t * stomp_spd)
+				var step_ring: float = fmod(phase_t * stomp_spd / PI, 1.0)
+				var step_side: float = 1.0 if int(floor(phase_t * stomp_spd / PI)) % 2 == 0 else -1.0
+				var dust_pos: Vector2 = -fwd * (target_max * 0.12) + side * (step_side * target_max * 0.24)
+				draw_arc(dust_pos, 4.0 + step_ring * 12.0, 0.0, TAU, 16, Color(0.86, 0.78, 0.68, (1.0 - step_ring) * 0.45), 1.8)
+				stride_scale = Vector2(1.0 - 0.04 * absf(stomp_s), 1.0 + 0.04 * absf(stomp_s))
+				wobble_ang = ang + stomp_s * 0.035
+			elif enemy_type == "stalker":
+				# Stealth Phase-Shift: ghostly purple afterimage trail + horizontal phase-glitch!
+				var glitch: float = sin(phase_t * 22.0) * (2.6 if is_effectively_cloaked() else 0.6)
+				draw_off = side * glitch
+				if is_effectively_cloaked():
+					SpriteLibrary.draw_sprite_oriented(self, sprite_tex, -fwd * 9.0, ang, draw_size * 0.94, Vector2(0.5, 0.5), Color(0.68, 0.36, 1.0, 0.20))
+				stride_scale = Vector2(1.03, 0.97)
+			elif enemy_type == "mender":
+				# Bio-Pulse: rhythmic organic sac breathing + rising green healing spores!
+				var breath: float = sin(phase_t * 5.2)
+				stride_scale = Vector2(1.0 + 0.07 * breath, 1.0 - 0.05 * breath)
+				for sp_i in range(3):
+					var sp_p: float = fmod(phase_t * 0.9 + float(sp_i) * 0.33, 1.0)
+					var sp_v := Vector2(sin(phase_t * 3.0 + float(sp_i) * 2.0) * 10.0, -6.0 - sp_p * 16.0)
+					draw_circle(sp_v, 2.0 * (1.0 - sp_p) + 0.6, Color(0.42, 1.0, 0.58, (1.0 - sp_p) * 0.78))
+
+		# Impact knockback squish when struck!
+		if _hit_squish_timer > 0.0:
+			var hq: float = clampf(_hit_squish_timer / 0.12, 0.0, 1.0)
+			stride_scale *= Vector2(1.0 - 0.16 * hq, 1.0 + 0.16 * hq)
+			draw_off -= fwd * (2.4 * hq)
+
+		SpriteLibrary.draw_sprite_oriented(self, sprite_tex, draw_off, wobble_ang, draw_size, Vector2(0.5, 0.5), mod_col, Vector2.ZERO, stride_scale)
 
 		if enemy_type == "stalker":
 			if is_effectively_cloaked():

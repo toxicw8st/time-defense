@@ -44,6 +44,10 @@ var _opened_enemy_ids: Dictionary = {}
 var total_damage_dealt: float = 0.0
 var total_kills: int = 0
 var _blind_cloak_bark_cd: float = 0.0
+var _recoil_spring: float = 0.0
+var _recoil_vel: float = 0.0
+var _idle_home_angle: float = -PI * 0.5
+var _shell_casings: Array[Dictionary] = []
 
 
 func record_damage(amount: float, killed: bool = false) -> void:
@@ -143,6 +147,8 @@ func _celebrate_apex_unlock(evo_cfg: Dictionary) -> void:
 
 
 func can_detect_cloaked() -> bool:
+	if GameState.has_global_camo_reveal():
+		return true
 	if int(levels.get("range", 0)) >= 2:
 		return true
 	if apex_tier >= 1 or has_apex_mod("reveals_cloaked"):
@@ -362,11 +368,33 @@ func _process(delta: float) -> void:
 	anim_time += delta
 	if muzzle_flash_timer > 0.0:
 		muzzle_flash_timer = maxf(0.0, muzzle_flash_timer - delta)
-		queue_redraw()
 	if _blind_cloak_bark_cd > 0.0:
 		_blind_cloak_bark_cd = maxf(0.0, _blind_cloak_bark_cd - delta)
-	elif is_selected or is_combine_highlighted or current_job != null or GameState.is_haste_active or tower_type in ["slow", "laser", "railgun"] or Balance.is_combo_tower(tower_type):
-		queue_redraw()
+	# Elastic recoil spring-damper (snaps back on fire, bounces cleanly back to 0)
+	if absf(_recoil_spring) > 0.002 or absf(_recoil_vel) > 0.002:
+		var k_stiff: float = 190.0
+		var k_damp: float = 17.0
+		var acc: float = -k_stiff * _recoil_spring - k_damp * _recoil_vel
+		_recoil_vel += acc * delta
+		_recoil_spring += _recoil_vel * delta
+	else:
+		_recoil_spring = 0.0
+		_recoil_vel = 0.0
+	# Update ejected brass shell casings / muzzle smoke puffs
+	if not _shell_casings.is_empty():
+		for si in range(_shell_casings.size() - 1, -1, -1):
+			var c: Dictionary = _shell_casings[si]
+			c["t"] = float(c["t"]) - delta
+			c["pos"] = (c["pos"] as Vector2) + (c["vel"] as Vector2) * delta
+			c["vel"] = (c["vel"] as Vector2) * pow(0.08, delta)
+			c["rot"] = float(c["rot"]) + float(c["spin"]) * delta
+			if float(c["t"]) <= 0.0:
+				_shell_casings.remove_at(si)
+	# Standby patrol swivel when built & no target locked
+	if is_built and current_job == null and not GameState.is_wave_active:
+		var patrol_ang: float = _idle_home_angle + sin(anim_time * 0.95 + float(tower_id) * 1.3) * 0.42
+		aim_angle = lerp_angle(aim_angle, patrol_ang, clampf(delta * 2.5, 0.0, 1.0))
+	queue_redraw()
 	advance_tower(GameState.get_sim_delta(delta))
 
 
@@ -418,7 +446,12 @@ func advance_tower(delta: float) -> void:
 	if preview_tgt != null:
 		var desired_angle: float = (preview_tgt.position - position).angle()
 		aim_angle = lerp_angle(aim_angle, desired_angle, clampf(delta * 14.0, 0.0, 1.0))
+		_idle_home_angle = aim_angle
 		queue_redraw()
+	else:
+		# Standby patrol sweep between enemy packs during a wave
+		var idle_ang: float = _idle_home_angle + sin(anim_time * 1.1 + float(tower_id) * 1.3) * 0.36
+		aim_angle = lerp_angle(aim_angle, idle_ang, clampf(delta * 2.2, 0.0, 1.0))
 	if fire_cooldown <= 0.0:
 		var target: EnemyUnit = preview_tgt if preview_tgt != null else _pick_target()
 		if target != null:
@@ -484,12 +517,29 @@ func _pick_target() -> EnemyUnit:
 
 func _fire_at(target: EnemyUnit) -> void:
 	aim_angle = (target.position - position).angle()
+	_idle_home_angle = aim_angle
 	muzzle_flash_timer = 0.14
+	_recoil_spring = 1.0
+	_recoil_vel = 2.8
 	_shot_counter += 1
+	# Spawn tactile brass shell casing or mortar smoke puff on firing!
+	if _shell_casings.size() < 8 and (tower_type.contains("blaster") or tower_type.contains("annihilator") or tower_type.contains("mortar")):
+		var fwd_e: Vector2 = Vector2.RIGHT.rotated(aim_angle)
+		var side_e: Vector2 = Vector2(-fwd_e.y, fwd_e.x) * (1.0 if (_shot_counter % 2 == 0) else -1.0)
+		var is_smoke: bool = tower_type.contains("mortar")
+		_shell_casings.append({
+			"pos": fwd_e * (12.0 if is_smoke else 2.0) + side_e * (2.0 if is_smoke else 6.0),
+			"vel": (fwd_e * 28.0 + side_e * 12.0) if is_smoke else (side_e * 48.0 - fwd_e * 14.0),
+			"rot": aim_angle,
+			"spin": 2.0 if is_smoke else 14.0,
+			"t": 0.42 if is_smoke else 0.36,
+			"max_t": 0.42 if is_smoke else 0.36,
+			"smoke": is_smoke,
+		})
 	queue_redraw()
 
 	var cfg: Dictionary = Balance.TOWERS[tower_type]
-	var dmg: float = get_effective_damage()
+	var dmg: float = get_effective_damage() * (1.0 + GameState.get_overclock_crit_bonus())
 	var dmg_lvl: int = clampi(int(levels["damage"]), 0, Balance.TOWER_DAMAGE_TOTAL_BONUSES.size() - 1)
 	var dmg_scale: float = (1.0 + Balance.TOWER_DAMAGE_TOTAL_BONUSES[dmg_lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("dmg_mult", 1.0)
 	var dtype: String = get_damage_type()
@@ -912,8 +962,23 @@ func _draw() -> void:
 		else:
 			draw_arc(Vector2.ZERO, 18.2, 0.0, TAU, 8, Color(1.0, 0.86, 0.36, 0.45), 1.2)
 
-	var recoil: float = (muzzle_flash_timer / 0.14) * 3.2
-	Visuals.draw_turret(self, tower_type, aim_angle, recoil, anim_time, muzzle_flash_timer, levels)
+	var recoil: float = maxf(0.0, _recoil_spring) * 4.4
+	var sq_x: float = clampf(1.0 - _recoil_spring * 0.14, 0.84, 1.10)
+	var sq_y: float = clampf(1.0 + _recoil_spring * 0.13, 0.92, 1.16)
+	var shot_period: float = 1.0 / maxf(0.05, get_effective_fire_rate())
+	var ch_ratio: float = (1.0 - clampf(fire_cooldown / shot_period, 0.0, 1.0)) if (shot_period >= 1.2 and GameState.is_wave_active) else 0.0
+	Visuals.draw_turret(self, tower_type, aim_angle, recoil, anim_time, muzzle_flash_timer, levels, ch_ratio, Vector2(sq_x, sq_y))
+
+	# Draw ejected brass shell casings / mortar smoke puffs
+	for c in _shell_casings:
+		var ca: float = clampf(float(c["t"]) / maxf(0.01, float(c["max_t"])), 0.0, 1.0)
+		var cp: Vector2 = c["pos"]
+		if bool(c["smoke"]):
+			draw_circle(cp, 3.0 + (1.0 - ca) * 5.0, Color(0.82, 0.86, 0.88, ca * 0.48))
+		else:
+			var cr: float = float(c["rot"])
+			var d_v := Vector2(cos(cr), sin(cr)) * 2.6
+			draw_line(cp - d_v, cp + d_v, Color(1.0, 0.86, 0.36, ca), 1.8)
 
 	# Compact target mode pill at bottom of pedestal
 	var tgt_tag: String = str(Balance.TARGETING_SHORT_TAGS.get(target_mode, "1ST"))

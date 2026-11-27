@@ -205,13 +205,20 @@ func _complete_current_wave() -> void:
 	var stipend_part: int = 0
 	var clean_part: int = 0
 	var interest_part: int = 0
+	var mint_part: int = 0
 	if not GameState.mission.cleared_waves.get(wave_num, false):
 		GameState.mission.cleared_waves[wave_num] = true
+		GameState.record_best_wave(GameState.selected_map_level, wave_num)
 		bonus = Balance.WAVE_CLEAR_BONUS_BASE + Balance.WAVE_CLEAR_BONUS_PER_WAVE * wave_num
 		# Wave 11+ BTD5 wave-clear stipend (W1-10 remain exact $0!)
 		if wave_num >= 11:
 			stipend_part = Balance.POST_W10_WAVE_STIPEND_BASE + Balance.POST_W10_WAVE_STIPEND_PER_WAVE * wave_num
 			bonus += stipend_part
+		# Citadel Economy Sacrifice Chrono-Mint Core (+$350/w Stage 2, +$700/w Stage 3!)
+		var eco_sac: int = int(GameState.mission.citadel_sacrifices.get("economy", 0))
+		if eco_sac > 0:
+			mint_part = 700 if eco_sac >= 2 else 350
+			bonus += mint_part
 		# Refinery Tech Tier 2+ Clean-Wave Bonus & Tier 3+ Compound Bank Interest (only when >=1 Refinery owned!)
 		var ref_owned: int = int(GameState.mission.economy.get("refineries_owned", 0))
 		var rtier_cfg: Dictionary = GameState.get_refinery_tier_cfg()
@@ -231,8 +238,8 @@ func _complete_current_wave() -> void:
 		GameState.mission.stats["waves_completed"] += 1
 		GameState.economy_changed.emit()
 
-	var summary: String = "Wave %d cleared! (s$%d, b$%d)" % [wave_num, stats["s_dollars"], stats["b_dollars"]]
-	if interest_part > 0 or stipend_part > 0 or clean_part > 0:
+	var summary: String = "Wave %d cleared! (b$%d)" % [wave_num, stats["b_dollars"]]
+	if interest_part > 0 or stipend_part > 0 or clean_part > 0 or mint_part > 0:
 		var bonus_bits: PackedStringArray = []
 		if stipend_part > 0:
 			bonus_bits.append("+$%d clear" % stipend_part)
@@ -240,9 +247,9 @@ func _complete_current_wave() -> void:
 			bonus_bits.append("+$%d clean" % clean_part)
 		if interest_part > 0:
 			bonus_bits.append("+$%d bank" % interest_part)
+		if mint_part > 0:
+			bonus_bits.append("+$%d mint" % mint_part)
 		summary += " [" + ", ".join(bonus_bits) + "]"
-	if _is_replay_attempt:
-		summary += " [Rewind Replay]"
 	wave_summary_updated.emit(summary)
 	GameState.event_logged.emit(summary)
 	GameState.wave_cleared.emit(wave_num)
@@ -256,8 +263,9 @@ func _complete_current_wave() -> void:
 			state = State.BUILD
 			state_changed.emit(state)
 			return
-		if not GameState.mission.is_over and GameState.mission.enemy_base_hp > 0:
-			GameState.end_mission("stalled", "Survived %d waves, but the Enemy Base still stands." % max_waves_limit)
+		if not GameState.mission.is_over:
+			GameState.mission.wave_number = wave_num + 1
+			GameState.end_mission("won", "SECTOR MILESTONE CLEARED! Survived all %d waves — tap Continue Endless to push your Best Wave!" % max_waves_limit)
 		return
 
 	GameState.mission.wave_number = wave_num + 1

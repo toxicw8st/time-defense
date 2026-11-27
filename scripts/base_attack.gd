@@ -1,16 +1,31 @@
 extends Node
 class_name BaseAttackManager
 
-## Owns the Hive Destroyer base-attack charge & firing ($450 per shot, 1/N rule by mission level).
-## HARD RULE: Haste can NEVER speed up base-attack charging.
+## v3.0 Chrono-Citadel Ascension ("Sun God" Base Super-Weapon Controller)
+## Replaces legacy Hive Destroyer with the 3-Stage Awakened Player Citadel:
+##   - Stage 1 ($1,500): Fortified Citadel — Twin Point-Defense Pulse Cannons (240px) + +3 Lives
+##   - Stage 2 ($6,500 + Opt-In Tower Sacrifices): Chrono-Dreadnought — Global Orbital Lance + +15% Global Speed + Grafted Weapons
+##   - Stage 3 ($18,000 + Opt-In Tower Sacrifices): ★ True Chrono-Singularity ("Time God") — 2.2x Power, +30% Global Speed, Hyper-Apex Grafts & 10s Singularity Pulse!
 
 signal charge_started
 signal base_attack_fired(damage: int, remaining_enemy_hp: int)
+signal citadel_ascended(new_stage: int, sacrifices: Dictionary)
 
 var map_ref: GameMap = null
 var is_charging: bool = false
 var charge_total_time: float = Balance.BASE_ATTACK_CHARGE_TIME
 var charge_remaining: float = 0.0
+
+# Citadel weapon cooldowns & live visual aim state
+var aim_angle: float = PI
+var pd_cooldown: float = 0.0
+var lance_cooldown: float = 0.0
+var kinetic_cooldown: float = 0.0
+var explosive_cooldown: float = 0.0
+var energy_cooldown: float = 0.0
+var chrono_cooldown: float = 0.0
+var pulse_cooldown: float = 10.0
+var muzzle_flash_timer: float = 0.0
 
 
 func setup(p_map: GameMap) -> void:
@@ -31,107 +46,305 @@ func _on_mission_reset() -> void:
 
 func _reset_state() -> void:
 	is_charging = false
-	charge_total_time = Balance.BASE_ATTACK_CHARGE_TIME
 	charge_remaining = 0.0
 	GameState.base_attack_charging_active = false
+	aim_angle = PI
+	pd_cooldown = 0.0
+	lance_cooldown = 0.0
+	kinetic_cooldown = 0.0
+	explosive_cooldown = 0.0
+	energy_cooldown = 0.0
+	chrono_cooldown = 0.0
+	pulse_cooldown = 10.0
+	muzzle_flash_timer = 0.0
 
 
 func _process(delta: float) -> void:
+	if muzzle_flash_timer > 0.0:
+		muzzle_flash_timer = maxf(0.0, muzzle_flash_timer - delta)
 	step_base_attack(GameState.get_sim_delta(delta))
 
 
 func step_base_attack(delta: float) -> void:
-	if GameState.mission.is_over or not is_charging or not GameState.is_wave_active or delta <= 0.0:
+	if GameState.mission.is_over or not GameState.is_wave_active or delta <= 0.0 or map_ref == null:
 		return
-	# Haste NEVER accelerates charge_remaining! Always 1.0x simulation delta.
-	charge_remaining = maxf(0.0, charge_remaining - delta)
-	if charge_remaining <= 0.0:
-		_fire_hive_destroyer()
+	var stage: int = GameState.mission.citadel_stage
+	if stage <= 0:
+		return
+
+	var enemies: Array[EnemyUnit] = map_ref.get_active_enemies()
+	if enemies.is_empty():
+		return
+
+	var pb_pos: Vector2 = map_ref.active_player_base_pos
+	var stage_mult: float = 2.2 if stage >= 3 else 1.0
+	var core_mult: float = GameState.get_citadel_damage_multiplier() * stage_mult * (1.0 + GameState.get_overclock_crit_bonus())
+	var spd_mult: float = GameState.get_tower_attack_speed_multiplier()
+	var sacs: Dictionary = GameState.mission.citadel_sacrifices
+
+	# 1) Stage 1+: Twin Point-Defense Pulse Cannons (240px local defense covering final approach)
+	pd_cooldown = maxf(0.0, pd_cooldown - delta * spd_mult)
+	if pd_cooldown <= 0.0:
+		var pd_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 250.0, "first")
+		if pd_tgt != null:
+			aim_angle = (pd_tgt.position - pb_pos).angle()
+			muzzle_flash_timer = 0.16
+			var pd_dtype: String = "Piercing" if (pd_tgt.armour_tags.has("Armored") or pd_tgt.armour_tags.has("Reflective")) else "Laser"
+			var pd_dmg: float = (42.0 if stage == 1 else 78.0) * core_mult
+			_fire_citadel_beam(pb_pos, pd_tgt, pd_dmg, pd_dtype, Color(0.38, 0.96, 1.0), 3.0)
+			pd_cooldown = 0.45
+
+	if stage < 2:
+		return
+
+	# 2) Stage 2+: Global Orbital Chrono-Lance (map-wide sniper!)
+	lance_cooldown = maxf(0.0, lance_cooldown - delta * spd_mult)
+	if lance_cooldown <= 0.0:
+		var l_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 99999.0, "strongest")
+		if l_tgt != null:
+			aim_angle = (l_tgt.position - pb_pos).angle()
+			muzzle_flash_timer = 0.22
+			var l_dmg: float = 220.0 * core_mult
+			if l_tgt.is_cloaked_type:
+				l_tgt.reveal_cloak(4.0)
+			_fire_citadel_beam(pb_pos, l_tgt, l_dmg, "Time", Color(1.0, 0.88, 0.36), 4.8, true)
+			lance_cooldown = 0.85
+
+	# 3) Grafted Kinetic Sacrifice: Quad Sabot Boss-Shredder Autocannons
+	var kin_lvl: int = int(sacs.get("kinetic", 0))
+	if kin_lvl > 0:
+		kinetic_cooldown = maxf(0.0, kinetic_cooldown - delta * spd_mult)
+		if kinetic_cooldown <= 0.0:
+			var k_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 99999.0, "strongest")
+			if k_tgt != null:
+				var k_dmg: float = (95.0 if kin_lvl == 1 else 165.0) * core_mult
+				k_tgt.apply_armor_shred(5, 4.5)
+				_fire_citadel_beam(pb_pos, k_tgt, k_dmg, "Piercing", Color(1.0, 0.72, 0.28), 3.4, true)
+				kinetic_cooldown = 0.36 if kin_lvl >= 2 else 0.52
+
+	# 4) Grafted Explosive Sacrifice: Map-Wide Orbital Cluster Barrage
+	var exp_lvl: int = int(sacs.get("explosive", 0))
+	if exp_lvl > 0:
+		explosive_cooldown = maxf(0.0, explosive_cooldown - delta * spd_mult)
+		if explosive_cooldown <= 0.0:
+			var e_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 99999.0, "first")
+			if e_tgt != null:
+				var shells: int = 4 if exp_lvl >= 2 else 3
+				var blast_r: float = 92.0 if exp_lvl >= 2 else 74.0
+				var blast_dmg: float = (135.0 if exp_lvl == 1 else 210.0) * core_mult
+				var center_p: Vector2 = e_tgt.position
+				for si in range(shells):
+					var off := Vector2(cos(float(si) * TAU / float(shells)), sin(float(si) * TAU / float(shells))) * (0.0 if si == 0 else 28.0)
+					var bp: Vector2 = center_p + off
+					map_ref.spawn_apex_shockwave(bp, Color(1.0, 0.58, 0.22), blast_r, 0.42)
+					for foe in map_ref.get_active_enemies():
+						if is_instance_valid(foe) and foe.is_alive() and foe.position.distance_to(bp) <= blast_r:
+							_apply_citadel_damage(foe, blast_dmg, "Normal")
+				explosive_cooldown = 2.2 if exp_lvl >= 2 else 2.8
+
+	# 5) Grafted Energy Sacrifice: Triple Prismatic Sunbeams + Global Camo Reveal
+	var ene_lvl: int = int(sacs.get("energy", 0))
+	if ene_lvl > 0:
+		energy_cooldown = maxf(0.0, energy_cooldown - delta * spd_mult)
+		if energy_cooldown <= 0.0:
+			var hits: int = 0
+			var max_chains: int = 5 if ene_lvl >= 2 else 3
+			var sun_dmg: float = (88.0 if ene_lvl == 1 else 145.0) * core_mult
+			for foe in enemies:
+				if not is_instance_valid(foe) or not foe.is_alive():
+					continue
+				if foe.is_cloaked_type:
+					foe.reveal_cloak(6.0)
+				if hits < max_chains:
+					_fire_citadel_beam(pb_pos, foe, sun_dmg, "Laser", Color(1.0, 0.45, 0.94), 3.6, true)
+					hits += 1
+			energy_cooldown = 0.50 if ene_lvl >= 2 else 0.72
+
+	# 6) Grafted Chrono Sacrifice: Global Time-Dilation Field (-20%..30% slow + flat Time Decay)
+	var chr_lvl: int = int(sacs.get("chrono", 0))
+	if chr_lvl > 0:
+		chrono_cooldown = maxf(0.0, chrono_cooldown - delta)
+		if chrono_cooldown <= 0.0:
+			var slow_v: float = 0.30 if chr_lvl >= 2 else 0.20
+			var dec_v: float = (26.0 if chr_lvl == 1 else 52.0) * core_mult
+			for foe in enemies:
+				if is_instance_valid(foe) and foe.is_alive():
+					foe.apply_slow(slow_v, 2.2)
+					foe.apply_time_decay(dec_v, 2, null)
+					foe.suppress_regen(2.2)
+			chrono_cooldown = 1.6
+
+	# 7) Stage 3 ★ True Chrono-Singularity Pulse every 10s (Pushback 12% + <15% Boss Execute!)
+	if stage >= 3:
+		pulse_cooldown = maxf(0.0, pulse_cooldown - delta)
+		if pulse_cooldown <= 0.0:
+			pulse_cooldown = 10.0
+			map_ref.spawn_apex_shockwave(pb_pos, Color(1.0, 0.88, 0.34), 320.0, 0.85)
+			map_ref.trigger_screen_shake(0.24, 3.2)
+			var plen: float = maxf(100.0, map_ref.get_path_length())
+			for foe in map_ref.get_active_enemies():
+				if not is_instance_valid(foe) or not foe.is_alive():
+					continue
+				foe.distance_along_path = maxf(4.0, foe.distance_along_path - plen * 0.12)
+				foe._sync_transform_to_path()
+				if (foe.hp / maxf(1.0, foe.max_hp)) <= 0.15:
+					map_ref.spawn_floater(foe.position + Vector2(-28.0, -24.0), "TIME GOD EXECUTE!", Color(1.0, 0.88, 0.32))
+					_apply_citadel_damage(foe, foe.hp + 10.0, "Time")
+				else:
+					_apply_citadel_damage(foe, 260.0 * core_mult, "Time")
 
 
-func get_charge_duration() -> float:
-	var dur: float = Balance.BASE_ATTACK_CHARGE_TIME
-	if GameState.mission.manipulator_level >= Balance.MANIPULATOR_MAX_LEVEL:
-		dur *= float(Balance.MANIPULATOR_UPGRADES[5]["base_attack_charge_multiplier"])
-	return dur
+func _pick_enemy(enemies: Array[EnemyUnit], origin: Vector2, max_range: float, mode: String) -> EnemyUnit:
+	var best: EnemyUnit = null
+	var can_see_all: bool = GameState.mission.citadel_stage >= 2 or GameState.has_global_camo_reveal()
+	for e in enemies:
+		if not is_instance_valid(e) or not e.is_alive():
+			continue
+		if e.is_effectively_cloaked() and not can_see_all:
+			continue
+		if max_range < 50000.0 and origin.distance_to(e.position) > max_range:
+			continue
+		if best == null:
+			best = e
+			continue
+		if mode == "strongest":
+			if e.max_hp > best.max_hp or (is_equal_approx(e.max_hp, best.max_hp) and e.distance_along_path > best.distance_along_path):
+				best = e
+		else:
+			if e.distance_along_path > best.distance_along_path:
+				best = e
+	return best
 
 
-## 1/N rule: Level 1 = 1 shot (500 dmg), Level 2 = 2 shots (250 dmg), Level 3 = 3 shots (167 dmg).
-func get_shot_damage() -> int:
-	var level_n: int = maxi(1, GameState.selected_mission_level)
-	var base_dmg: float = ceilf(float(Balance.ENEMY_BASE_MAX_HP) / float(level_n))
-	var ranks: int = GameState.get_research_rank("hive_breaker")
-	if ranks <= 0 and GameState.mission.owned_research.get("hive_breaker", false):
-		ranks = 1
-	if ranks > 0:
-		base_dmg *= (1.0 + float(ranks) * float(Balance.RESEARCH_NODES["hive_breaker"]["base_attack_bonus"]))
-	return int(round(base_dmg))
+func _apply_citadel_damage(target: EnemyUnit, raw_dmg: float, dtype: String) -> void:
+	if target == null or not is_instance_valid(target) or not target.is_alive():
+		return
+	var dealt: float = target.take_damage(raw_dmg, dtype, null)
+	GameState.mission.citadel_total_damage += dealt
+	if target.is_dead_or_leaked:
+		GameState.mission.citadel_total_kills += 1
 
 
-func get_shots_to_destroy_remaining() -> int:
-	var dmg: int = max(1, get_shot_damage())
-	return int(ceil(float(GameState.mission.enemy_base_hp) / float(dmg)))
+func _fire_citadel_beam(from_pos: Vector2, target: EnemyUnit, raw_dmg: float, dtype: String, col: Color, width: float, strip_aura: bool = false) -> void:
+	if map_ref == null or target == null or not is_instance_valid(target) or not target.is_alive():
+		return
+	var end_pos: Vector2 = target.position
+	if strip_aura and target.is_shielded_by_conduit():
+		raw_dmg /= 0.65 # Bypass Conduit -35% aura
+	_apply_citadel_damage(target, raw_dmg, dtype)
+	if map_ref.has_method("spawn_citadel_beam"):
+		map_ref.spawn_citadel_beam(from_pos, end_pos, col, width)
 
 
-func can_start_charge() -> bool:
-	if GameState.mission.is_over or is_charging:
+func get_next_citadel_stage() -> int:
+	var cur: int = GameState.mission.citadel_stage
+	return (cur + 1) if cur < Balance.CITADEL_MAX_STAGE else -1
+
+
+func get_next_citadel_cost() -> int:
+	var nxt: int = get_next_citadel_stage()
+	if nxt < 0:
+		return -1
+	return int(Balance.CITADEL_STAGES[nxt]["cost"])
+
+
+func can_ascend_citadel() -> bool:
+	if GameState.mission.is_over:
 		return false
-	if GameState.is_base_locked():
+	var cost: int = get_next_citadel_cost()
+	if cost < 0:
 		return false
-	if GameState.mission.enemy_base_hp <= 0:
-		return false
-	return GameState.mission.economy["money"] >= Balance.BASE_ATTACK_COST
+	return GameState.is_sandbox_mode or GameState.mission.economy["money"] >= cost
 
 
-func start_charge() -> bool:
-	if not can_start_charge():
+## Computes which Sacrifice Super-Weapons would unlock/upgrade given a chosen set of towers & refinery option.
+func preview_sacrifice_unlocks(selected_towers: Array, sacrifice_refinery: bool = false) -> Dictionary:
+	var spent_by_cat: Dictionary = {"kinetic": 0, "explosive": 0, "energy": 0, "chrono": 0}
+	for t in selected_towers:
+		if t == null or not is_instance_valid(t):
+			continue
+		var cats: Array[String] = Balance.get_tower_sacrifice_categories(t.tower_type)
+		for c in cats:
+			spent_by_cat[c] = int(spent_by_cat.get(c, 0)) + int(t.total_spent)
+	var unlocked: Dictionary = {}
+	for c in ["kinetic", "explosive", "energy", "chrono"]:
+		unlocked[c] = int(spent_by_cat[c]) >= Balance.CITADEL_SACRIFICE_THRESHOLD
+	var owns_t3_bank: bool = GameState.get_refinery_tier() >= 3 and int(GameState.mission.economy.get("refineries_owned", 0)) >= 1
+	unlocked["economy"] = sacrifice_refinery or owns_t3_bank
+	return {
+		"spent_by_cat": spent_by_cat,
+		"unlocked": unlocked,
+	}
+
+
+func ascend_citadel(selected_towers: Array = [], sacrifice_refinery: bool = false) -> bool:
+	if not can_ascend_citadel():
 		return false
-	if not GameState.spend_money(Balance.BASE_ATTACK_COST, false):
+	var next_stage: int = get_next_citadel_stage()
+	var scfg: Dictionary = Balance.CITADEL_STAGES[next_stage]
+	var cost: int = int(scfg["cost"])
+	if not GameState.spend_money(cost, true):
 		return false
-	charge_total_time = get_charge_duration()
-	charge_remaining = charge_total_time
-	is_charging = true
-	GameState.base_attack_charging_active = true
-	if AnalyticsManager != null:
-		AnalyticsManager.record_hive_charge_started(Balance.BASE_ATTACK_COST)
-	charge_started.emit()
-	GameState.event_logged.emit("Hive Destroyer charging (%.0fs, $%d)" % [charge_total_time, Balance.BASE_ATTACK_COST])
+
+	# Process opt-in tower sacrifices for Stage 2 & Stage 3!
+	var unlocked_cats: Array[String] = []
+	if bool(scfg.get("supports_sacrifice", false)):
+		var prev: Dictionary = preview_sacrifice_unlocks(selected_towers, sacrifice_refinery)
+		var unl: Dictionary = prev["unlocked"]
+		for t in selected_towers:
+			if t != null and is_instance_valid(t) and map_ref != null:
+				if map_ref.has_method("absorb_tower_into_citadel"):
+					map_ref.absorb_tower_into_citadel(t)
+		if sacrifice_refinery and int(GameState.mission.economy.get("refineries_owned", 0)) > 0:
+			GameState.mission.economy["refineries_owned"] = maxi(0, int(GameState.mission.economy["refineries_owned"]) - 1)
+		for c in ["kinetic", "explosive", "energy", "chrono", "economy"]:
+			if bool(unl.get(c, false)):
+				var target_lvl: int = 2 if next_stage >= 3 else 1
+				GameState.mission.citadel_sacrifices[c] = maxi(int(GameState.mission.citadel_sacrifices.get(c, 0)), target_lvl)
+				unlocked_cats.append(c)
+			elif next_stage >= 3 and int(GameState.mission.citadel_sacrifices.get(c, 0)) >= 1:
+				# Stage 3 automatically promotes previously grafted Stage-2 weapons to Hyper-Apex!
+				GameState.mission.citadel_sacrifices[c] = 2
+
+	GameState.mission.citadel_stage = next_stage
+	var heal_amt: int = int(scfg.get("heal_lives", 0))
+	if heal_amt > 0:
+		GameState.restore_lives(heal_amt)
+
+	if SfxManager != null:
+		SfxManager.play("combine")
+	if map_ref != null:
+		var sw_col := Color(1.0, 0.88, 0.34) if next_stage >= 3 else (Color(0.45, 0.96, 1.0) if next_stage == 2 else Color(0.42, 0.92, 0.72))
+		map_ref.spawn_apex_shockwave(map_ref.active_player_base_pos, sw_col, 140.0 + float(next_stage) * 55.0, 0.85)
+		map_ref.trigger_screen_shake(0.32, 3.8 + float(next_stage))
+		map_ref.spawn_floater(map_ref.active_player_base_pos + Vector2(-72.0, -48.0), "%s ONLINE!" % str(scfg["name"]).to_upper(), sw_col)
+		map_ref.queue_redraw()
+
+	var sac_str: String = (" | Grafted: " + ", ".join(unlocked_cats)) if not unlocked_cats.is_empty() else ""
+	GameState.event_logged.emit("CITADEL ASCENDED -> Stage %d %s ($%d)%s!" % [next_stage, str(scfg["name"]), cost, sac_str])
+	GameState.citadel_upgraded.emit(next_stage)
+	citadel_ascended.emit(next_stage, GameState.mission.citadel_sacrifices.duplicate())
 	return true
 
 
-func is_in_firing_warning() -> bool:
-	return is_charging and charge_remaining <= Balance.BASE_ATTACK_FIRE_WARNING_TIME
+# Legacy compatibility getters (prevent null/method errors in older scripts)
+func get_charge_duration() -> float:
+	return Balance.BASE_ATTACK_CHARGE_TIME
 
+func get_shot_damage() -> int:
+	return Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE
+
+func get_shots_to_destroy_remaining() -> int:
+	return 0
+
+func can_start_charge() -> bool:
+	return can_ascend_citadel()
+
+func start_charge() -> bool:
+	return ascend_citadel()
+
+func is_in_firing_warning() -> bool:
+	return false
 
 func get_charge_progress() -> float:
-	if not is_charging or charge_total_time <= 0.0:
-		return 0.0
-	return clampf(1.0 - (charge_remaining / charge_total_time), 0.0, 1.0)
-
-
-func _fire_hive_destroyer() -> void:
-	is_charging = false
-	charge_remaining = 0.0
-	GameState.base_attack_charging_active = false
-
-	var dmg: int = get_shot_damage()
-	var m := GameState.mission
-	m.enemy_base_hp = max(0, m.enemy_base_hp - dmg)
-	m.stats["charges_fired"] += 1
-	GameState.enemy_base_hp_changed.emit(m.enemy_base_hp)
-
-	if map_ref != null:
-		map_ref.trigger_hive_beam_effect(dmg)
-	if SfxManager != null:
-		SfxManager.play("hive_beam")
-
-	var msg: String = "Hive destroyer hit - %d damage (%d / %d HP)" % [dmg, m.enemy_base_hp, Balance.ENEMY_BASE_MAX_HP]
-	if AnalyticsManager != null:
-		AnalyticsManager.record_hive_shot(dmg, m.enemy_base_hp)
-	GameState.event_logged.emit(msg)
-	base_attack_fired.emit(dmg, m.enemy_base_hp)
-
-	if m.enemy_base_hp <= 0:
-		GameState.end_mission("won", "Enemy Base destroyed by Hive Destroyer!")
-	elif map_ref != null and GameState.is_wave_active and not GameState.is_sandbox_mode and m.wave_number >= 3:
-		map_ref.trigger_hive_retaliation(m.enemy_base_hp, m.wave_number)
+	return float(GameState.mission.citadel_stage) / float(Balance.CITADEL_MAX_STAGE)

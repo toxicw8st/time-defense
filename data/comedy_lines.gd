@@ -90,22 +90,37 @@ const RESEARCH_FLAVOR: Dictionary = {
 # --- Reactive 3-Voice Chrono-Comms Banter Pools ---
 const BANTER: Dictionary = {
 	"rewind": [
-		{"speaker": "os", "text": "Timeline rewound. If you bump into yourself from 30 seconds ago, do not make eye contact."},
-		{"speaker": "vex", "text": "Temporal do-over! Nobody saw that first attempt. Technically it never happened."},
-		{"speaker": "krag", "text": "Wait... didn't we ALREADY march down this trench?! Stop messing with the clock!"},
-		{"speaker": "os", "text": "Paradox side effect detected: aliens now arrive 5% more armored and mildly confused."},
+		{"speaker": "krag", "text": "HEY! MY FEET ARE GOING BACKWARDS!! STOP MOONWALKING MY ARMY!!"},
+		{"speaker": "vex", "text": "Temporal Yoink! Send 'em right back through the kill-box for round two!"},
+		{"speaker": "os", "text": "Temporal Rewind complete. Aliens relocated backward in space and dignity."},
+		{"speaker": "krag", "text": "I JUST walked past that Mortar! Why am I back at the front door?!"},
 	],
 	"pause": [
-		{"speaker": "vex", "text": "Aliens frozen for 8 seconds! Please refrain from drawing mustaches on the Juggernauts."},
-		{"speaker": "os", "text": "Temporal Stasis engaged. Your turrets remain active because physics signed a waiver."},
-		{"speaker": "krag", "text": "WHY CAN'T I MOVE MY LEGS?! WHO HIT THE PAUSE BUTTON?!"},
-		{"speaker": "vex", "text": "Freeze frame! Nothing says 'fair fight' like shooting statues for eight straight seconds."},
+		{"speaker": "vex", "text": "Time Freeze engaged! Please refrain from drawing mustaches on the Juggernauts."},
+		{"speaker": "os", "text": "Temporal Stasis active. Turrets keep firing because physics signed a waiver."},
+		{"speaker": "krag", "text": "WHY CAN'T I MOVE MY LEGS?! WHO HIT THE FREEZE BUTTON?!"},
+		{"speaker": "vex", "text": "Freeze frame! Nothing says 'fair fight' like shooting statues!"},
 	],
 	"haste": [
-		{"speaker": "os", "text": "Turrets overclocked +50%. Local laws of thermodynamics have filed a formal complaint."},
-		{"speaker": "vex", "text": "HASTE active! Coffee levels in the ammo feed are now technically illegal."},
-		{"speaker": "os", "text": "Warning: Extreme dakka may cause aliens to jog 5% faster out of sheer panic."},
+		{"speaker": "os", "text": "Overclock engaged. Local laws of thermodynamics have filed a formal complaint."},
+		{"speaker": "vex", "text": "OVERCLOCK active! Coffee levels in the ammo feed are now technically illegal."},
 		{"speaker": "krag", "text": "Slow down those guns! That fire rate isn't even regulation!"},
+	],
+	"ability_upgrade": [
+		{"speaker": "os", "text": "Chrono-Ability upgraded. Safety margins reduced to thrilling levels."},
+		{"speaker": "vex", "text": "Bigger, faster, more irresponsible time bending! That's the Chrono Command way."},
+	],
+	"citadel_s1": [
+		{"speaker": "vex", "text": "Wait — our Citadel had hidden pulse cannons the whole time?! Why didn't anyone read page 400?!"},
+		{"speaker": "os", "text": "Fortified Citadel online. Twin defense cannons deployed and hull patched."},
+	],
+	"citadel_s2": [
+		{"speaker": "krag", "text": "HOLD ON — DID YOUR BASE JUST GROW AN ORBITAL LASER AND EAT YOUR OWN TURRETS?!"},
+		{"speaker": "os", "text": "Chrono-Dreadnought Citadel online. Sacrificed hardware integrated with 99.4% enthusiasm."},
+	],
+	"citadel_s3": [
+		{"speaker": "krag", "text": "OKAY NO, THAT'S A LITERAL TIME GOD! THEIR HOUSE HAS LASER WINGS! RETREAT!!"},
+		{"speaker": "vex", "text": "★ TRUE CHRONO-SINGULARITY ONLINE!! Let's see how far Endless can survive THIS!"},
 	],
 	"surge": [
 		{"speaker": "os", "text": "CHRONO SURGE! Good news: the reactor didn't explode. Bad news: turrets are -5% slower."},
@@ -217,54 +232,49 @@ static func get_end_of_run_review(outcome: String, m: Object) -> Dictionary:
 	var rew: int = int(m.stats["powers_used"].get("rewind", 0))
 	var pau: int = int(m.stats["powers_used"].get("pause", 0))
 	var has: int = int(m.stats["powers_used"].get("haste", 0))
-	var total_p: int = rew + pau + has
+	var c_stage: int = int(m.citadel_stage)
 	if outcome == "won":
+		if c_stage >= 3:
+			return {
+				"badge": "ASCENDED TIME GOD OF THE SECTOR",
+				"note": "WARLORD KRAG: 'Their house literally became a star. I quit.' Jump into Endless!",
+			}
 		if m.lives >= Balance.PLAYER_STARTING_LIVES:
 			return {
-				"badge": "FLAWLESS VICTORY — WARLORD KRAG HAS BLOCKED YOUR NUMBER",
-				"note": "C.H.R.O.N.O.-OS: Zero leaks, zero mercy. Citadel carpet remains pristine.",
-			}
-		if m.surge_count == 0 and total_p > 0:
-			return {
-				"badge": "CERTIFIED RESPONSIBLE TIME-BENDER",
-				"note": "VEX: Zero Surges AND you blew up the Hive! HR is framing your timesheet.",
-			}
-		if rew >= 3:
-			return {
-				"badge": "TEMPORAL DÉJÀ VU CHAMPION",
-				"note": "C.H.R.O.N.O.-OS: Rewound %d times, yet somehow won on the first try (legally)." % rew,
+				"badge": "FLAWLESS MILESTONE — WARLORD KRAG HAS BLOCKED YOUR NUMBER",
+				"note": "C.H.R.O.N.O.-OS: 40 waves cleared, zero leaks. Ready for Endless Freeplay!",
 			}
 		return {
-			"badge": "CERTIFIED HIVE VAPORIZER",
-			"note": "VEX: Alien Hive downgraded to smoking crater. Great shift, Commander!",
+			"badge": "SECTOR MEDAL EARNED — ENDLESS UNLOCKED!",
+			"note": "VEX: 40 waves conquered! Tap Continue Endless to see how insanely far your build can go!",
 		}
-	if outcome == "stalled":
+	# Defeat awards (including Endless high-wave runs!)
+	if m.wave_number >= 60:
 		return {
-			"badge": "PEACEFUL COEXISTENCE AWARD (NOT AUTHORIZED)",
-			"note": "VEX: You survived all 45 waves, but forgot to zap the Alien Hive! Charge that Hive Destroyer next run!",
+			"badge": "LEGENDARY ENDLESS SURVIVOR (WAVE %d)" % m.wave_number,
+			"note": "VEX: Wave %d?! Even C.H.R.O.N.O.-OS ran out of confetti cannons!" % m.wave_number,
 		}
-	# Defeat awards
+	if c_stage >= 3:
+		return {
+			"badge": "TRUE CHRONO-SINGULARITY COMMANDER",
+			"note": "C.H.R.O.N.O.-OS: Awakened the Time God Citadel and pushed to Wave %d!" % m.wave_number,
+		}
 	if m.wave_number == 10:
 		return {
 			"badge": "TRAMPLED BY CHROME",
-			"note": "WARLORD KRAG: 'My Juggernauts send their regards!'  |  VEX: 'Stack Piercing + Slow + PAUSE next time!'",
+			"note": "WARLORD KRAG: 'My Juggernauts send their regards!'  |  VEX: 'Stack Piercing + Slow + Time Freeze!'",
 		}
 	if m.wave_number == 11:
 		return {
 			"badge": "AMBUSHED BY INVISIBLE NINJAS",
 			"note": "VEX: 'Cloaked Phase Stalkers got us! Remember: Range Lv2 (+CAMO) or Lasers/Slow/Railguns expose them!'",
 		}
-	if m.surge_count >= 2:
+	if (rew + pau + has) >= 8:
 		return {
-			"badge": "CHRONO-REACTOR SNEEZE VICTIM",
-			"note": "C.H.R.O.N.O.-OS: %d Surges slowed your turrets. Pop any Time Power every 5 waves to vent pressure." % m.surge_count,
-		}
-	if rew >= 3:
-		return {
-			"badge": "GROUNDHOG DAY VETERAN",
-			"note": "C.H.R.O.N.O.-OS: %d Rewinds stacked extra alien armor. Sometimes advancing beats looping!" % rew,
+			"badge": "CERTIFIED CHRONO-TACTICIAN",
+			"note": "C.H.R.O.N.O.-OS: %d Time Abilities deployed — aliens are still dizzy." % (rew + pau + has),
 		}
 	return {
-		"badge": "TEMPORARY TACTICAL SETBACK",
-		"note": "VEX: Good news — you kept your Meta-Research! Upgrade in the Lab and show Krag who's boss.",
+		"badge": "TEMPORARY TACTICAL SETBACK (WAVE %d)" % m.wave_number,
+		"note": "VEX: Good news — you kept your Meta-Research and Best Wave record! Upgrade and run it back.",
 	}

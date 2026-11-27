@@ -1,17 +1,12 @@
 extends Node
 
-## Headless Step 5 acceptance verification:
-## - Ignoring surge timer fires surges at 45 s intervals with stacking penalties (95%, 90%, 86%)
-## - Warning states fire at 15 s (amber) and 7 s (red) before every surge
-## - Test power button resets timer and prevents surge
-## - Surge pauses in BUILD phase and when manipulator_upgrading_remaining > 0
-## - Reset mission zeroes surges
-
-var warning_events: Array[int] = []
-var surge_events: Array[int] = []
-
+## Headless Step 5 acceptance verification (v3.0 Zero-Surge / Zero-Mutation + Paid Ability Upgrade Ladders):
+## - Surge penalties & permanent enemy mutations are retired (0 surges, 1.0x HP/speed baseline regardless of casts)
+## - Surge row is hidden in BottomBar for cleaner mobile layout
+## - All 3 Paid Time Abilities (Time Freeze, Overclock, Temporal Rewind) upgrade cleanly from Tier 1 -> Tier 5
 
 func _ready() -> void:
+	GameState.reset_meta_progression()
 	GameState.reset_mission()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var inst: Node = main_scene.instantiate()
@@ -19,52 +14,33 @@ func _ready() -> void:
 
 	var wm: WaveManager = inst.get_node("WaveManager")
 	var surge: SurgeManager = inst.get_node("SurgeManager")
+	var tp: TimePowersManager = inst.get_node("TimePowersManager")
 	var hud: CanvasLayer = inst.get_node("HUD")
 
-	surge.warning_state_changed.connect(func(lvl: int) -> void:
-		if lvl > 0:
-			warning_events.append(lvl)
-	)
-	GameState.surge_triggered.connect(func(c: int) -> void: surge_events.append(c))
-
-	# Must be paused during BUILD phase
-	assert(surge.is_surge_paused(), "Surge must pause during BUILD phase")
-	surge.step_surge(100.0)
-	assert(GameState.mission.surge_count == 0, "Paused surge must not fire")
-
-	# Start wave so surge runs
+	# 1) Surge retired: stepping forever never triggers surges or weakens towers!
 	wm.start_wave()
-	assert(not surge.is_surge_paused())
+	surge.step_surge(5000.0)
+	assert(GameState.mission.surge_count == 0, "v3.0 must NEVER trigger Surge penalties")
+	assert(is_equal_approx(GameState.get_tower_attack_speed_multiplier(), 1.0))
 
-	# Step 3 full surge windows in 0.5 s increments
-	var win: float = Balance.SURGE_BASE_WINDOW
-	var steps_for_3: int = int(round((win * 3.0) / 0.5))
-	for _i in range(steps_for_3):
-		surge.step_surge(0.5)
+	# 2) Surge row hidden in HUD BottomBar
+	var surge_row: Control = hud.get_node_or_null("BottomBar/VBox/SurgeRow") as Control
+	assert(surge_row != null and not surge_row.visible, "SurgeRow must stay hidden in v3.0")
 
-	assert(surge_events == [1, 2, 3], "Expected 3 surges at %.1f s intervals, got %s" % [win, str(surge_events)])
-	assert(warning_events == [1, 2, 1, 2, 1, 2], "Expected amber(1) & red(2) warnings before every surge, got %s" % str(warning_events))
+	# 3) Paid Time Ability Upgrade Ladders (T1 -> T5) for Time Freeze, Overclock & Temporal Rewind
+	GameState.mission.economy["money"] = 0
+	assert(not tp.can_upgrade_ability("pause") and not tp.can_upgrade_ability("haste") and not tp.can_upgrade_ability("rewind"))
+	GameState.mission.economy["money"] = 25000
+	for ak in ["pause", "haste", "rewind"]:
+		for expected_t in range(2, 6):
+			assert(tp.can_upgrade_ability(ak), "Should be able to upgrade %s to T%d" % [ak, expected_t])
+			assert(tp.upgrade_ability(ak))
+			assert(GameState.get_ability_level(ak) == expected_t)
+		assert(not tp.can_upgrade_ability(ak), "%s must cap at Tier 5" % ak)
 
-	hud._refresh_surge_bar()
-	assert(hud.surge_penalty_label.text.contains("86%"), "3 surges must display 86%% speed, got: %s" % hud.surge_penalty_label.text)
-
-	# Verify time_power_used signal resets timer and prevents surge
-	surge.step_surge(win - 5.0) # 5 s left
-	GameState.time_power_used.emit("test")
-	assert(is_equal_approx(GameState.mission.surge_timer_seconds, win), "Using power must reset surge timer")
-	surge.step_surge(win - 5.0)
-	assert(GameState.mission.surge_count == 3, "Prevented surge via test button")
-
-	# Verify manipulator upgrade pauses surge timer
-	GameState.mission.manipulator_upgrading_remaining = 10.0
-	assert(surge.is_surge_paused())
-	var before_pause: float = GameState.mission.surge_timer_seconds
-	surge.step_surge(20.0)
-	assert(is_equal_approx(GameState.mission.surge_timer_seconds, before_pause))
-
-	# Verify reset clears surges
+	# 4) Reset mission cleanly restores all ability tiers to T1
 	GameState.reset_mission()
-	assert(GameState.mission.surge_count == 0 and is_equal_approx(GameState.mission.surge_timer_seconds, win))
+	assert(GameState.get_ability_level("pause") == 1 and GameState.get_ability_level("haste") == 1 and GameState.get_ability_level("rewind") == 1)
 
-	print("STEP5_TEST_PASS surges=%s warnings=%s" % [str(surge_events), str(warning_events)])
+	print("STEP5_TEST_PASS surge_retired=ok abilities_t1_to_t5=ok")
 	get_tree().quit(0)
