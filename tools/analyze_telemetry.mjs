@@ -100,7 +100,8 @@ function analyze(allRuns) {
   const byVer = {}, waveMap = {}, towerMap = {}, zoneMap = {}, enemyLeaks = {};
   const btnPresses = {}, disabledTaps = {}, tapLand = {}, tapPort = {};
   const orientations = { landscape: 0, portrait: 0 };
-  let totalTaps = 0, touchTaps = 0, totalScrolls = 0, guideDismissed = 0, guideCompleted = 0;
+  let totalTaps = 0, touchTaps = 0, totalScrolls = 0, guideShown = 0, guideDismissed = 0, guideCompleted = 0;
+  const zoomTotals = { pinch: 0, wheel: 0, button: 0, pan: 0, maxZoom: 1.0 };
   const upgrades = { damage: 0, range: 0, fire_rate: 0 };
   const powers = { rewind: 0, pause: 0, haste: 0 };
   let wins = 0, losses = 0, stalled = 0, chargesTotal = 0, sumCs = 0, sumKp = 0, kpCnt = 0, sumBp = 0, bpCnt = 0, sumSpd = 0, surges = 0;
@@ -134,8 +135,15 @@ function analyze(allRuns) {
     for (const [dk2, dc] of Object.entries(ui.disabled_taps || {})) disabledTaps[dk2] = (disabledTaps[dk2] || 0) + Number(dc || 0);
     for (const [ck, cc] of Object.entries(ui.tap_grid_landscape || {})) tapLand[ck] = (tapLand[ck] || 0) + Number(cc || 0);
     for (const [ck2, cc2] of Object.entries(ui.tap_grid_portrait || {})) tapPort[ck2] = (tapPort[ck2] || 0) + Number(cc2 || 0);
+    guideShown += Number(ui.guide_stats?.beats_shown || 0);
     if (ui.guide_stats?.dismissed_at) guideDismissed++;
     if (ui.guide_stats?.completed) guideCompleted++;
+    const zs = ui.zoom_stats || {};
+    zoomTotals.pinch += Number(zs.pinch_count || 0);
+    zoomTotals.wheel += Number(zs.wheel_count || 0);
+    zoomTotals.button += Number(zs.button_count || 0);
+    zoomTotals.pan += Number(zs.pan_count || 0);
+    zoomTotals.maxZoom = Math.max(zoomTotals.maxZoom, Number(zs.max_zoom || 1.0));
 
     for (const wl of (r.wave_log || [])) {
       const w = Number(wl.wave || 1);
@@ -226,7 +234,7 @@ function analyze(allRuns) {
     byVersion: Object.values(byVer), topWaves: waves.slice(0, 8), towers: towers.slice(0, 15),
     enemyLeaks, proposals,
     ui: {
-      totalTaps, touchTaps, totalScrolls, orientations, guideDismissed, guideCompleted,
+      totalTaps, touchTaps, totalScrolls, orientations, guideShown, guideDismissed, guideCompleted, zoom: zoomTotals,
       topButtons: Object.entries(btnPresses).sort((a, b) => b[1] - a[1]).slice(0, 12),
       topDisabledTaps: Object.entries(disabledTaps).sort((a, b) => b[1] - a[1]).slice(0, 8),
       hotCellsLandscape: Object.entries(tapLand).sort((a, b) => b[1] - a[1]).slice(0, 6),
@@ -257,7 +265,8 @@ if (asJson) {
   console.log("\n--- Top Towers by Dmg/$ ---");
   for (const t of report.towers.slice(0, 10)) console.log(`  ${t.name} (${t.type}): built=${t.built} spent=$${t.spent} dmg=${Math.round(t.damage)} Dmg/$=${t.dpd.toFixed(1)} pick=${t.pickPct.toFixed(0)}% WR=${t.winPct.toFixed(0)}%`);
   console.log("\n--- UI Button & Tap Heatmap Telemetry ---");
-  console.log(`  Taps: ${report.ui.totalTaps} (${report.ui.touchTaps} touch) | Orientations: Landscape=${report.ui.orientations.landscape || 0} Portrait=${report.ui.orientations.portrait || 0} | Scrolls=${report.ui.totalScrolls} | Guide Vex: ${report.ui.guideCompleted} completed / ${report.ui.guideDismissed} dismissed`);
+  console.log(`  Taps: ${report.ui.totalTaps} (${report.ui.touchTaps} touch) | Orientations: Landscape=${report.ui.orientations.landscape || 0} Portrait=${report.ui.orientations.portrait || 0} | Scrolls=${report.ui.totalScrolls} | Guide Vex: ${report.ui.guideShown} beats / ${report.ui.guideCompleted} completed / ${report.ui.guideDismissed} dismissed`);
+  console.log(`  Battlefield Zoom: pinch=${report.ui.zoom.pinch} wheel=${report.ui.zoom.wheel} buttons=${report.ui.zoom.button} pan=${report.ui.zoom.pan} peak=${report.ui.zoom.maxZoom.toFixed(2)}x`);
   if (report.ui.topButtons.length) console.log("  Top Buttons: " + report.ui.topButtons.map(([k, v]) => `${k}=${v}`).join(", "));
   if (report.ui.topDisabledTaps.length) console.log("  Disabled Taps (UX Friction): " + report.ui.topDisabledTaps.map(([k, v]) => `${k}=${v}`).join(", "));
   if (report.ui.hotCellsLandscape.length) console.log("  Hot Tap Cells (Landscape 16x9): " + report.ui.hotCellsLandscape.map(([k, v]) => `(${k}):${v}`).join(", "));

@@ -1,7 +1,7 @@
 extends Node
 
 ## Headless Step 4 acceptance verification (Refinery Exponential Curve + Rogue-Like Meta-Research):
-## - Refinery prices match exponential $250 * 1.8^owned curve: $250, $450, $810, $1460, $2625
+## - Refinery prices match exponential $200 * 1.8^owned curve: $200, $360, $650, $1165, $2100
 ## - Anti-exploit: waiting in BUILD phase generates ZERO money from Refineries!
 ## - Research is spent between levels only, persists across missions, and uses rank costs [100, 250, 600, 1400, 3200]
 ## - Currency separation: research cannot buy towers, money cannot buy research
@@ -21,8 +21,8 @@ func _ready() -> void:
 	econ1.step_economy(60.0)
 	assert(GameState.mission.economy["money"] == start_m, "Refineries MUST NOT generate money when not in a wave!")
 
-	# Verify exponential refinery cost ramp: $250 * 1.8^owned -> 250, 450, 810, 1460, 2625
-	var expected_costs: Array[int] = [250, 450, 810, 1460, 2625]
+	# Verify exponential refinery cost ramp: $200 * 1.8^owned -> 200, 360, 650, 1165, 2100
+	var expected_costs: Array[int] = [200, 360, 650, 1165, 2100]
 	for owned_count in range(0, 5):
 		GameState.mission.economy["refineries_owned"] = owned_count
 		var c: int = econ1.get_next_refinery_cost()
@@ -66,5 +66,5 @@ func _ready() -> void:
 
 	main1.queue_free()
 	GameState.reset_meta_progression()
-	print("STEP4_TEST_PASS refinery_ramp=[250,450,810,1460,2625] meta_research=ok")
+	print("STEP4_TEST_PASS refinery_ramp=[200,360,650,1165,2100] meta_research=ok")
 	get_tree().quit(0)

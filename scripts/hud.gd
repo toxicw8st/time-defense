@@ -161,6 +161,19 @@ var _pan_is_middle: bool = false
 var _pan_start_pos: Vector2 = Vector2.ZERO
 var _pan_last_pos: Vector2 = Vector2.ZERO
 var _is_panning_map: bool = false
+var _pinch_zoom_changed: bool = false
+var _last_wheel_log_sec: float = -10.0
+var wave_intel_button: Button = null
+var wave_intel_card: PanelContainer = null
+var wave_intel_title_label: Label = null
+var wave_intel_bounty_label: Label = null
+var wave_intel_hide_button: Button = null
+var wave_intel_roster_box: HFlowContainer = null
+var wave_intel_tip_label: Label = null
+var wave_intel_mut_label: Label = null
+var _wave_intel_hidden_for_wave: int = -1
+var _wave_intel_pinned_in_combat: bool = false
+var _last_wave_intel_sig: String = ""
 var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
@@ -321,6 +334,7 @@ func _ready() -> void:
 	_build_start_menu()
 	_build_combine_and_sandbox_ui()
 	_build_zoom_controls_ui()
+	_build_wave_intel_ui()
 	_setup_responsive_grids()
 	_build_guide_ui()
 	_setup_right_panel_buttons()
@@ -1503,12 +1517,17 @@ func _step_map_zoom(direction: int) -> void:
 		map_ref.zoom_to_local_point(target, _selected_tower.position)
 	else:
 		map_ref.set_user_zoom(target)
+	if AnalyticsManager != null:
+		AnalyticsManager.record_zoom_event("button", map_ref.user_zoom)
 	_refresh_zoom_controls()
 
 
 func _reset_map_zoom() -> void:
 	if map_ref != null:
+		var was_z: bool = map_ref.user_zoom > 1.01
 		map_ref.reset_user_zoom()
+		if was_z and AnalyticsManager != null:
+			AnalyticsManager.record_zoom_event("button", 1.0)
 	_refresh_zoom_controls()
 
 
@@ -1524,6 +1543,338 @@ func _refresh_zoom_controls() -> void:
 		zoom_in_button.disabled = (z >= GameMap.MAX_USER_ZOOM - 0.02)
 
 
+func _build_wave_intel_ui() -> void:
+	if wave_intel_card != null:
+		return
+	var row1: HBoxContainer = get_node_or_null("TopBar/VBox/Row1") as HBoxContainer
+	if row1 != null and wave_intel_button == null:
+		wave_intel_button = Button.new()
+		wave_intel_button.name = "WaveIntelButton"
+		wave_intel_button.text = "Next Wave ▾"
+		wave_intel_button.tooltip_text = "Show / Hide detailed Next Wave Intel & counter tips"
+		wave_intel_button.custom_minimum_size = Vector2(104.0, 24.0)
+		wave_intel_button.add_theme_font_size_override("font_size", 11)
+		wave_intel_button.pressed.connect(_toggle_wave_intel_card)
+		UIIcons.apply_right_button_theme(wave_intel_button, Color(0.32, 0.86, 1.0))
+		row1.add_child(wave_intel_button)
+
+	wave_intel_card = PanelContainer.new()
+	wave_intel_card.name = "NextWaveIntelCard"
+	wave_intel_card.visible = false
+	wave_intel_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.94), Color(0.35, 0.82, 1.0), 10, 10.0, 7.0))
+	add_child(wave_intel_card)
+	if surge_banner != null and surge_banner.get_parent() == self:
+		move_child(wave_intel_card, surge_banner.get_index())
+
+	var vb := VBoxContainer.new()
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 5)
+	wave_intel_card.add_child(vb)
+
+	var hdr_row := HBoxContainer.new()
+	hdr_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr_row.add_theme_constant_override("separation", 8)
+	vb.add_child(hdr_row)
+
+	wave_intel_title_label = Label.new()
+	wave_intel_title_label.name = "WaveIntelTitleLabel"
+	wave_intel_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_title_label.add_theme_font_size_override("font_size", 13)
+	wave_intel_title_label.add_theme_color_override("font_color", Color(0.55, 0.96, 1.0))
+	wave_intel_title_label.text = "NEXT: WAVE 1"
+	hdr_row.add_child(wave_intel_title_label)
+
+	wave_intel_bounty_label = Label.new()
+	wave_intel_bounty_label.name = "WaveIntelBountyLabel"
+	wave_intel_bounty_label.add_theme_font_size_override("font_size", 12)
+	wave_intel_bounty_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.36))
+	wave_intel_bounty_label.text = "Reward: $80"
+	hdr_row.add_child(wave_intel_bounty_label)
+
+	wave_intel_hide_button = Button.new()
+	wave_intel_hide_button.name = "WaveIntelHideButton"
+	wave_intel_hide_button.text = "Hide ✕"
+	wave_intel_hide_button.tooltip_text = "Hide Next Wave Intel for this wave (tap TopBar Intel button anytime to reopen)"
+	wave_intel_hide_button.custom_minimum_size = Vector2(62.0, 24.0)
+	wave_intel_hide_button.add_theme_font_size_override("font_size", 11)
+	wave_intel_hide_button.pressed.connect(_on_wave_intel_hide_pressed)
+	UIIcons.apply_right_button_theme(wave_intel_hide_button, Color(0.52, 0.66, 0.84))
+	hdr_row.add_child(wave_intel_hide_button)
+
+	wave_intel_roster_box = HFlowContainer.new()
+	wave_intel_roster_box.name = "WaveIntelRosterBox"
+	wave_intel_roster_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_roster_box.add_theme_constant_override("h_separation", 6)
+	wave_intel_roster_box.add_theme_constant_override("v_separation", 4)
+	vb.add_child(wave_intel_roster_box)
+
+	wave_intel_tip_label = Label.new()
+	wave_intel_tip_label.name = "WaveIntelTipLabel"
+	wave_intel_tip_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	wave_intel_tip_label.add_theme_font_size_override("font_size", 12)
+	wave_intel_tip_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
+	wave_intel_tip_label.text = ""
+	vb.add_child(wave_intel_tip_label)
+
+	wave_intel_mut_label = Label.new()
+	wave_intel_mut_label.name = "WaveIntelMutLabel"
+	wave_intel_mut_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_mut_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	wave_intel_mut_label.add_theme_font_size_override("font_size", 11)
+	wave_intel_mut_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.34))
+	wave_intel_mut_label.visible = false
+	vb.add_child(wave_intel_mut_label)
+
+
+func _toggle_wave_intel_card() -> void:
+	if wave_manager_ref == null:
+		return
+	if wave_manager_ref.is_wave_active():
+		_wave_intel_pinned_in_combat = not _wave_intel_pinned_in_combat
+	else:
+		var cur_w: int = GameState.mission.wave_number
+		if _wave_intel_hidden_for_wave == cur_w:
+			_wave_intel_hidden_for_wave = -1
+		else:
+			_wave_intel_hidden_for_wave = cur_w
+	_last_wave_intel_sig = ""
+	_refresh_wave_intel_card()
+
+
+func _on_wave_intel_hide_pressed() -> void:
+	if wave_manager_ref == null:
+		return
+	if wave_manager_ref.is_wave_active():
+		_wave_intel_pinned_in_combat = false
+	else:
+		_wave_intel_hidden_for_wave = GameState.mission.wave_number
+	_last_wave_intel_sig = ""
+	_refresh_wave_intel_card()
+
+
+func _get_enemy_trait_badge(utype: String) -> Dictionary:
+	match utype:
+		"crawler":
+			return {"tag": "Standard", "color": Color(0.76, 0.88, 0.98)}
+		"rusher":
+			return {"tag": "Fast 2x", "color": Color(1.0, 0.92, 0.48)}
+		"brute":
+			return {"tag": "Armored", "color": Color(1.0, 0.76, 0.34)}
+		"blitzer":
+			return {"tag": "Refl 3x", "color": Color(0.58, 0.80, 1.0)}
+		"juggernaut":
+			return {"tag": "BOSS • Arm+Refl", "color": Color(1.0, 0.50, 0.28)}
+		"colossus":
+			return {"tag": "SIEGE BOSS", "color": Color(1.0, 0.36, 0.28)}
+		"stalker":
+			return {"tag": "CLOAKED • Refl", "color": Color(0.95, 0.45, 1.0)}
+		"mender":
+			return {"tag": "REGEN 6%/s", "color": Color(0.45, 1.0, 0.58)}
+		"carrier":
+			return {"tag": "SPLITS x6", "color": Color(1.0, 0.68, 0.28)}
+		"conduit":
+			return {"tag": "SHIELD -35%", "color": Color(0.38, 0.94, 1.0)}
+		_:
+			return {"tag": "Alien", "color": Color(0.85, 0.90, 0.96)}
+
+
+func _build_wave_intel_tactical_tip(wave_num: int, counts: Dictionary) -> String:
+	var tips: PackedStringArray = []
+	if counts.has("stalker"):
+		tips.append("CLOAKED ALERT: Normal Blasters/Mortars/Annihilators CANNOT SEE Phase Stalkers! Upgrade Range to Lv2 (+CAMO & +25% dmg), OR use Laser / Chrono Slow / Railgun.")
+	if counts.has("conduit"):
+		tips.append("SHIELD AURA: Aegis Conduits cut damage to nearby aliens by 35% — set a Railgun/Sniper to Strongest or use T4/T5 Shield-Strip!")
+	if counts.has("colossus"):
+		tips.append("SIEGE BOSS: Colossus costs 8♥ if leaked! Stack Piercing (180%), Railgun Decay, Tier-4/5 evolutions & PAUSE.")
+	elif counts.has("juggernaut"):
+		tips.append("BOSS WAVE: Each Juggernaut costs 5♥ if leaked! Stack Piercing (Blaster/Annihilator 180%), Chrono Slow bubbles & PAUSE.")
+	if counts.has("carrier"):
+		tips.append("SPLITTER: Brood Carriers burst into 2 Blitzers + 4 Rushers on death — pair Mortar/Splash AoE with Slow Bubbles!")
+	if counts.has("mender"):
+		tips.append("HEALER: Bio-Menders regen 6% HP/s — suppress regen with Chrono Decay, Laser+Slow Burn, or Armor Shred.")
+	if tips.is_empty():
+		if counts.has("blitzer"):
+			tips.append("REFLECTIVE (3x speed): Blitzers bounce Lasers (only 10% dmg!) — counter with Piercing (Blaster/Annihilator) or Chrono Slow.")
+		elif counts.has("brute"):
+			tips.append("ARMORED BRUTES (3♥ each): Normal shells deal 50% — Piercing (Blaster/Railgun) deals 150% damage!")
+		elif counts.has("rusher") and wave_num <= 4:
+			tips.append("FAST SWARM (2x speed): Rushers sprint down lanes — Laser (150% vs Standard), Chrono Slow, or Mortar splash clear packs cleanly.")
+		else:
+			tips.append("STANDARD WAVE: Laser deals 150% vs Standard aliens. Upgrade base towers to 3+ combined ranks to Fuse them into stronger Combos!")
+	return "HOW TO COUNTER: " + "  ".join(tips.slice(0, 2))
+
+
+func _refresh_wave_intel_card() -> void:
+	if wave_intel_card == null or wave_manager_ref == null:
+		return
+	var in_combat: bool = wave_manager_ref.is_wave_active()
+	var max_w: int = wave_manager_ref.max_waves_limit
+	var cur_w: int = GameState.mission.wave_number
+	var target_w: int = (cur_w + 1) if in_combat else cur_w
+	if not GameState.is_endless_mode:
+		target_w = mini(target_w, max_w)
+	var preview: Dictionary = wave_manager_ref.get_preview_data(target_w)
+	var counts: Dictionary = preview["counts"]
+	var exam_title: String = str(preview.get("exam_title", ""))
+	var is_cloak_wave: bool = counts.has("stalker")
+	var is_boss_wave: bool = counts.has("juggernaut") or counts.has("colossus") or exam_title != ""
+
+	var new_enemies: Array[String] = []
+	for utype in ["colossus", "juggernaut", "conduit", "carrier", "mender", "stalker", "blitzer", "brute", "rusher", "crawler"]:
+		if counts.has(utype) and int(Balance.ENEMIES[utype].get("first_wave", 999)) == target_w and target_w > 1:
+			new_enemies.append(utype)
+
+	var overlay_blocked: bool = false
+	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay]:
+		if ov != null and ov.visible:
+			overlay_blocked = true
+			break
+	var should_show: bool = (not overlay_blocked) and (not GameState.mission.is_over) and (
+		_wave_intel_pinned_in_combat if in_combat else (_wave_intel_hidden_for_wave != cur_w)
+	)
+
+	if wave_intel_button != null:
+		var prefix_btn: String = "Next W%d" % target_w if in_combat else "W%d Intel" % target_w
+		var alert_sym: String = " ⚠" if (is_cloak_wave or is_boss_wave or not new_enemies.is_empty()) else ""
+		var arrow_sym: String = " ▴" if should_show else " ▾"
+		wave_intel_button.text = "%s%s%s" % [prefix_btn, alert_sym, arrow_sym]
+		if is_cloak_wave:
+			wave_intel_button.modulate = Color(0.98, 0.58, 1.0)
+		elif is_boss_wave:
+			wave_intel_button.modulate = Color(1.0, 0.68, 0.34)
+		elif not new_enemies.is_empty():
+			wave_intel_button.modulate = Color(1.0, 0.90, 0.42)
+		else:
+			wave_intel_button.modulate = Color(0.75, 0.96, 1.0) if should_show else Color.WHITE
+
+	wave_intel_card.visible = should_show
+	if not should_show:
+		return
+
+	var muts: Array = preview["active_mutations"]
+	var sig: String = "%d|%s|%s|%.3f|%d|%s" % [
+		target_w,
+		str(in_combat),
+		_current_layout_mode,
+		GameState.get_enemy_hp_multiplier(),
+		muts.size(),
+		GameState.difficulty_key,
+	]
+	if sig == _last_wave_intel_sig:
+		return
+	_last_wave_intel_sig = sig
+
+	var is_port: bool = (_current_layout_mode == "portrait")
+	var is_wide: bool = (_current_layout_mode == "landscape_wide")
+	var border_col := Color(0.34, 0.80, 1.0)
+	var title_col := Color(0.55, 0.96, 1.0)
+	var heading_prefix: String = "UP NEXT: WAVE %d" % target_w if in_combat else "NEXT: WAVE %d" % target_w
+	if is_cloak_wave and new_enemies.has("stalker"):
+		heading_prefix += "  —  ⚠ NEW CLOAKED ENEMY!"
+		border_col = Color(0.92, 0.42, 1.0)
+		title_col = Color(1.0, 0.60, 1.0)
+	elif exam_title != "":
+		heading_prefix = "★ %s: %s" % [heading_prefix, exam_title]
+		border_col = Color(1.0, 0.56, 0.24)
+		title_col = Color(1.0, 0.78, 0.36)
+	elif is_boss_wave:
+		heading_prefix += "  —  ★ BOSS WAVE!"
+		border_col = Color(1.0, 0.46, 0.28)
+		title_col = Color(1.0, 0.68, 0.36)
+	elif is_cloak_wave:
+		heading_prefix += "  —  ⚠ CLOAKED THREAT"
+		border_col = Color(0.88, 0.45, 1.0)
+		title_col = Color(0.98, 0.62, 1.0)
+	elif not new_enemies.is_empty():
+		var first_new_name: String = str(Balance.ENEMIES[new_enemies[0]]["name"]).to_upper()
+		heading_prefix += "  —  NEW ENEMY: %s!" % first_new_name
+		border_col = Color(1.0, 0.82, 0.30)
+		title_col = Color(1.0, 0.90, 0.45)
+
+	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.94), border_col, 10, 12.0 if is_port else 10.0, 10.0 if is_port else 7.0))
+	wave_intel_title_label.text = heading_prefix
+	wave_intel_title_label.add_theme_color_override("font_color", title_col)
+	wave_intel_title_label.add_theme_font_size_override("font_size", 21 if is_port else (14 if is_wide else 13))
+
+	var est_bounty: int = int(round(float(preview.get("b_dollars", 0)) * GameState.get_enemy_bounty_multiplier()))
+	wave_intel_bounty_label.text = "Reward: ~$%d" % est_bounty
+	wave_intel_bounty_label.add_theme_font_size_override("font_size", 19 if is_port else (13 if is_wide else 12))
+	wave_intel_hide_button.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
+	wave_intel_hide_button.custom_minimum_size = Vector2(96.0, 40.0) if is_port else (Vector2(68.0, 28.0) if is_wide else Vector2(58.0, 24.0))
+
+	for ch in wave_intel_roster_box.get_children():
+		ch.queue_free()
+
+	var icon_px: int = 36 if is_port else (26 if is_wide else 22)
+	var chip_fs: int = 18 if is_port else (12 if is_wide else 11)
+	var sub_fs: int = 15 if is_port else (10 if is_wide else 10)
+	for utype in ["colossus", "juggernaut", "conduit", "carrier", "mender", "stalker", "blitzer", "brute", "rusher", "crawler"]:
+		if not counts.has(utype):
+			continue
+		var cnt: int = int(counts[utype])
+		var ecfg: Dictionary = Balance.ENEMIES[utype]
+		var ename: String = str(ecfg["name"])
+		var ehp: int = GameState.get_enemy_wave_hp(utype, target_w)
+		var leak_c: int = int(ecfg.get("leak_cost", 1))
+		var badge: Dictionary = _get_enemy_trait_badge(utype)
+		var tcol: Color = badge["color"]
+		var is_new_e: bool = new_enemies.has(utype)
+
+		var chip := PanelContainer.new()
+		chip.add_theme_stylebox_override("panel", UIIcons.make_panel_style(
+			Color(0.11, 0.14, 0.24, 0.96) if is_new_e else Color(0.08, 0.12, 0.20, 0.92),
+			Color(1.0, 0.86, 0.30) if is_new_e else tcol.darkened(0.25),
+			7, 7.0, 4.0
+		))
+		var chb := HBoxContainer.new()
+		chb.add_theme_constant_override("separation", 6)
+		chip.add_child(chb)
+
+		var e_icon: ImageTexture = SpriteLibrary.get_ui_badge_icon(utype, icon_px)
+		if e_icon != null:
+			var tr := TextureRect.new()
+			tr.texture = e_icon
+			tr.custom_minimum_size = Vector2(icon_px, icon_px)
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			chb.add_child(tr)
+
+		var tvb := VBoxContainer.new()
+		tvb.add_theme_constant_override("separation", 0)
+		chb.add_child(tvb)
+
+		var top_l := Label.new()
+		top_l.text = ("%s%dx %s" % ["NEW! " if is_new_e else "", cnt, ename])
+		top_l.add_theme_font_size_override("font_size", chip_fs)
+		top_l.add_theme_color_override("font_color", Color(1.0, 0.94, 0.55) if is_new_e else Color.WHITE)
+		tvb.add_child(top_l)
+
+		var sub_l := Label.new()
+		var leak_tag: String = (" • %d♥" % leak_c) if leak_c > 1 else ""
+		sub_l.text = "%d HP • %s%s" % [ehp, str(badge["tag"]), leak_tag]
+		sub_l.add_theme_font_size_override("font_size", sub_fs)
+		sub_l.add_theme_color_override("font_color", tcol)
+		tvb.add_child(sub_l)
+
+		wave_intel_roster_box.add_child(chip)
+
+	wave_intel_tip_label.text = _build_wave_intel_tactical_tip(target_w, counts)
+	wave_intel_tip_label.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
+	wave_intel_tip_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.98) if is_cloak_wave else Color(0.92, 0.97, 1.0))
+
+	if muts.is_empty():
+		wave_intel_mut_label.visible = false
+	else:
+		var m_parts: PackedStringArray = []
+		for item in muts:
+			m_parts.append("%s x%d (%s)" % [str(item["label"]), int(item["stacks"]), str(item["effect"])])
+		wave_intel_mut_label.text = "⚠ Active Mutations: " + " | ".join(m_parts)
+		wave_intel_mut_label.add_theme_font_size_override("font_size", 16 if is_port else 11)
+		wave_intel_mut_label.visible = true
+	wave_intel_card.reset_size()
+
+
 func _is_any_blocking_overlay_visible() -> bool:
 	for ov in [start_menu_overlay, pause_overlay, between_levels_overlay, end_overlay, recipes_overlay, analytics_overlay, guide_panel]:
 		if ov != null and ov.visible:
@@ -1536,7 +1887,7 @@ func _is_point_in_battlefield_open(screen_pos: Vector2) -> bool:
 		return false
 	if not map_ref.get_viewport_rect_screen().has_point(screen_pos):
 		return false
-	for hud_ctrl in [top_bar, bottom_bar, right_panel, zoom_bar, sandbox_panel, debug_panel, enemy_inspector_panel]:
+	for hud_ctrl in [top_bar, bottom_bar, right_panel, zoom_bar, wave_intel_card, sandbox_panel, debug_panel, enemy_inspector_panel]:
 		if hud_ctrl != null and hud_ctrl.visible and hud_ctrl.get_global_rect().has_point(screen_pos):
 			return false
 	return true
@@ -1982,11 +2333,19 @@ func _input(event: InputEvent) -> void:
 			if event.button_index == MOUSE_BUTTON_WHEEL_UP and _is_point_in_battlefield_open(event.position):
 				map_ref.set_user_zoom(map_ref.user_zoom * 1.18, event.position)
 				_refresh_zoom_controls()
+				var now_w1: float = float(Time.get_ticks_msec()) * 0.001
+				if now_w1 - _last_wheel_log_sec >= 0.6 and AnalyticsManager != null:
+					_last_wheel_log_sec = now_w1
+					AnalyticsManager.record_zoom_event("wheel", map_ref.user_zoom)
 				get_viewport().set_input_as_handled()
 				return
 			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and _is_point_in_battlefield_open(event.position):
 				map_ref.set_user_zoom(map_ref.user_zoom / 1.18, event.position)
 				_refresh_zoom_controls()
+				var now_w2: float = float(Time.get_ticks_msec()) * 0.001
+				if now_w2 - _last_wheel_log_sec >= 0.6 and AnalyticsManager != null:
+					_last_wheel_log_sec = now_w2
+					AnalyticsManager.record_zoom_event("wheel", map_ref.user_zoom)
 				get_viewport().set_input_as_handled()
 				return
 			elif (event.button_index == MOUSE_BUTTON_MIDDLE or (event.button_index == MOUSE_BUTTON_LEFT and map_ref.user_zoom > 1.01)) and _is_point_in_battlefield_open(event.position):
@@ -2002,6 +2361,8 @@ func _input(event: InputEvent) -> void:
 				_pan_is_middle = false
 				_is_panning_map = false
 				if was_panning:
+					if AnalyticsManager != null:
+						AnalyticsManager.record_zoom_event("pan", map_ref.user_zoom)
 					get_viewport().set_input_as_handled()
 					return
 		elif event is InputEventMouseMotion and _pan_pointer_active and map_ref.user_zoom > 1.01:
@@ -2021,11 +2382,15 @@ func _input(event: InputEvent) -> void:
 						var pts: Array = _active_touches.values()
 						_pinch_prev_dist = maxf(10.0, (pts[0] as Vector2).distance_to(pts[1] as Vector2))
 						_pinch_prev_mid = ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
+						_pinch_zoom_changed = false
 						_pan_pointer_active = false
 						_is_panning_map = false
 			else:
 				_active_touches.erase(event.index)
 				if _active_touches.size() < 2:
+					if _pinch_zoom_changed and AnalyticsManager != null:
+						AnalyticsManager.record_zoom_event("pinch", map_ref.user_zoom)
+					_pinch_zoom_changed = false
 					_pinch_prev_dist = 0.0
 		elif event is InputEventScreenDrag and _active_touches.has(event.index):
 			_active_touches[event.index] = event.position
@@ -2037,8 +2402,11 @@ func _input(event: InputEvent) -> void:
 				var cur_mid: Vector2 = (p0 + p1) * 0.5
 				if _pinch_prev_dist > 10.0:
 					var ratio: float = cur_dist / _pinch_prev_dist
+					var prev_z: float = map_ref.user_zoom
 					map_ref.pan_by_screen_delta(cur_mid - _pinch_prev_mid)
 					map_ref.set_user_zoom(map_ref.user_zoom * ratio, cur_mid)
+					if absf(map_ref.user_zoom - prev_z) >= 0.015:
+						_pinch_zoom_changed = true
 					_refresh_zoom_controls()
 				_pinch_prev_dist = cur_dist
 				_pinch_prev_mid = cur_mid
@@ -2143,6 +2511,7 @@ func _refresh_all() -> void:
 	clock_label.text = "Time: %02d:%02d (%s)" % [mins, secs, GameState.get_relative_speed_label()]
 
 	_refresh_preview_panel()
+	_refresh_wave_intel_card()
 	_refresh_selection_panel()
 	_refresh_manipulator_panel()
 	_refresh_refinery_tech_button()
@@ -2370,22 +2739,19 @@ func _refresh_preview_panel() -> void:
 	var max_w: int = wave_manager_ref.max_waves_limit
 	var exam_title: String = str(preview.get("exam_title", ""))
 	if exam_title != "":
-		preview_title_label.text = "★ W%d %s (s$%d, b$%d)" % [
+		preview_title_label.text = "★ W%d %s  •  Reward $%d" % [
 			wave_num,
 			exam_title,
-			int(preview.get("s_dollars", 0)),
-			int(preview.get("b_dollars", 0)),
+			int(round(float(preview.get("b_dollars", 0)) * GameState.get_enemy_bounty_multiplier())),
 		]
 		preview_title_label.modulate = Color(1.0, 0.72, 0.32)
 	else:
-		preview_title_label.text = "WAVE %d / %d (s$%d, b$%d, DPS req %d)" % [
+		preview_title_label.text = "WAVE %d / %d  •  Reward ~$%d" % [
 			wave_num,
 			max_w,
-			int(preview.get("s_dollars", 0)),
-			int(preview.get("b_dollars", 0)),
-			int(preview.get("dps_needed", 0)),
+			int(round(float(preview.get("b_dollars", 0)) * GameState.get_enemy_bounty_multiplier())),
 		]
-		preview_title_label.modulate = Color.WHITE
+		preview_title_label.modulate = Color(0.76, 0.94, 1.0)
 
 	var counts: Dictionary = preview["counts"]
 	var unit_parts: PackedStringArray = []
@@ -2489,7 +2855,7 @@ func _refresh_selection_panel() -> void:
 			_style_upgrade_button(upg_dmg_button, decay_lbl, "damage", _selected_tower, money, decay_desc)
 		else:
 			_style_upgrade_button(upg_dmg_button, "Dmg" if compact_2col else "Damage", "damage", _selected_tower, money, "+30% / +68% / +115% / +170% / +235% total damage")
-		_style_upgrade_button(upg_rng_button, "Rng" if compact_2col else "Range", "range", _selected_tower, money, "+25%..+160% range (Lv2+ detects Cloaked!)")
+		_style_upgrade_button(upg_rng_button, "Rng" if compact_2col else "Range", "range", _selected_tower, money, "+25%..+160% range | Lv2+ unlocks CAMO detect & +25%..+40% dmg vs Cloaked!")
 		_style_upgrade_button(upg_spd_button, "Spd" if compact_2col else "Fire Rate", "fire_rate", _selected_tower, money, "+18% / +38% / +62% / +90% / +120% fire speed")
 
 		if combine_button != null:
@@ -2820,7 +3186,8 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 		for i in range(Balance.TOWER_UPGRADE_MAX_LEVEL):
 			pips += "[*]" if i < lvl else "[ ]"
 	if lvl >= Balance.TOWER_UPGRADE_MAX_LEVEL:
-		btn.text = "%s MAX" % title if compact_lbl else ("%s %s MAX" % [title, pips])
+		var max_camo: String = " [CAMO]" if (key == "range" and tower.can_detect_cloaked()) else ""
+		btn.text = ("%s MAX%s" % [title, max_camo]) if compact_lbl else ("%s %s MAX%s" % [title, pips, max_camo])
 		btn.disabled = true
 		btn.modulate = Color(0.75, 0.92, 0.78)
 		_set_button_description(btn, "%s MAX (%d/%d): %s." % [title, Balance.TOWER_UPGRADE_MAX_LEVEL, Balance.TOWER_UPGRADE_MAX_LEVEL, desc_detail])
@@ -2828,7 +3195,17 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 	var cost: int = Balance.get_tower_upgrade_cost(key, lvl, tower.tower_type)
 	var btime: int = int(Balance.TOWER_UPGRADE_BUILD_TIMES[lvl])
 	var can_buy: bool = tower.can_start_upgrade(key)
-	btn.text = "%s %s ($%d)" % [title, pips, cost]
+	var camo_suffix: String = ""
+	var is_camo_unlock_step: bool = false
+	if key == "range":
+		if tower.can_detect_cloaked():
+			camo_suffix = " [CAMO]"
+		elif lvl == 1:
+			camo_suffix = " [+CAMO!]"
+			is_camo_unlock_step = true
+		elif lvl == 0:
+			camo_suffix = " (Camo@L2)"
+	btn.text = "%s %s ($%d)%s" % [title, pips, cost, camo_suffix]
 	btn.disabled = not can_buy
 	_set_button_description(btn, "Lvl %d/%d ($%d, %ds): %s. No fire while building." % [
 		lvl + 1,
@@ -2841,6 +3218,8 @@ func _style_upgrade_button(btn: Button, title: String, key: String, tower: Tower
 		btn.modulate = Color(1.0, 0.65, 0.65)
 	elif not can_buy:
 		btn.modulate = Color(0.8, 0.8, 0.85)
+	elif is_camo_unlock_step:
+		btn.modulate = Color(0.62, 1.0, 0.96)
 	else:
 		btn.modulate = Color.WHITE
 
@@ -3619,6 +3998,16 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 				if zb != null:
 					zb.custom_minimum_size = Vector2(34.0, 24.0)
 					zb.add_theme_font_size_override("font_size", 11)
+		if wave_intel_button != null:
+			wave_intel_button.custom_minimum_size = Vector2(104.0, 24.0)
+			wave_intel_button.add_theme_font_size_override("font_size", 11)
+		if wave_intel_card != null:
+			var intel_w_d: float = minf(690.0, 940.0 - 156.0 - 10.0)
+			wave_intel_card.position = Vector2(10.0, 68.0)
+			wave_intel_card.custom_minimum_size = Vector2(intel_w_d, 0.0)
+			wave_intel_card.size = Vector2(intel_w_d, wave_intel_card.get_combined_minimum_size().y)
+			_last_wave_intel_sig = ""
+			_refresh_wave_intel_card()
 		surge_banner.position = Vector2(150.0, 68.0)
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(572.0, 68.0)
@@ -3677,6 +4066,17 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 				if zb != null:
 					zb.custom_minimum_size = Vector2(46.0, 36.0)
 					zb.add_theme_font_size_override("font_size", 14)
+		if wave_intel_button != null:
+			wave_intel_button.custom_minimum_size = Vector2(128.0, 28.0)
+			wave_intel_button.add_theme_font_size_override("font_size", 12)
+		if wave_intel_card != null:
+			var intel_x_l: float = safe_x + 12.0
+			var intel_w_l: float = minf(760.0, maxf(340.0, right_panel.position.x - 196.0 - intel_x_l))
+			wave_intel_card.position = Vector2(intel_x_l, top_h + 6.0)
+			wave_intel_card.custom_minimum_size = Vector2(intel_w_l, 0.0)
+			wave_intel_card.size = Vector2(intel_w_l, wave_intel_card.get_combined_minimum_size().y)
+			_last_wave_intel_sig = ""
+			_refresh_wave_intel_card()
 
 		surge_banner.position = Vector2(safe_x + 12.0, top_h + 6.0)
 		surge_banner.size = Vector2(410.0, 42.0)
@@ -3723,6 +4123,16 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			if zb != null:
 				zb.custom_minimum_size = Vector2(64.0, 52.0)
 				zb.add_theme_font_size_override("font_size", 20)
+	if wave_intel_button != null:
+		wave_intel_button.custom_minimum_size = Vector2(190.0, 44.0)
+		wave_intel_button.add_theme_font_size_override("font_size", 18)
+	if wave_intel_card != null:
+		var intel_w_p: float = maxf(460.0, vp_size.x - 280.0)
+		wave_intel_card.position = Vector2(16.0, safe_top + p_top_h + 8.0)
+		wave_intel_card.custom_minimum_size = Vector2(intel_w_p, 0.0)
+		wave_intel_card.size = Vector2(intel_w_p, wave_intel_card.get_combined_minimum_size().y)
+		_last_wave_intel_sig = ""
+		_refresh_wave_intel_card()
 
 	bottom_bar.position = Vector2(0.0, bot_y)
 	_set_bottom_button_widths(1.0, 108.0, 20, true)
@@ -3767,7 +4177,13 @@ func _on_wave_summary_updated(summary_text: String) -> void:
 	_last_summary_text = summary_text
 
 
-func _on_wave_state_changed(_new_state: int) -> void:
+func _on_wave_state_changed(new_state: int) -> void:
+	if new_state == WaveManager.State.SPAWNING:
+		_wave_intel_pinned_in_combat = false
+	elif new_state == WaveManager.State.BUILD:
+		_wave_intel_hidden_for_wave = -1
+		_wave_intel_pinned_in_combat = false
+	_last_wave_intel_sig = ""
 	_check_teaching_prompt()
 	_refresh_all()
 
@@ -3817,6 +4233,14 @@ func trigger_guide_beat(beat_id: String) -> void:
 				"Heads up — big metal nightmare on the lane! Stack Piercing (180% vs Bosses) + Chrono Bubbles + PAUSE before it turns our Citadel into a pancake!",
 				"alert",
 				"Bring It On!"
+			)
+		"first_cloak":
+			_present_guide_beat(
+				"first_cloak",
+				"VEX  —  CLOAKED PHASE STALKERS AHEAD!",
+				"Warning, Commander! Wave 11 brings CLOAKED Phase Stalkers. Normal Blasters, Mortars & Annihilators CANNOT SEE them unless you upgrade Range to Lv2 (+CAMO & +25% bonus dmg) — or rely on Lasers, Chrono Slow, or Railguns!",
+				"alert",
+				"Sensors Ready!"
 			)
 
 
@@ -3899,7 +4323,7 @@ func _check_teaching_prompt() -> void:
 	elif w == 5 and st == WaveManager.State.BUILD:
 		beat_id = "w5_build"
 		title_txt = "VEX (7/8)  —  REFINERY TECH & META LAB"
-		body_txt = "Want to afford those $4k–$8k Apex Overdrives? Build a Refinery ($250), then upgrade Refinery Tech in the right panel: Chrono-Plant -> Temporal Bank (10% wave interest!) -> Singularity Mint!"
+		body_txt = "Want to afford those $4k–$8k Apex Overdrives? Build a Refinery ($200), then upgrade Refinery Tech in the right panel: Chrono-Plant -> Temporal Bank (10% wave interest!) -> Singularity Mint!"
 		mood = "proud"
 	elif w == 6 and st == WaveManager.State.BUILD:
 		beat_id = "w6_build"
@@ -3908,6 +4332,9 @@ func _check_teaching_prompt() -> void:
 		mood = "proud"
 	elif w == 10 and st == WaveManager.State.BUILD:
 		trigger_guide_beat("first_boss")
+		return
+	elif w == 11 and st == WaveManager.State.BUILD:
+		trigger_guide_beat("first_cloak")
 		return
 
 	if beat_id != "" and not GameState.mission.shown_prompts.get(beat_id, false):
@@ -4047,6 +4474,9 @@ func _on_mission_reset() -> void:
 	get_tree().paused = false
 	_banner_timer = 0.0
 	_last_summary_text = ""
+	_wave_intel_hidden_for_wave = -1
+	_wave_intel_pinned_in_combat = false
+	_last_wave_intel_sig = ""
 	_selected_pad_idx = -1
 	_selected_tower = null
 	_inspected_enemy = null

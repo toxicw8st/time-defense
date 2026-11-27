@@ -118,6 +118,8 @@ static func get_ui_badge_icon(kind: String, icon_size: int = 28) -> ImageTexture
 	var tex: Texture2D = null
 	if kind in ["blaster", "mortar", "laser", "slow", "railgun", "annihilator"] or kind.contains("+"):
 		tex = get_tower_texture(kind)
+	elif Balance.ENEMIES.has(kind):
+		tex = get_enemy_texture(kind)
 	elif kind in ["manipulator", "efficient_manipulator"]:
 		tex = get_structure_texture("chrono_manipulator")
 	elif kind in ["hive_breaker", "hive_destroyer"]:

@@ -283,8 +283,8 @@ func can_rewind_now() -> bool:
 	return is_wave_active()
 
 
-func get_preview_data() -> Dictionary:
-	var wave_num: int = GameState.mission.wave_number
+func get_preview_data(wave_override: int = -1) -> Dictionary:
+	var wave_num: int = wave_override if wave_override >= 1 else GameState.mission.wave_number
 	var counts: Dictionary = WavesData.get_wave_counts_by_type(wave_num)
 	var m := GameState.mission.mutations
 	var active_mutations: Array[Dictionary] = []

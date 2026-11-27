@@ -451,7 +451,7 @@ func _test_b_fourth_refinery_impossible_before_wave_5() -> void:
 		GameState.mission.economy["refineries_owned"] = owned
 
 	assert(owned < 4, "Player focusing on economy MUST NOT afford a 4th refinery before Wave 5! (owned=%d, leftover=$%.0f)" % [owned, money])
-	print("CHECK_B_PASS max_refineries_before_wave_5=%d (4th costs $1460, cumulative $2970)" % owned)
+	print("CHECK_B_PASS max_refineries_before_wave_5=%d (4th costs $1165, cumulative $2375)" % owned)
 	remove_child(inst)
 	inst.queue_free()
 
@@ -1667,10 +1667,75 @@ func _test_j_v2_btd5_evolution() -> void:
 	assert(map.position.x + GameMap.MAP_WIDTH * map.scale.x >= vp_box.end.x - 1.0, "Zoomed map pan must clamp inside right viewport edge")
 	hud.zoom_reset_button.pressed.emit()
 	assert(is_equal_approx(map.user_zoom, 1.0) and map.position.distance_to(base_pos_snap) < 1.5, "Zoom Reset must cleanly restore 1.0x full overview")
+
+	# 3k) Verify v2.4 Hard difficulty tuning, Range Lv2+ Camo Optics, Next Wave Intel Card, & Zoom/Vex Telemetry
+	assert(is_equal_approx(float(Balance.DIFFICULTY_PRESETS["hard"]["hp_mult"]), 1.22) and is_equal_approx(float(Balance.DIFFICULTY_PRESETS["hard"]["speed_mult"]), 1.08) and is_equal_approx(float(Balance.DIFFICULTY_PRESETS["hard"]["bounty_mult"]), 0.92), "Hard difficulty must be softened to +22% HP / +8% spd / -8% bounty")
+	assert(int(Balance.REFINERY_BASE_COST) == 200 and int(Balance.REFINERY_TIERS[2]["cost"]) == 400, "Refinery T1 ($200) and T2 ($400) economy tuning must match v2.4")
+
+	# Range button Camo labeling (Lv0 -> Camo@L2, Lv1 -> +CAMO!, Lv2 -> [CAMO]) & +25% Camo Optics bonus dmg
+	var camo_b: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	camo_b.current_job = null
+	camo_b.is_built = true
+	GameState.mission.economy["money"] = 1000
+	map.select_tower_unit(camo_b)
+	hud._refresh_selection_panel()
+	assert(hud.upg_rng_button.text.contains("Camo@L2"), "Range Lv0 button must signal Camo@L2, got: %s" % hud.upg_rng_button.text)
+	camo_b.levels["range"] = 1
+	hud._refresh_selection_panel()
+	assert(hud.upg_rng_button.text.contains("+CAMO!"), "Range Lv1 button must signal +CAMO! unlock, got: %s" % hud.upg_rng_button.text)
+	camo_b.levels["range"] = 2
+	hud._refresh_selection_panel()
+	assert(hud.upg_rng_button.text.contains("[CAMO]"), "Range Lv2+ button must show [CAMO], got: %s" % hud.upg_rng_button.text)
+	var stalker_t: EnemyUnit = map.spawn_enemy("stalker", 11)
+	var hp_pre_optics: float = stalker_t.hp
+	camo_b._fire_at(stalker_t)
+	for _pr in range(15):
+		for p in map.projectiles_container.get_children():
+			if p is ProjectileEffect:
+				p.advance_projectile(0.1)
+	var expected_optics_dmg: float = Balance.TOWERS["blaster"]["damage"] * 1.20 * 1.25 # Reflective 1.20 * Range Lv2 Camo Optics 1.25
+	assert((hp_pre_optics - stalker_t.hp) >= expected_optics_dmg - 0.5, "Range Lv2+ must deal +25%% Precision Optics damage vs Cloaked Stalker! (dealt %.1f, expected >= %.1f)" % [hp_pre_optics - stalker_t.hp, expected_optics_dmg])
+	map.clear_all_enemies()
+	map.clear_all_projectiles()
+	map.sell_tower(camo_b)
+
+	# Next Wave Intel Card: auto-visible on BUILD, Wave 11 Cloaked warning, zero overlap w/ ZoomBar, combat peek W+1
+	hud.apply_responsive_layout(Vector2(1600.0, 720.0))
+	wm.state = WaveManager.State.BUILD
+	GameState.is_wave_active = false
+	GameState.mission.wave_number = 11
+	hud._wave_intel_hidden_for_wave = -1
+	hud._last_wave_intel_sig = ""
+	hud._refresh_wave_intel_card()
+	assert(hud.wave_intel_card != null and hud.wave_intel_card.visible, "NextWaveIntelCard must auto-show during BUILD phase")
+	assert(hud.wave_intel_title_label.text.contains("CLOAKED") and hud.wave_intel_tip_label.text.contains("Range to Lv2"), "Wave 11 NextWaveIntelCard must clearly warn about Cloaked Stalkers & Range Lv2!")
+	assert(hud.wave_intel_roster_box.get_child_count() >= 1, "NextWaveIntelCard must render visual enemy chips")
+	assert(hud.wave_intel_card.position.x + hud.wave_intel_card.custom_minimum_size.x <= hud.zoom_bar.position.x + 1.0, "NextWaveIntelCard must NOT overlap floating ZoomControlsBar")
+	hud.wave_intel_hide_button.pressed.emit()
+	assert(not hud.wave_intel_card.visible, "Hide button must dismiss NextWaveIntelCard for current wave")
+	wm.state = WaveManager.State.FIGHTING
+	GameState.is_wave_active = true
+	hud._on_wave_state_changed(WaveManager.State.SPAWNING)
+	assert(not hud.wave_intel_card.visible, "NextWaveIntelCard must stay hidden during combat by default")
+	hud.wave_intel_button.pressed.emit()
+	assert(hud.wave_intel_card.visible and hud.wave_intel_title_label.text.contains("WAVE 12"), "Tapping TopBar WaveIntelButton in combat must peek ahead at Wave N+1 (W12), got: %s" % hud.wave_intel_title_label.text)
+	hud.wave_intel_hide_button.pressed.emit()
+
+	# Zoom & Startup Vex telemetry tracking
+	AnalyticsManager.record_guide_event("shown", "startup")
+	AnalyticsManager.record_guide_event("dismissed", "startup")
+	GameState.reset_mission()
+	var gs_carry: Dictionary = AnalyticsManager.current_run.get("ui_telemetry", {}).get("guide_stats", {})
+	assert(int(gs_carry.get("beats_shown", 0)) >= 1 and str(gs_carry.get("dismissed_at", "")) == "startup", "Startup Vex events must carry over into the launched run's guide_stats (got %s)" % str(gs_carry))
+	AnalyticsManager.record_zoom_event("pinch", 1.85)
+	AnalyticsManager.record_zoom_event("pan", 1.85)
+	var zs_rec: Dictionary = AnalyticsManager.current_run.get("ui_telemetry", {}).get("zoom_stats", {})
+	assert(int(zs_rec.get("pinch_count", 0)) >= 1 and int(zs_rec.get("pan_count", 0)) >= 1 and float(zs_rec.get("max_zoom", 1.0)) >= 1.84, "Zoom telemetry must record pinch, pan, and peak zoom (got %s)" % str(zs_rec))
+
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
 
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok" % sprite_count)
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok wave_intel_v24=ok" % sprite_count)

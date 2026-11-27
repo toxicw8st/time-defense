@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v2.3-battlefield-zoom"
+const BALANCE_VERSION: String = "v2.4-wave-intel-and-balance"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default
@@ -1277,27 +1277,27 @@ const DIFFICULTY_PRESETS: Dictionary = {
 	},
 	"hard": {
 		"name": "Hard",
-		"hp_mult": 1.45,
-		"speed_mult": 1.14,
-		"bounty_mult": 0.85,
-		"desc": "Aliens +45% HP, +14% speed, -15% kill bounty.",
+		"hp_mult": 1.22,
+		"speed_mult": 1.08,
+		"bounty_mult": 0.92,
+		"desc": "Aliens +22% HP, +8% speed, -8% kill bounty.",
 	},
 	"nightmare": {
 		"name": "Chrono Nightmare",
-		"hp_mult": 1.85,
-		"speed_mult": 1.24,
-		"bounty_mult": 0.78,
-		"desc": "Aliens +85% HP, +24% speed, -22% kill bounty.",
+		"hp_mult": 1.55,
+		"speed_mult": 1.16,
+		"bounty_mult": 0.84,
+		"desc": "Aliens +55% HP, +16% speed, -16% kill bounty.",
 	},
 }
 
 # --- Economies: Refineries ($ exponential ramp) & Rogue-like Meta-Research ---
-## Cost = $250 * 1.8^(owned) -> $250, $450, $810, $1,460, $2,625
+## Cost = $200 * 1.8^(owned) -> $200, $360, $650, $1,165, $2,100
 ## Income = $0.25/sec per refinery (+$1 every 4.0s tick).
 const REFINERY_RATE_PER_SEC: float = 0.25
 const REFINERY_TICK_INTERVAL: float = 4.0
 const REFINERY_INCOME_PER_TICK: int = 1 # $1 per 4.0s = $0.25/sec
-const REFINERY_BASE_COST: float = 250.0
+const REFINERY_BASE_COST: float = 200.0
 const REFINERY_COST_GROWTH: float = 1.80
 const REFINERY_COST_ROUND_TO: int = 5
 const REFINERY_BUILD_TIME: float = 8.0
@@ -1318,8 +1318,8 @@ const REFINERY_TIERS: Dictionary = {
 	},
 	2: {
 		"name": "Chrono-Plant",
-		"cost": 550,
-		"build_time": 8.0,
+		"cost": 400,
+		"build_time": 7.5,
 		"income_per_tick": 3,   # $0.75/s per refinery (3x!)
 		"rate_per_sec": 0.75,
 		"clean_wave_bonus_pct": 0.10,
@@ -1329,8 +1329,8 @@ const REFINERY_TIERS: Dictionary = {
 	},
 	3: {
 		"name": "Temporal Bank",
-		"cost": 1450,
-		"build_time": 11.0,
+		"cost": 1150,
+		"build_time": 10.0,
 		"income_per_tick": 6,   # $1.50/s per refinery (6x!)
 		"rate_per_sec": 1.50,
 		"clean_wave_bonus_pct": 0.12,
@@ -1340,8 +1340,8 @@ const REFINERY_TIERS: Dictionary = {
 	},
 	4: {
 		"name": "Singularity Mint",
-		"cost": 3600,
-		"build_time": 14.0,
+		"cost": 2900,
+		"build_time": 13.0,
 		"income_per_tick": 13,  # $3.25/s per refinery (13x!)
 		"rate_per_sec": 3.25,
 		"clean_wave_bonus_pct": 0.15,

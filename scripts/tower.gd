@@ -530,6 +530,11 @@ func _fire_at(target: EnemyUnit) -> void:
 	if is_crack_shot:
 		dmg *= (float(cfg.get("armor_crack_mult", 1.25)) + get_apex_mod_float("armor_crack_mult_add", 0.0))
 
+	# Precision Camo Optics perk: Range Lv2+ grants +25%..+40% bonus damage vs Cloaked enemies!
+	var rng_lvl: int = int(levels.get("range", 0))
+	if rng_lvl >= 2 and target.is_cloaked_type:
+		dmg *= (1.25 + 0.05 * float(rng_lvl - 2))
+
 	var sec_dmg: float = float(cfg.get("secondary_damage", 0.0)) * dmg_scale
 	var sec_type: String = String(cfg.get("secondary_damage_type", "Laser" if tower_type.contains("laser") else "Time"))
 	var slow_pct: float = minf(0.75, float(cfg.get("slow_pct", 0.0)) + get_apex_mod_float("bubble_slow_add", 0.0))

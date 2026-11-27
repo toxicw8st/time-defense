@@ -37,6 +37,7 @@ var _active_wave_open: bool = false
 var _session_counter: int = 0
 var _map_ref: WeakRef = null
 var suppress_default_persistence: bool = false
+var _pending_guide_events: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -240,6 +241,13 @@ func _start_new_run() -> void:
 				"dismissed_at": "",
 				"completed": false,
 			},
+			"zoom_stats": {
+				"pinch_count": 0,
+				"wheel_count": 0,
+				"button_count": 0,
+				"pan_count": 0,
+				"max_zoom": 1.0,
+			},
 		},
 		"meta_ranks_start": GameState.meta_research_ranks.duplicate(true),
 		"mutations_end": {"armoured": 0, "thaw": 0, "swift": 0},
@@ -252,6 +260,11 @@ func _start_new_run() -> void:
 	}
 	_active_wave_rec = {}
 	_active_wave_open = false
+	if not _pending_guide_events.is_empty():
+		var carry: Array[Dictionary] = _pending_guide_events.duplicate(true)
+		_pending_guide_events.clear()
+		for ev in carry:
+			_apply_guide_event_to_current(str(ev.get("kind", "")), str(ev.get("beat_id", "")))
 
 
 func _is_run_meaningful(r: Dictionary) -> bool:
@@ -714,7 +727,7 @@ func record_ui_scroll() -> void:
 	ui["scroll_events"] = int(ui.get("scroll_events", 0)) + 1
 
 
-func record_guide_event(kind: String, beat_id: String = "") -> void:
+func _apply_guide_event_to_current(kind: String, beat_id: String = "") -> void:
 	if current_run.is_empty() or not current_run.has("ui_telemetry"):
 		return
 	var gs: Dictionary = current_run["ui_telemetry"]["guide_stats"]
@@ -724,6 +737,35 @@ func record_guide_event(kind: String, beat_id: String = "") -> void:
 		gs["dismissed_at"] = beat_id
 	elif kind == "completed":
 		gs["completed"] = true
+
+
+func record_guide_event(kind: String, beat_id: String = "") -> void:
+	# Startup menu Vex interactions happen BEFORE Start Level resets the mission into the real run,
+	# so also queue pre-wave startup events to carry over into the launched run!
+	if current_run.is_empty() or (beat_id == "startup" and int(current_run.get("waves_started", 0)) == 0):
+		_pending_guide_events.append({"kind": kind, "beat_id": beat_id})
+	_apply_guide_event_to_current(kind, beat_id)
+
+
+func record_zoom_event(source: String, zoom_level: float) -> void:
+	if current_run.is_empty() or not current_run.has("ui_telemetry"):
+		return
+	var ui: Dictionary = current_run["ui_telemetry"]
+	if not ui.has("zoom_stats"):
+		ui["zoom_stats"] = {"pinch_count": 0, "wheel_count": 0, "button_count": 0, "pan_count": 0, "max_zoom": 1.0}
+	var zs: Dictionary = ui["zoom_stats"]
+	match source:
+		"pinch":
+			zs["pinch_count"] = int(zs.get("pinch_count", 0)) + 1
+		"wheel":
+			zs["wheel_count"] = int(zs.get("wheel_count", 0)) + 1
+		"button":
+			zs["button_count"] = int(zs.get("button_count", 0)) + 1
+		"pan":
+			zs["pan_count"] = int(zs.get("pan_count", 0)) + 1
+	var prev_max: float = float(zs.get("max_zoom", 1.0))
+	if zoom_level > prev_max:
+		zs["max_zoom"] = snappedf(zoom_level, 0.01)
 
 
 func record_refinery_started(cost: int, next_count: int) -> void:
