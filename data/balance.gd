@@ -8,7 +8,7 @@ extends RefCounted
 ## s$ and b$ are strictly separate numbers.
 
 # --- Viewport & Map ---
-const BALANCE_VERSION: String = "v2.4-wave-intel-and-balance"
+const BALANCE_VERSION: String = "v2.5-chrono-comedy"
 const DEFAULT_GAME_SPEED: float = 3.0 # Old 3x is now the crisp 1x default; options: 0.5x (1.5), 1x (3.0), 1.5x (4.5)
 const SPEED_OPTION_SLOW: float = 1.5  # 0.5x of default
 const SPEED_OPTION_NORMAL: float = 3.0 # 1.0x default

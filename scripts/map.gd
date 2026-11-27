@@ -1347,8 +1347,10 @@ func sell_tower(tower: TowerUnit) -> int:
 		pad_occupancy[pad_idx] = null
 	placed_towers.erase(tower)
 	GameState.add_money(refund, false)
+	var sold_pos: Vector2 = tower.position
 	if AnalyticsManager != null:
 		AnalyticsManager.record_tower_sell(sold_type, refund, sold_dmg, sold_kills)
+	spawn_floater(sold_pos + Vector2(-30.0, -24.0), "RECYCLED! +$%d" % refund, Color(0.76, 0.92, 1.0))
 	GameState.event_logged.emit("Sold %s (+%d money)" % [Balance.TOWERS[sold_type]["name"], refund])
 	if selected_tower == tower:
 		selected_tower = null
@@ -1534,8 +1536,11 @@ func _on_unit_leaked(enemy: EnemyUnit) -> void:
 
 
 func _on_unit_died(enemy: EnemyUnit) -> void:
+	var prog_pct: float = enemy.get_path_progress_pct()
 	if AnalyticsManager != null:
-		AnalyticsManager.record_enemy_progress(enemy.enemy_type, enemy.get_path_progress_pct(), false)
+		AnalyticsManager.record_enemy_progress(enemy.enemy_type, prog_pct, false)
+	if prog_pct >= 84.0 and not enemy.is_split_child:
+		GameState.event_logged.emit("Close call! %s neutralized at %d%% path!" % [str(Balance.ENEMIES.get(enemy.enemy_type, {}).get("name", enemy.enemy_type)), int(round(prog_pct))])
 	var is_replay: bool = GameState.mission.replay_count_this_wave > 0
 	GameState.award_kill_earnings(enemy.enemy_type, enemy.money_on_kill, enemy.research_on_kill, enemy.global_position, is_replay)
 

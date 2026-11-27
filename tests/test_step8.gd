@@ -1732,10 +1732,31 @@ func _test_j_v2_btd5_evolution() -> void:
 	var zs_rec: Dictionary = AnalyticsManager.current_run.get("ui_telemetry", {}).get("zoom_stats", {})
 	assert(int(zs_rec.get("pinch_count", 0)) >= 1 and int(zs_rec.get("pan_count", 0)) >= 1 and float(zs_rec.get("max_zoom", 1.0)) >= 1.84, "Zoom telemetry must record pinch, pan, and peak zoom (got %s)" % str(zs_rec))
 
+	# 3l) Verify v2.5 Chrono-Comedy System (27 tower flavors, 10 enemy flavors, 3-voice comms toast, blind ??? bark, end review)
+	for tk2 in Balance.TOWERS.keys():
+		assert(ComedyLines.TOWER_FLAVOR.has(tk2) and ComedyLines.get_tower_flavor(tk2).length() > 10, "Missing tower flavor for %s" % tk2)
+	for ek2 in Balance.ENEMIES.keys():
+		assert(ComedyLines.ENEMY_FLAVOR.has(ek2) and ComedyLines.get_enemy_flavor(ek2).length() > 10, "Missing enemy flavor for %s" % ek2)
+	hud.start_menu_overlay.visible = false
+	hud.show_chrono_comms("pause", true)
+	assert(hud.comms_toast_panel != null and hud.comms_toast_panel.visible and hud.comms_text_label.text.length() > 10, "Chrono-Comms toast must appear on Time Power activation")
+	var blind_t: TowerUnit = map.build_tower_on_pad(0, "blaster")
+	blind_t.current_job = null
+	blind_t.is_built = true
+	var stealth_e: EnemyUnit = map.spawn_enemy("stalker", 11)
+	stealth_e.advance_along_path(2.2)
+	var fl_pre: int = map.floating_texts.size()
+	assert(blind_t._pick_target() == null)
+	assert(map.floating_texts.size() > fl_pre, "Blind Lv0 tower must pop ??? floater when Cloaked Stalker passes inside range!")
+	map.clear_all_enemies()
+	map.sell_tower(blind_t)
+	var rev_w10: Dictionary = ComedyLines.get_end_of_run_review("lost", GameState.mission)
+	assert(str(rev_w10.get("badge", "")) != "" and str(rev_w10.get("note", "")) != "", "End-of-run Temporal Performance Review must return badge & note")
+
 	hud.apply_responsive_layout(Vector2(1280.0, 720.0))
 
 	GameState.is_wave_active = false
 	GameState.prompts_muted = false
 	remove_child(inst)
 	inst.queue_free()
-	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok wave_intel_v24=ok" % sprite_count)
+	print("CHECK_V2_BTD5_EVOLUTION_PASS evolutions=21 enemies=4 exams=6 refinery_tech=4 sprites=%d vex_startup=always_on combine_pricing_ui=ok zoom_pan=ok wave_intel_v24=ok comedy_v25=ok" % sprite_count)

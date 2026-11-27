@@ -174,6 +174,12 @@ var wave_intel_mut_label: Label = null
 var _wave_intel_hidden_for_wave: int = -1
 var _wave_intel_pinned_in_combat: bool = false
 var _last_wave_intel_sig: String = ""
+var comms_toast_panel: PanelContainer = null
+var comms_speaker_label: Label = null
+var comms_text_label: Label = null
+var _comms_timer: float = 0.0
+var _comms_cooldown: float = 0.0
+var _comms_last_wave_banter: int = -1
 var refinery_tech_button: Button = null
 var build_recipes_button: Button = null
 var recipes_overlay: PanelContainer = null
@@ -335,6 +341,7 @@ func _ready() -> void:
 	_build_combine_and_sandbox_ui()
 	_build_zoom_controls_ui()
 	_build_wave_intel_ui()
+	_build_comms_toast_ui()
 	_setup_responsive_grids()
 	_build_guide_ui()
 	_setup_right_panel_buttons()
@@ -343,6 +350,7 @@ func _ready() -> void:
 	GameState.mission_ended.connect(_on_mission_ended)
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.event_logged.connect(_on_event_logged)
+	GameState.enemy_leaked.connect(_on_lives_lost_comms)
 	if get_viewport() != null:
 		get_viewport().size_changed.connect(_on_viewport_size_changed)
 		apply_responsive_layout(_get_effective_viewport_size())
@@ -356,6 +364,8 @@ func _exit_tree() -> void:
 		GameState.mission_reset.disconnect(_on_mission_reset)
 	if GameState.event_logged.is_connected(_on_event_logged):
 		GameState.event_logged.disconnect(_on_event_logged)
+	if GameState.enemy_leaked.is_connected(_on_lives_lost_comms):
+		GameState.enemy_leaked.disconnect(_on_lives_lost_comms)
 
 
 func _reapply_overlay_bounds() -> void:
@@ -1439,6 +1449,13 @@ func _populate_recipes_list() -> void:
 			desc_l.add_theme_color_override("font_color", Color(0.86, 0.92, 0.98))
 			desc_l.text = "%s — %s" % [str(cfg["damage_type_label"]), role]
 			rv.add_child(desc_l)
+			var flav_l := Label.new()
+			flav_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			flav_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			flav_l.add_theme_font_size_override("font_size", 10)
+			flav_l.add_theme_color_override("font_color", Color(0.68, 0.92, 0.96))
+			flav_l.text = "\"%s\"" % ComedyLines.get_tower_flavor(ck)
+			rv.add_child(flav_l)
 			if not t4_cfg.is_empty() and not t5_cfg.is_empty():
 				var evo_l := Label.new()
 				evo_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1860,6 +1877,16 @@ func _refresh_wave_intel_card() -> void:
 		wave_intel_roster_box.add_child(chip)
 
 	wave_intel_tip_label.text = _build_wave_intel_tactical_tip(target_w, counts)
+	var headliner_e: String = ""
+	if not new_enemies.is_empty():
+		headliner_e = new_enemies[0]
+	else:
+		for ut in ["colossus", "juggernaut", "conduit", "carrier", "mender", "stalker", "blitzer", "brute", "rusher", "crawler"]:
+			if counts.has(ut):
+				headliner_e = ut
+				break
+	if headliner_e != "":
+		wave_intel_tip_label.text += "\nFIELD NOTE (%s): \"%s\"" % [str(Balance.ENEMIES[headliner_e]["name"]), ComedyLines.get_enemy_flavor(headliner_e)]
 	wave_intel_tip_label.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
 	wave_intel_tip_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.98) if is_cloak_wave else Color(0.92, 0.97, 1.0))
 
@@ -1873,6 +1900,94 @@ func _refresh_wave_intel_card() -> void:
 		wave_intel_mut_label.add_theme_font_size_override("font_size", 16 if is_port else 11)
 		wave_intel_mut_label.visible = true
 	wave_intel_card.reset_size()
+
+
+func _build_comms_toast_ui() -> void:
+	if comms_toast_panel != null:
+		return
+	comms_toast_panel = PanelContainer.new()
+	comms_toast_panel.name = "ChronoCommsToast"
+	comms_toast_panel.visible = false
+	comms_toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	comms_toast_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.90), Color(0.38, 0.92, 1.0), 8, 10.0, 6.0))
+	add_child(comms_toast_panel)
+	if surge_banner != null and surge_banner.get_parent() == self:
+		move_child(comms_toast_panel, surge_banner.get_index())
+
+	var hb := HBoxContainer.new()
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_theme_constant_override("separation", 8)
+	comms_toast_panel.add_child(hb)
+
+	comms_speaker_label = Label.new()
+	comms_speaker_label.name = "CommsSpeakerLabel"
+	comms_speaker_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	comms_speaker_label.add_theme_font_size_override("font_size", 12)
+	comms_speaker_label.add_theme_color_override("font_color", Color(0.38, 0.96, 1.0))
+	comms_speaker_label.text = "[VEX]"
+	hb.add_child(comms_speaker_label)
+
+	comms_text_label = Label.new()
+	comms_text_label.name = "CommsTextLabel"
+	comms_text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	comms_text_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	comms_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	comms_text_label.add_theme_font_size_override("font_size", 12)
+	comms_text_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0))
+	comms_text_label.text = ""
+	hb.add_child(comms_text_label)
+
+
+func show_chrono_comms(category: String, force_priority: bool = false) -> void:
+	if comms_toast_panel == null or comms_speaker_label == null or comms_text_label == null:
+		return
+	if start_menu_overlay != null and start_menu_overlay.visible:
+		return
+	if not force_priority and _comms_cooldown > 0.0:
+		return
+	var line: Dictionary = ComedyLines.pick_banter(category)
+	if line.is_empty():
+		return
+	var scol: Color = line["color"]
+	var is_port: bool = (_current_layout_mode == "portrait")
+	comms_toast_panel.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.08, 0.14, 0.92), scol, 8, 12.0 if is_port else 10.0, 8.0 if is_port else 6.0))
+	comms_speaker_label.text = "[%s]" % str(line["tag"])
+	comms_speaker_label.add_theme_color_override("font_color", scol)
+	comms_speaker_label.add_theme_font_size_override("font_size", 18 if is_port else 12)
+	comms_text_label.text = str(line["text"])
+	comms_text_label.add_theme_font_size_override("font_size", 18 if is_port else 12)
+	comms_toast_panel.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	comms_toast_panel.visible = true
+	comms_toast_panel.reset_size()
+	_reposition_comms_toast()
+	_comms_timer = 5.4
+	_comms_cooldown = 4.2
+
+
+func _reposition_comms_toast() -> void:
+	if comms_toast_panel == null or get_viewport() == null:
+		return
+	var vp_size: Vector2 = _get_effective_viewport_size()
+	var toast_h: float = maxf(38.0, comms_toast_panel.get_combined_minimum_size().y)
+	var inspector_lift: float = 104.0 if (enemy_inspector_panel != null and enemy_inspector_panel.visible) else 0.0
+	if _current_layout_mode == "portrait":
+		var tw_p: float = vp_size.x - 32.0
+		comms_toast_panel.custom_minimum_size = Vector2(tw_p, 0.0)
+		comms_toast_panel.position = Vector2(16.0, right_panel.position.y - toast_h - 10.0 - inspector_lift)
+	elif _current_layout_mode == "landscape_wide":
+		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.06, 0.0, 24.0)
+		var tw_l: float = minf(680.0, maxf(320.0, right_panel.position.x - safe_x - 24.0))
+		comms_toast_panel.custom_minimum_size = Vector2(tw_l, 0.0)
+		comms_toast_panel.position = Vector2(safe_x + 12.0, bottom_bar.position.y - toast_h - 8.0 - inspector_lift)
+	else:
+		var tw_d: float = 640.0
+		comms_toast_panel.custom_minimum_size = Vector2(tw_d, 0.0)
+		comms_toast_panel.position = Vector2(12.0, bottom_bar.position.y - toast_h - 8.0 - inspector_lift)
+
+
+func _on_lives_lost_comms(_enemy_type: String, _amount: int, _world_pos: Vector2) -> void:
+	if not GameState.mission.is_over:
+		show_chrono_comms("leak", false)
 
 
 func _is_any_blocking_overlay_visible() -> bool:
@@ -2227,6 +2342,9 @@ func _refresh_hover_info() -> void:
 	if active_btn != null and is_instance_valid(active_btn) and _hover_descriptions.has(active_btn):
 		hover_info_label.text = _hover_descriptions[active_btn]
 		hover_info_label.modulate = Color(0.95, 0.98, 1.0)
+	elif _selected_tower != null and is_instance_valid(_selected_tower):
+		hover_info_label.text = "\"%s\"" % ComedyLines.get_tower_flavor(_selected_tower.tower_type)
+		hover_info_label.modulate = Color(0.70, 0.94, 0.98)
 	else:
 		hover_info_label.text = "Hover or tap any button below for details."
 		hover_info_label.modulate = Color(0.68, 0.76, 0.88)
@@ -2256,6 +2374,11 @@ func set_references(
 		wave_manager_ref.state_changed.connect(_on_wave_state_changed)
 	if surge_ref != null:
 		surge_ref.surge_banner_triggered.connect(_on_surge_banner_triggered)
+	if time_powers_ref != null:
+		time_powers_ref.power_activated.connect(func(pname: String) -> void: show_chrono_comms(pname, true))
+	if base_attack_ref != null:
+		base_attack_ref.charge_started.connect(func() -> void: show_chrono_comms("hive_charge", true))
+		base_attack_ref.base_attack_fired.connect(func(_dmg: int, _rem: int) -> void: show_chrono_comms("hive_fire", true))
 	if get_viewport() != null:
 		apply_responsive_layout(_get_effective_viewport_size())
 	_check_teaching_prompt()
@@ -2447,6 +2570,15 @@ func _process(delta: float) -> void:
 			_banner_timer = maxf(0.0, _banner_timer - delta)
 			if _banner_timer <= 0.0:
 				surge_banner.visible = false
+		if _comms_cooldown > 0.0:
+			_comms_cooldown = maxf(0.0, _comms_cooldown - delta)
+		if _comms_timer > 0.0:
+			_comms_timer = maxf(0.0, _comms_timer - delta)
+			if comms_toast_panel != null:
+				if _comms_timer <= 0.0:
+					comms_toast_panel.visible = false
+				elif _comms_timer < 0.6:
+					comms_toast_panel.modulate.a = clampf(_comms_timer / 0.6, 0.0, 1.0)
 	if _early_call_armed_timer > 0.0:
 		_early_call_armed_timer = maxf(0.0, _early_call_armed_timer - delta)
 	_refresh_all()
@@ -3021,7 +3153,7 @@ func _refresh_research_panel() -> void:
 			var mod_txt: String = str(map_cfg.get("modifier_label", ""))
 			var diff_cfg: Dictionary = GameState.get_difficulty_cfg()
 			var extra_line: String = ("\nSector Modifier: %s  |  Difficulty: %s (%s)" % [mod_txt, str(diff_cfg["name"]), str(diff_cfg["desc"])]) if mod_txt != "" else ("\nDifficulty: %s (%s)" % [str(diff_cfg["name"]), str(diff_cfg["desc"])])
-			start_level_desc_label.text = str(map_cfg["description"]) + extra_line
+			start_level_desc_label.text = str(map_cfg["description"]) + extra_line + "\n" + ComedyLines.get_level_lore(sel_map)
 		if start_meta_label != null:
 			start_meta_label.text = "Persistent Meta-Research Available: %d R (Max %d R earned per mission)" % [res, Balance.MAX_RESEARCH_PER_MISSION]
 		if start_play_button != null:
@@ -3039,16 +3171,17 @@ func _refresh_research_panel() -> void:
 		var max_rank: int = cfg["rank_costs"].size()
 		var cost: int = GameState.get_next_research_cost(key)
 		if rank >= max_rank or cost < 0:
-			_set_button_description(btn, "MAX Rank (%d/%d): %s." % [rank, max_rank, cfg["description"]])
+			_set_button_description(btn, "MAX Rank (%d/%d): %s. %s" % [rank, max_rank, cfg["description"], ComedyLines.get_research_flavor(key)])
 			btn.text = "%s [Rank %d/%d MAX]" % [cfg["name"], rank, max_rank]
 			btn.disabled = true
 			btn.modulate = Color(0.62, 0.95, 0.72)
 		else:
-			_set_button_description(btn, "Rank %d->%d (%d R): %s. (Between levels only)" % [
+			_set_button_description(btn, "Rank %d->%d (%d R): %s. %s" % [
 				rank,
 				rank + 1,
 				cost,
 				cfg["description"],
+				ComedyLines.get_research_flavor(key),
 			])
 			btn.text = "%s [Rank %d/%d] (%d R)" % [cfg["name"], rank, max_rank, cost]
 			var affordable: bool = res >= cost and can_spend_now
@@ -3151,23 +3284,19 @@ func _style_build_button(btn: Button, tower_type: String, money: int, is_armed: 
 			accent = Color(1.0, 0.72, 0.25)
 		UIIcons.apply_right_button_theme(btn, accent, is_armed)
 
-	var desc: String = "$%d, %ds | %s" % [
-		cost,
-		int(cfg["build_time"]),
-		cfg["damage_type_label"],
-	]
+	var desc: String = ""
 	if tower_type == "mortar":
-		desc += " - Heavy 5s-reload AoE vs crowds."
+		desc = "$%d (%ds) Splash AoE — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	elif tower_type == "laser":
-		desc += " - 150% Std, 10% Refl."
+		desc = "$%d (%ds) 150%% Std / 10%% Refl — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	elif tower_type == "slow":
-		desc = "$%d, %ds | Chrono Bubble (0.4/s): 30%% slow + Decay (Dmg grows radius)." % [cost, int(cfg["build_time"])]
+		desc = "$%d (%ds) 30%% Slow+Decay — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	elif tower_type == "railgun":
-		desc += " - 140 hit + 50% slow 4s + Decay."
+		desc = "$%d (%ds) 140+Slow+Decay — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	elif tower_type == "annihilator":
-		desc += " - Heavy anti-boss (101-338/hit vs Jugg)."
+		desc = "$%d (%ds) Anti-Boss — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	else:
-		desc += " - JUGGERNAUT COUNTER (180%)."
+		desc = "$%d (%ds) Piercing 180%% Boss — \"%s\"" % [cost, int(cfg["build_time"]), ComedyLines.get_tower_flavor(tower_type)]
 	_set_button_description(btn, desc)
 
 	if is_armed:
@@ -3295,6 +3424,7 @@ func _on_surge_banner_triggered(banner_text: String) -> void:
 	surge_banner_label.text = banner_text
 	surge_banner.visible = true
 	_banner_timer = 3.5
+	show_chrono_comms("surge", true)
 
 
 func _on_event_logged(message: String) -> void:
@@ -3304,6 +3434,19 @@ func _on_event_logged(message: String) -> void:
 	event_feed_label.text = "Events: " + "  |  ".join(_event_feed)
 	if message.contains("Combined into") or message.contains("COMBINED:") or message.contains("MERGED:"):
 		trigger_guide_beat("first_combine")
+		show_chrono_comms("combine", true)
+	elif message.begins_with("★ APEX T5"):
+		show_chrono_comms("apex_t5", true)
+	elif message.begins_with("TIER 4 EVOLVED"):
+		show_chrono_comms("apex_t4", true)
+	elif message.begins_with("Close call!"):
+		show_chrono_comms("close_call", false)
+	elif message.begins_with("Sold "):
+		show_chrono_comms("sell", false)
+	elif message.contains("Refinery") and message.contains("Tier"):
+		show_chrono_comms("refinery_tech", false)
+	elif message.contains("Refinery") and message.contains("built"):
+		show_chrono_comms("refinery", false)
 
 
 func _on_refinery_button_pressed() -> void:
@@ -3594,7 +3737,7 @@ func _refresh_enemy_inspector() -> void:
 		statuses.append("Shred +%d%%" % (_inspected_enemy.armor_shred_stacks * 10))
 	var status_str: String = ", ".join(statuses) if not statuses.is_empty() else "None"
 	var cur_spd: float = _inspected_enemy.get_current_move_speed()
-	enemy_inspector_label.text = "%s [%s]\nHP: %d / %d  |  Spd: %.0f px/s\nCounter: %s\nStatus: %s" % [
+	enemy_inspector_label.text = "%s [%s]\nHP: %d / %d  |  Spd: %.0f px/s\nCounter: %s\nStatus: %s\n\"%s\"" % [
 		ename,
 		armour,
 		int(ceil(_inspected_enemy.hp)),
@@ -3602,8 +3745,10 @@ func _refresh_enemy_inspector() -> void:
 		cur_spd,
 		best_tip,
 		status_str,
+		ComedyLines.get_enemy_flavor(_inspected_enemy.enemy_type),
 	]
 	enemy_inspector_panel.visible = true
+	_reposition_comms_toast()
 
 
 func _on_pad_selected(pad_idx: int) -> void:
@@ -4024,6 +4169,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			sandbox_panel.position = Vector2(12.0, 70.0)
 		if enemy_inspector_panel != null:
 			enemy_inspector_panel.position = Vector2(12.0, bottom_bar.position.y - 98.0)
+		_reposition_comms_toast()
 		return
 
 	# 2) Phone / Touch Landscape & Widescreen (1280x720 Touch AND Pixel 11 Pro 20:9 1600x720)
@@ -4095,6 +4241,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			sandbox_panel.position = Vector2(safe_x + 12.0, top_h + 8.0)
 		if enemy_inspector_panel != null:
 			enemy_inspector_panel.position = Vector2(safe_x + 12.0, bottom_bar.position.y - 98.0)
+		_reposition_comms_toast()
 		return
 
 	# 3) Phone Portrait Ergonomic Layout (e.g. 1280x2844 — 3-row TopBar, 2-col chunky shop cards, 3x2 bottom bar, large readable fonts!)
@@ -4158,6 +4305,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	debug_panel.position = Vector2(16.0, safe_top + p_top_h + 10.0)
 	if sandbox_panel != null:
 		sandbox_panel.position = Vector2(16.0, safe_top + p_top_h + 8.0)
+	_reposition_comms_toast()
 	if enemy_inspector_panel != null:
 		enemy_inspector_panel.position = Vector2(20.0, bottom_bar.position.y - 120.0)
 
@@ -4183,6 +4331,17 @@ func _on_wave_state_changed(new_state: int) -> void:
 	elif new_state == WaveManager.State.BUILD:
 		_wave_intel_hidden_for_wave = -1
 		_wave_intel_pinned_in_combat = false
+		var w_now: int = GameState.mission.wave_number
+		if w_now != _comms_last_wave_banter and wave_manager_ref != null:
+			_comms_last_wave_banter = w_now
+			var prev_d: Dictionary = wave_manager_ref.get_preview_data(w_now)
+			var cnts: Dictionary = prev_d.get("counts", {})
+			if cnts.has("stalker") and w_now == 11:
+				show_chrono_comms("cloak_wave", true)
+			elif str(prev_d.get("exam_title", "")) != "":
+				show_chrono_comms("exam_wave", true)
+			elif cnts.has("juggernaut") or cnts.has("colossus"):
+				show_chrono_comms("boss_wave", true)
 	_last_wave_intel_sig = ""
 	_check_teaching_prompt()
 	_refresh_all()
@@ -4427,7 +4586,11 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 
 	var m := GameState.mission
 	var pct: int = int(round(pow(Balance.SURGE_ATTACK_SPEED_FACTOR, m.surge_count) * 100.0))
+	var review: Dictionary = ComedyLines.get_end_of_run_review(outcome, m)
 	end_stats_label.text = "\n".join([
+		"★ PERFORMANCE REVIEW: %s" % str(review.get("badge", "")),
+		str(review.get("note", "")),
+		"",
 		reason,
 		"Mission Time: %.1f s | Wave: %d | Waves Cleared: %d" % [
 			GameState.mission_elapsed_seconds,
@@ -4477,6 +4640,11 @@ func _on_mission_reset() -> void:
 	_wave_intel_hidden_for_wave = -1
 	_wave_intel_pinned_in_combat = false
 	_last_wave_intel_sig = ""
+	if comms_toast_panel != null:
+		comms_toast_panel.visible = false
+	_comms_timer = 0.0
+	_comms_cooldown = 0.0
+	_comms_last_wave_banter = -1
 	_selected_pad_idx = -1
 	_selected_tower = null
 	_inspected_enemy = null

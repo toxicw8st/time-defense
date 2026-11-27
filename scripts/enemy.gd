@@ -54,6 +54,7 @@ var stun_remaining: float = 0.0
 var is_split_child: bool = false
 var _slag_nova_dmg: float = 0.0
 var _slag_nova_source_ref: WeakRef = null
+var _shiny_ping_cd: float = 0.0
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D, p_map: Node = null) -> void:
@@ -337,6 +338,8 @@ func _process(delta: float) -> void:
 		anim_time += delta
 	if hit_flash_timer > 0.0:
 		hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
+	if _shiny_ping_cd > 0.0:
+		_shiny_ping_cd = maxf(0.0, _shiny_ping_cd - delta)
 	advance_along_path(GameState.get_sim_delta(delta))
 	queue_redraw()
 
@@ -359,6 +362,10 @@ func take_damage(amount: float, damage_type: String = "", source_tower: Node = n
 	var dmg: float = amount
 	if damage_type != "":
 		dmg *= Balance.get_damage_multiplier(damage_type, armour_tags)
+		if damage_type == "Laser" and armour_tags.has("Reflective") and _shiny_ping_cd <= 0.0 and map_ref != null and map_ref.has_method("spawn_floater"):
+			_shiny_ping_cd = 5.5
+			if (enemy_id % 2) == 0:
+				map_ref.spawn_floater(position + Vector2(-24.0, -22.0), "PING! (SHINY)", Color(0.62, 0.88, 1.0))
 	if armor_shred_stacks > 0 and damage_type != "Time":
 		dmg *= (1.0 + 0.10 * float(armor_shred_stacks))
 	# Aegis Conduit Shield Aura (-35% dmg taken unless attacker has Apex shield-strip!)
@@ -385,7 +392,8 @@ func take_damage(amount: float, damage_type: String = "", source_tower: Node = n
 			dealt += hp
 			hp = 0.0
 			if map_ref != null and map_ref.has_method("spawn_floater"):
-				map_ref.spawn_floater(position + Vector2(-24.0, -26.0), "APEX EXECUTE!", Color(1.0, 0.32, 0.65))
+				var exec_labels: Array[String] = ["TIME'S UP!", "DELETED!", "APEX EXECUTE!"]
+				map_ref.spawn_floater(position + Vector2(-24.0, -26.0), exec_labels[enemy_id % exec_labels.size()], Color(1.0, 0.32, 0.65))
 	if hp <= 0.0:
 		hp = 0.0
 		is_dead_or_leaked = true

@@ -43,6 +43,7 @@ var _ramp_stacks: int = 0
 var _opened_enemy_ids: Dictionary = {}
 var total_damage_dealt: float = 0.0
 var total_kills: int = 0
+var _blind_cloak_bark_cd: float = 0.0
 
 
 func record_damage(amount: float, killed: bool = false) -> void:
@@ -362,6 +363,8 @@ func _process(delta: float) -> void:
 	if muzzle_flash_timer > 0.0:
 		muzzle_flash_timer = maxf(0.0, muzzle_flash_timer - delta)
 		queue_redraw()
+	if _blind_cloak_bark_cd > 0.0:
+		_blind_cloak_bark_cd = maxf(0.0, _blind_cloak_bark_cd - delta)
 	elif is_selected or is_combine_highlighted or current_job != null or GameState.is_haste_active or tower_type in ["slow", "laser", "railgun"] or Balance.is_combo_tower(tower_type):
 		queue_redraw()
 	advance_tower(GameState.get_sim_delta(delta))
@@ -432,9 +435,12 @@ func _pick_target() -> EnemyUnit:
 	var can_see_cloak: bool = can_detect_cloaked()
 	var in_range: Array[EnemyUnit] = []
 	for enemy in map_ref.get_active_enemies():
-		if enemy.is_effectively_cloaked() and not can_see_cloak:
-			continue
 		var d: float = position.distance_to(enemy.position)
+		if enemy.is_effectively_cloaked() and not can_see_cloak:
+			if d <= eff_range and d >= min_r and _blind_cloak_bark_cd <= 0.0 and map_ref.has_method("spawn_floater"):
+				_blind_cloak_bark_cd = 6.5
+				map_ref.spawn_floater(position + Vector2(-12.0, -28.0), "???", Color(0.95, 0.52, 1.0))
+			continue
 		if d <= eff_range and d >= min_r:
 			in_range.append(enemy)
 
