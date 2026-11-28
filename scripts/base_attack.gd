@@ -77,8 +77,11 @@ func step_base_attack(delta: float) -> void:
 		return
 
 	var pb_pos: Vector2 = map_ref.active_player_base_pos
-	var stage_mult: float = 2.2 if stage >= 3 else 1.0
-	var core_mult: float = GameState.get_citadel_damage_multiplier() * stage_mult * (1.0 + GameState.get_overclock_crit_bonus())
+	var base_stage_mult: float = 1.75 if stage >= 3 else 1.0
+	var sac_stage_mult: float = 2.40 if stage >= 3 else 1.0
+	var shared_mult: float = GameState.get_citadel_damage_multiplier() * (1.0 + GameState.get_overclock_crit_bonus())
+	var core_mult: float = shared_mult * base_stage_mult
+	var sac_mult: float = shared_mult * sac_stage_mult
 	var spd_mult: float = GameState.get_tower_attack_speed_multiplier()
 	var sacs: Dictionary = GameState.mission.citadel_sacrifices
 
@@ -90,7 +93,7 @@ func step_base_attack(delta: float) -> void:
 			aim_angle = (pd_tgt.position - pb_pos).angle()
 			muzzle_flash_timer = 0.16
 			var pd_dtype: String = "Piercing" if (pd_tgt.armour_tags.has("Armored") or pd_tgt.armour_tags.has("Reflective")) else "Laser"
-			var pd_dmg: float = (42.0 if stage == 1 else 78.0) * core_mult
+			var pd_dmg: float = (42.0 if stage == 1 else 66.0) * core_mult
 			_fire_citadel_beam(pb_pos, pd_tgt, pd_dmg, pd_dtype, Color(0.38, 0.96, 1.0), 3.0)
 			pd_cooldown = 0.45
 
@@ -104,11 +107,11 @@ func step_base_attack(delta: float) -> void:
 		if l_tgt != null:
 			aim_angle = (l_tgt.position - pb_pos).angle()
 			muzzle_flash_timer = 0.22
-			var l_dmg: float = 220.0 * core_mult
+			var l_dmg: float = 165.0 * core_mult
 			if l_tgt.is_cloaked_type:
 				l_tgt.reveal_cloak(4.0)
 			_fire_citadel_beam(pb_pos, l_tgt, l_dmg, "Time", Color(1.0, 0.88, 0.36), 4.8, true)
-			lance_cooldown = 0.85
+			lance_cooldown = 0.95
 
 	# 3) Grafted Kinetic Sacrifice: Quad Sabot Boss-Shredder Autocannons
 	var kin_lvl: int = int(sacs.get("kinetic", 0))
@@ -117,10 +120,10 @@ func step_base_attack(delta: float) -> void:
 		if kinetic_cooldown <= 0.0:
 			var k_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 99999.0, "strongest")
 			if k_tgt != null:
-				var k_dmg: float = (95.0 if kin_lvl == 1 else 165.0) * core_mult
+				var k_dmg: float = (115.0 if kin_lvl == 1 else 205.0) * sac_mult
 				k_tgt.apply_armor_shred(5, 4.5)
 				_fire_citadel_beam(pb_pos, k_tgt, k_dmg, "Piercing", Color(1.0, 0.72, 0.28), 3.4, true)
-				kinetic_cooldown = 0.36 if kin_lvl >= 2 else 0.52
+				kinetic_cooldown = 0.34 if kin_lvl >= 2 else 0.50
 
 	# 4) Grafted Explosive Sacrifice: Map-Wide Orbital Cluster Barrage
 	var exp_lvl: int = int(sacs.get("explosive", 0))
@@ -130,8 +133,8 @@ func step_base_attack(delta: float) -> void:
 			var e_tgt: EnemyUnit = _pick_enemy(enemies, pb_pos, 99999.0, "first")
 			if e_tgt != null:
 				var shells: int = 4 if exp_lvl >= 2 else 3
-				var blast_r: float = 92.0 if exp_lvl >= 2 else 74.0
-				var blast_dmg: float = (135.0 if exp_lvl == 1 else 210.0) * core_mult
+				var blast_r: float = 96.0 if exp_lvl >= 2 else 78.0
+				var blast_dmg: float = (160.0 if exp_lvl == 1 else 260.0) * sac_mult
 				var center_p: Vector2 = e_tgt.position
 				for si in range(shells):
 					var off := Vector2(cos(float(si) * TAU / float(shells)), sin(float(si) * TAU / float(shells))) * (0.0 if si == 0 else 28.0)
@@ -140,7 +143,7 @@ func step_base_attack(delta: float) -> void:
 					for foe in map_ref.get_active_enemies():
 						if is_instance_valid(foe) and foe.is_alive() and foe.position.distance_to(bp) <= blast_r:
 							_apply_citadel_damage(foe, blast_dmg, "Normal")
-				explosive_cooldown = 2.2 if exp_lvl >= 2 else 2.8
+				explosive_cooldown = 2.0 if exp_lvl >= 2 else 2.6
 
 	# 5) Grafted Energy Sacrifice: Triple Prismatic Sunbeams + Global Camo Reveal
 	var ene_lvl: int = int(sacs.get("energy", 0))
@@ -149,7 +152,7 @@ func step_base_attack(delta: float) -> void:
 		if energy_cooldown <= 0.0:
 			var hits: int = 0
 			var max_chains: int = 5 if ene_lvl >= 2 else 3
-			var sun_dmg: float = (88.0 if ene_lvl == 1 else 145.0) * core_mult
+			var sun_dmg: float = (105.0 if ene_lvl == 1 else 175.0) * sac_mult
 			for foe in enemies:
 				if not is_instance_valid(foe) or not foe.is_alive():
 					continue
@@ -158,7 +161,7 @@ func step_base_attack(delta: float) -> void:
 				if hits < max_chains:
 					_fire_citadel_beam(pb_pos, foe, sun_dmg, "Laser", Color(1.0, 0.45, 0.94), 3.6, true)
 					hits += 1
-			energy_cooldown = 0.50 if ene_lvl >= 2 else 0.72
+			energy_cooldown = 0.46 if ene_lvl >= 2 else 0.68
 
 	# 6) Grafted Chrono Sacrifice: Global Time-Dilation Field (-20%..30% slow + flat Time Decay)
 	var chr_lvl: int = int(sacs.get("chrono", 0))
@@ -166,7 +169,7 @@ func step_base_attack(delta: float) -> void:
 		chrono_cooldown = maxf(0.0, chrono_cooldown - delta)
 		if chrono_cooldown <= 0.0:
 			var slow_v: float = 0.30 if chr_lvl >= 2 else 0.20
-			var dec_v: float = (26.0 if chr_lvl == 1 else 52.0) * core_mult
+			var dec_v: float = (34.0 if chr_lvl == 1 else 68.0) * sac_mult
 			for foe in enemies:
 				if is_instance_valid(foe) and foe.is_alive():
 					foe.apply_slow(slow_v, 2.2)
@@ -191,7 +194,7 @@ func step_base_attack(delta: float) -> void:
 					map_ref.spawn_floater(foe.position + Vector2(-28.0, -24.0), "TIME GOD EXECUTE!", Color(1.0, 0.88, 0.32))
 					_apply_citadel_damage(foe, foe.hp + 10.0, "Time")
 				else:
-					_apply_citadel_damage(foe, 260.0 * core_mult, "Time")
+					_apply_citadel_damage(foe, 190.0 * core_mult, "Time")
 
 
 func _pick_enemy(enemies: Array[EnemyUnit], origin: Vector2, max_range: float, mode: String) -> EnemyUnit:
@@ -269,8 +272,7 @@ func preview_sacrifice_unlocks(selected_towers: Array, sacrifice_refinery: bool 
 	var unlocked: Dictionary = {}
 	for c in ["kinetic", "explosive", "energy", "chrono"]:
 		unlocked[c] = int(spent_by_cat[c]) >= Balance.CITADEL_SACRIFICE_THRESHOLD
-	var owns_t3_bank: bool = GameState.get_refinery_tier() >= 3 and int(GameState.mission.economy.get("refineries_owned", 0)) >= 1
-	unlocked["economy"] = sacrifice_refinery or owns_t3_bank
+	unlocked["economy"] = sacrifice_refinery and int(GameState.mission.economy.get("refineries_owned", 0)) >= 1
 	return {
 		"spent_by_cat": spent_by_cat,
 		"unlocked": unlocked,
@@ -317,6 +319,8 @@ func ascend_citadel(selected_towers: Array = [], sacrifice_refinery: bool = fals
 		var sw_col := Color(1.0, 0.88, 0.34) if next_stage >= 3 else (Color(0.45, 0.96, 1.0) if next_stage == 2 else Color(0.42, 0.92, 0.72))
 		map_ref.spawn_apex_shockwave(map_ref.active_player_base_pos, sw_col, 140.0 + float(next_stage) * 55.0, 0.85)
 		map_ref.trigger_screen_shake(0.32, 3.8 + float(next_stage))
+		if map_ref.has_method("trigger_hit_stop"):
+			map_ref.trigger_hit_stop(0.06, 0.08)
 		map_ref.spawn_floater(map_ref.active_player_base_pos + Vector2(-72.0, -48.0), "%s ONLINE!" % str(scfg["name"]).to_upper(), sw_col)
 		map_ref.queue_redraw()
 

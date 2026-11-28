@@ -101,6 +101,7 @@ var is_endless_mode: bool = false
 var auto_wave_enabled: bool = false
 var show_damage_numbers: bool = true
 var sfx_volume: float = 0.85
+var music_volume: float = 0.45
 var saved_sfx_muted: bool = false
 var reduce_screen_shake: bool = false
 var reduce_flashes: bool = false
@@ -131,6 +132,7 @@ func save_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	cfg.set_value("prefs", "show_damage_numbers", show_damage_numbers)
 	cfg.set_value("prefs", "auto_wave", auto_wave_enabled)
 	cfg.set_value("prefs", "sfx_volume", sfx_volume)
+	cfg.set_value("prefs", "music_volume", music_volume)
 	cfg.set_value("prefs", "reduce_screen_shake", reduce_screen_shake)
 	cfg.set_value("prefs", "reduce_flashes", reduce_flashes)
 	if SfxManager != null:
@@ -162,11 +164,14 @@ func load_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	show_damage_numbers = bool(cfg.get_value("prefs", "show_damage_numbers", true))
 	auto_wave_enabled = bool(cfg.get_value("prefs", "auto_wave", false))
 	sfx_volume = clampf(float(cfg.get_value("prefs", "sfx_volume", 0.85)), 0.0, 1.0)
+	music_volume = clampf(float(cfg.get_value("prefs", "music_volume", 0.45)), 0.0, 1.0)
 	saved_sfx_muted = bool(cfg.get_value("prefs", "sfx_muted", false))
 	reduce_screen_shake = bool(cfg.get_value("prefs", "reduce_screen_shake", false))
 	reduce_flashes = bool(cfg.get_value("prefs", "reduce_flashes", false))
 	if SfxManager != null:
 		SfxManager.set_volume_linear(sfx_volume)
+		if SfxManager.has_method("set_music_volume_linear"):
+			SfxManager.set_music_volume_linear(music_volume)
 		SfxManager.set_muted(saved_sfx_muted)
 	_sync_mission_research_mirror()
 	economy_changed.emit()
@@ -430,6 +435,23 @@ func add_research(amount: int, is_replay: bool = false) -> int:
 	save_meta_progress()
 	economy_changed.emit()
 	return granted
+
+
+func award_endless_milestone(wave_num: int) -> Dictionary:
+	if is_sandbox_mode or not Balance.ENDLESS_MILESTONES.has(wave_num):
+		return {}
+	var mcfg: Dictionary = Balance.ENDLESS_MILESTONES[wave_num]
+	var bonus_r: int = int(mcfg.get("research", 0))
+	var bonus_cash: int = int(mcfg.get("cash", 0))
+	if bonus_r > 0:
+		meta_research += bonus_r
+		mission.stats["research_earned"] += bonus_r
+		_sync_mission_research_mirror()
+	if bonus_cash > 0:
+		add_money(bonus_cash, true)
+	save_meta_progress()
+	economy_changed.emit()
+	return mcfg
 
 
 func spend_research(amount: int) -> bool:

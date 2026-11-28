@@ -177,6 +177,8 @@ var _wave_intel_pinned_in_combat: bool = false
 var _last_wave_intel_sig: String = ""
 var pause_sfx_volume_slider: HSlider = null
 var pause_sfx_volume_label: Label = null
+var pause_music_volume_slider: HSlider = null
+var pause_music_volume_label: Label = null
 var pause_reduce_shake_check: CheckBox = null
 var pause_reduce_flashes_check: CheckBox = null
 var comms_toast_panel: PanelContainer = null
@@ -761,7 +763,7 @@ func _build_start_menu() -> void:
 	if end_vbox != null:
 		end_endless_button = Button.new()
 		end_endless_button.name = "EndEndlessButton"
-		end_endless_button.text = "Continue into Endless Mode (Wave 46+)"
+		end_endless_button.text = "★ Continue Endless (Wave 41+ • Bonus Research at W45/50/60!)"
 		end_endless_button.visible = false
 		end_endless_button.pressed.connect(func() -> void:
 			end_overlay.visible = false
@@ -851,19 +853,19 @@ func _build_start_menu() -> void:
 		UIIcons.apply_right_button_theme(pause_analytics_button, Color(0.28, 0.86, 0.96))
 		pause_extra_grid.add_child(pause_analytics_button)
 
-		# Audio volume slider (squared perceptual dB curve) + Accessibility toggles (Reduce Shake / Reduce Flashes)
-		var access_row := HBoxContainer.new()
-		access_row.name = "PauseAudioAccessRow"
-		access_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		access_row.add_theme_constant_override("separation", 12)
-		pause_vbox.add_child(access_row)
-		pause_vbox.move_child(access_row, pause_extra_grid.get_index() + 1)
+		# Audio sliders (SFX + Adaptive Music on dedicated squared perceptual dB buses)
+		var audio_row := HBoxContainer.new()
+		audio_row.name = "PauseAudioRow"
+		audio_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		audio_row.add_theme_constant_override("separation", 10)
+		pause_vbox.add_child(audio_row)
+		pause_vbox.move_child(audio_row, pause_extra_grid.get_index() + 1)
 
 		pause_sfx_volume_label = Label.new()
 		pause_sfx_volume_label.name = "PauseSfxVolumeLabel"
-		pause_sfx_volume_label.text = "SFX Vol: %d%%" % int(round(GameState.sfx_volume * 100.0))
-		pause_sfx_volume_label.custom_minimum_size = Vector2(94.0, 0.0)
-		access_row.add_child(pause_sfx_volume_label)
+		pause_sfx_volume_label.text = "SFX: %d%%" % int(round(GameState.sfx_volume * 100.0))
+		pause_sfx_volume_label.custom_minimum_size = Vector2(78.0, 0.0)
+		audio_row.add_child(pause_sfx_volume_label)
 
 		pause_sfx_volume_slider = HSlider.new()
 		pause_sfx_volume_slider.name = "PauseSfxVolumeSlider"
@@ -872,11 +874,11 @@ func _build_start_menu() -> void:
 		pause_sfx_volume_slider.step = 5.0
 		pause_sfx_volume_slider.value = round(GameState.sfx_volume * 100.0)
 		pause_sfx_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pause_sfx_volume_slider.custom_minimum_size = Vector2(120.0, 24.0)
+		pause_sfx_volume_slider.custom_minimum_size = Vector2(100.0, 24.0)
 		pause_sfx_volume_slider.value_changed.connect(func(v: float) -> void:
 			GameState.sfx_volume = clampf(v / 100.0, 0.0, 1.0)
 			if pause_sfx_volume_label != null:
-				pause_sfx_volume_label.text = "SFX Vol: %d%%" % int(round(v))
+				pause_sfx_volume_label.text = "SFX: %d%%" % int(round(v))
 			if SfxManager != null:
 				SfxManager.set_volume_linear(GameState.sfx_volume)
 		)
@@ -885,11 +887,45 @@ func _build_start_menu() -> void:
 			if SfxManager != null:
 				SfxManager.play("ui")
 		)
-		access_row.add_child(pause_sfx_volume_slider)
+		audio_row.add_child(pause_sfx_volume_slider)
+
+		pause_music_volume_label = Label.new()
+		pause_music_volume_label.name = "PauseMusicVolumeLabel"
+		pause_music_volume_label.text = "Music: %d%%" % int(round(GameState.music_volume * 100.0))
+		pause_music_volume_label.custom_minimum_size = Vector2(88.0, 0.0)
+		audio_row.add_child(pause_music_volume_label)
+
+		pause_music_volume_slider = HSlider.new()
+		pause_music_volume_slider.name = "PauseMusicVolumeSlider"
+		pause_music_volume_slider.min_value = 0.0
+		pause_music_volume_slider.max_value = 100.0
+		pause_music_volume_slider.step = 5.0
+		pause_music_volume_slider.value = round(GameState.music_volume * 100.0)
+		pause_music_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pause_music_volume_slider.custom_minimum_size = Vector2(100.0, 24.0)
+		pause_music_volume_slider.value_changed.connect(func(v: float) -> void:
+			GameState.music_volume = clampf(v / 100.0, 0.0, 1.0)
+			if pause_music_volume_label != null:
+				pause_music_volume_label.text = "Music: %d%%" % int(round(v))
+			if SfxManager != null and SfxManager.has_method("set_music_volume_linear"):
+				SfxManager.set_music_volume_linear(GameState.music_volume)
+		)
+		pause_music_volume_slider.drag_ended.connect(func(_changed: bool) -> void:
+			GameState.save_meta_progress()
+		)
+		audio_row.add_child(pause_music_volume_slider)
+
+		# Accessibility toggles (Reduce Shake / Reduce Flashes — WCAG 2.3.1)
+		var access_row := HBoxContainer.new()
+		access_row.name = "PauseAudioAccessRow"
+		access_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		access_row.add_theme_constant_override("separation", 16)
+		pause_vbox.add_child(access_row)
+		pause_vbox.move_child(access_row, audio_row.get_index() + 1)
 
 		pause_reduce_shake_check = CheckBox.new()
 		pause_reduce_shake_check.name = "PauseReduceShakeCheck"
-		pause_reduce_shake_check.text = "Reduce Shake"
+		pause_reduce_shake_check.text = "Reduce Shake / Hit-Stop"
 		pause_reduce_shake_check.button_pressed = GameState.reduce_screen_shake
 		pause_reduce_shake_check.toggled.connect(func(on: bool) -> void:
 			GameState.reduce_screen_shake = on
@@ -5116,6 +5152,18 @@ func _toggle_pause_menu() -> void:
 	pause_overlay.visible = next_paused
 	get_tree().paused = next_paused or (_guide_paused_game and guide_panel != null and guide_panel.visible)
 	if next_paused:
+		if pause_sfx_volume_slider != null:
+			pause_sfx_volume_slider.set_value_no_signal(round(GameState.sfx_volume * 100.0))
+		if pause_sfx_volume_label != null:
+			pause_sfx_volume_label.text = "SFX: %d%%" % int(round(GameState.sfx_volume * 100.0))
+		if pause_music_volume_slider != null:
+			pause_music_volume_slider.set_value_no_signal(round(GameState.music_volume * 100.0))
+		if pause_music_volume_label != null:
+			pause_music_volume_label.text = "Music: %d%%" % int(round(GameState.music_volume * 100.0))
+		if pause_reduce_shake_check != null:
+			pause_reduce_shake_check.set_pressed_no_signal(GameState.reduce_screen_shake)
+		if pause_reduce_flashes_check != null:
+			pause_reduce_flashes_check.set_pressed_no_signal(GameState.reduce_flashes)
 		_reapply_overlay_bounds()
 		call_deferred("_reapply_overlay_bounds")
 
@@ -5140,6 +5188,15 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 	var m := GameState.mission
 	var best_w: int = GameState.get_level_best_wave(GameState.selected_map_level)
 	var review: Dictionary = ComedyLines.get_end_of_run_review(outcome, m)
+	var endless_hint: String = ""
+	if outcome == "won":
+		endless_hint = "Endless Milestones: W45 (+15R) • W50 (+25R) • W60 (+40R) • W75 (+60R)"
+	elif GameState.is_endless_mode:
+		var cleared_ms: PackedStringArray = []
+		for mw in [45, 50, 60, 75]:
+			if bool(m.cleared_waves.get(mw, false)):
+				cleared_ms.append("W%d %s" % [mw, str(Balance.ENDLESS_MILESTONES[mw]["title"])])
+		endless_hint = ("Endless Badges Earned: " + ", ".join(cleared_ms)) if not cleared_ms.is_empty() else "Next Endless Milestone: Wave 45 (+15 Bonus Research!)"
 	end_stats_label.text = "\n".join([
 		"★ PERFORMANCE REVIEW: %s" % str(review.get("badge", "")),
 		str(review.get("note", "")),
@@ -5164,7 +5221,7 @@ func _on_mission_ended(outcome: String, reason: String) -> void:
 			m.stats["research_earned"],
 			GameState.meta_research,
 		],
-	])
+	] + ([endless_hint] if endless_hint != "" else []))
 
 
 func _on_mission_reset() -> void:

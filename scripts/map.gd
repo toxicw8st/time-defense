@@ -698,9 +698,27 @@ func spawn_apex_shockwave(local_pos: Vector2, col: Color, max_rad: float = 92.0,
 	queue_redraw()
 
 
+var _hit_stop_id: int = 0
+
+
 func trigger_screen_shake(duration: float = 0.25, intensity: float = 3.5) -> void:
 	_shake_timer = maxf(_shake_timer, duration)
 	_shake_intensity = maxf(_shake_intensity, intensity)
+
+
+func trigger_hit_stop(duration: float = 0.05, slow_scale: float = 0.08) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if GameState.reduce_screen_shake or GameState.mission == null or GameState.mission.is_over:
+		return
+	if get_tree() == null or get_tree().paused:
+		return
+	_hit_stop_id += 1
+	var my_id: int = _hit_stop_id
+	Engine.time_scale = clampf(slow_scale, 0.02, 0.5)
+	await get_tree().create_timer(clampf(duration, 0.02, 0.12), true, false, true).timeout
+	if my_id == _hit_stop_id:
+		Engine.time_scale = 1.0
 
 
 func trigger_hive_beam_effect(dmg: int = Balance.BASE_ATTACK_TEST_DAMAGE_OVERRIDE) -> void:
@@ -829,6 +847,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	_hit_stop_id += 1
+	Engine.time_scale = 1.0
 	_projectile_pool.clear()
 	if GameState.mission_reset.is_connected(_on_mission_reset):
 		GameState.mission_reset.disconnect(_on_mission_reset)
@@ -1531,6 +1551,8 @@ func _on_mission_reset() -> void:
 	inspected_enemy = null
 	_shake_timer = 0.0
 	_shake_intensity = 0.0
+	_hit_stop_id += 1
+	Engine.time_scale = 1.0
 	reset_user_zoom()
 	next_enemy_id = 1
 	next_tower_id = 1
@@ -1548,6 +1570,7 @@ func _on_enemy_leaked(_enemy_type: String, _lives_lost: int, _world_pos: Vector2
 func _on_enemy_killed(enemy_type: String, money_gained: int, research_gained: int, world_pos: Vector2) -> void:
 	if enemy_type == "juggernaut" or enemy_type == "colossus":
 		trigger_screen_shake(0.28, 4.2)
+		trigger_hit_stop(0.05, 0.08)
 	var local_p: Vector2 = to_local(world_pos)
 	if floating_texts.size() < 32:
 		floating_texts.append({

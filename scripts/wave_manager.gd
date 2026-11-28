@@ -235,6 +235,18 @@ func _complete_current_wave() -> void:
 				bonus += interest_part
 		if bonus > 0:
 			GameState.add_money(bonus, true)
+		if GameState.is_endless_mode and Balance.ENDLESS_MILESTONES.has(wave_num) and not GameState.is_sandbox_mode:
+			var ms: Dictionary = GameState.award_endless_milestone(wave_num)
+			if not ms.is_empty():
+				var ms_title: String = str(ms.get("title", "Endless Milestone"))
+				var ms_r: int = int(ms.get("research", 0))
+				var ms_c: int = int(ms.get("cash", 0))
+				if SfxManager != null:
+					SfxManager.play("combine")
+				if map_ref != null:
+					map_ref.spawn_apex_shockwave(map_ref.active_player_base_pos, Color(1.0, 0.88, 0.34), 220.0, 0.80)
+					map_ref.spawn_floater(map_ref.active_player_base_pos + Vector2(-90.0, -56.0), "★ W%d %s! +%dR +$%d" % [wave_num, ms_title.to_upper(), ms_r, ms_c], Color(1.0, 0.90, 0.36))
+				GameState.event_logged.emit("★ ENDLESS MILESTONE W%d (%s): +%d Bonus Meta-Research & +$%d!" % [wave_num, ms_title, ms_r, ms_c])
 		GameState.mission.stats["waves_completed"] += 1
 		GameState.economy_changed.emit()
 
