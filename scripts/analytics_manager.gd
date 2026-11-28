@@ -15,7 +15,7 @@ const SCHEMA_VERSION: int = 2
 const ANALYTICS_FILE_PATH: String = "user://timedefense_analytics.json"
 const PLAYER_ID_FILE_PATH: String = "user://timedefense_player_id.txt"
 const MAX_STORED_RUNS: int = 60
-const MAX_EVENTS_PER_RUN: int = 260
+const MAX_EVENTS_PER_RUN: int = 700
 
 # Dedicated TimeDefense telemetry section on user's Supabase project (RLS-isolated public.timedefense_runs)
 const SUPABASE_URL: String = "https://ojtcgdsryjylpryevurl.supabase.co"
@@ -795,6 +795,12 @@ func record_manipulator_upgrade(next_lvl: int, cost: int) -> void:
 	if current_run.is_empty():
 		return
 	_log_event("manipulator", {"lvl": next_lvl, "cost": cost})
+
+
+func record_ability_upgrade(ability_key: String, next_lvl: int, cost: int) -> void:
+	if current_run.is_empty():
+		return
+	_log_event("ability_upgrade", {"ability": ability_key, "lvl": next_lvl, "cost": cost})
 
 
 func record_hive_charge_started(cost: int) -> void:

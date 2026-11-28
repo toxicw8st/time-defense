@@ -1703,9 +1703,11 @@ func _test_j_v2_btd5_evolution() -> void:
 	hud._last_wave_intel_sig = ""
 	hud._refresh_wave_intel_card()
 	assert(hud.wave_intel_card != null and hud.wave_intel_card.visible, "NextWaveIntelCard must auto-show during BUILD phase")
+	assert(hud.wave_intel_card.get_parent() == hud.get_node("RightPanel/Margin/VBox"), "NextWaveIntelCard must be docked inside Top-Right RightPanel (never floating over battlefield)")
+	assert(not hud.preview_body_label.visible, "Redundant plain-text PreviewBodyLabel must stay hidden when docked visual Wave Intel is mounted")
 	assert(hud.wave_intel_title_label.text.contains("CLOAKED") and hud.wave_intel_tip_label.text.contains("Range to Lv2"), "Wave 11 NextWaveIntelCard must clearly warn about Cloaked Stalkers & Range Lv2!")
 	assert(hud.wave_intel_roster_box.get_child_count() >= 1, "NextWaveIntelCard must render visual enemy chips")
-	assert(hud.wave_intel_card.position.x + hud.wave_intel_card.custom_minimum_size.x <= hud.zoom_bar.position.x + 1.0, "NextWaveIntelCard must NOT overlap floating ZoomControlsBar")
+	assert(not hud.wave_intel_card.get_global_rect().intersects(hud.zoom_bar.get_global_rect()), "Docked NextWaveIntelCard must NOT overlap floating ZoomControlsBar")
 	hud.wave_intel_hide_button.pressed.emit()
 	assert(not hud.wave_intel_card.visible, "Hide button must dismiss NextWaveIntelCard for current wave")
 	wm.state = WaveManager.State.FIGHTING

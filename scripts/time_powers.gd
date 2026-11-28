@@ -249,7 +249,7 @@ func upgrade_ability(power_name: String) -> bool:
 	GameState.ability_upgraded.emit(power_name, next_tier)
 	ability_upgraded.emit(power_name, next_tier)
 	if AnalyticsManager != null:
-		AnalyticsManager.record_manipulator_upgrade(next_tier, cost)
+		AnalyticsManager.record_ability_upgrade(power_name, next_tier, cost)
 	return true
 
 

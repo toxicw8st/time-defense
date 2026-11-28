@@ -113,6 +113,17 @@ var extra_left_margin: float = 0.0
 var extra_right_margin: float = 0.0
 var visual_time: float = 0.0
 
+# P0 Performance caches: static backdrop canvas, projectile pool, per-frame active enemy & Conduit shield caches
+const MAX_PROJECTILE_POOL: int = 160
+var _static_layer: Node2D = null
+var _projectile_pool: Array[ProjectileEffect] = []
+var _active_enemies_cache: Array[EnemyUnit] = []
+var _live_conduits_cache: Array[EnemyUnit] = []
+var _enemies_cache_frame: int = -1
+var _enemies_cache_dirty: bool = true
+var _conduit_refresh_accum: float = 0.0
+var _idle_redraw_accum: float = 0.0
+
 var drag_tower_type: String = ""
 var drag_local_pos: Vector2 = Vector2.ZERO
 var drag_snap_pad_index: int = -1
@@ -338,6 +349,7 @@ func load_level(level_id: int) -> void:
 	_build_path_curve()
 	clear_all_towers()
 	reset_user_zoom()
+	_queue_static_redraw()
 	queue_redraw()
 
 
@@ -558,6 +570,7 @@ func set_viewport_margins(left_m: float, right_m: float) -> void:
 		map_click_area.offset_top = 0.0
 		map_click_area.offset_right = MAP_WIDTH + extra_right_margin
 		map_click_area.offset_bottom = MAP_HEIGHT
+	_queue_static_redraw()
 	queue_redraw()
 
 
@@ -765,11 +778,11 @@ func trigger_ability_animation(power_name: String) -> void:
 		})
 
 	if power_name == "pause":
-		spawn_floater(active_player_base_pos + Vector2(-58, -62), "TEMPORAL PAUSE! (FROZEN)", Color(0.45, 0.96, 1.0))
+		spawn_floater(active_player_base_pos + Vector2(-58, -62), "TIME FREEZE! (STASIS)", Color(0.45, 0.96, 1.0))
 	elif power_name == "haste":
-		spawn_floater(active_player_base_pos + Vector2(-56, -62), "CHRONO HASTE! (+50% SPD)", Color(0.38, 1.0, 0.78))
+		spawn_floater(active_player_base_pos + Vector2(-56, -62), "OVERCLOCK! (SUPERCHARGED)", Color(0.38, 1.0, 0.78))
 	else:
-		spawn_floater(active_player_base_pos + Vector2(-56, -62), "TIME REWIND! (RESET)", Color(0.86, 0.52, 1.0))
+		spawn_floater(active_player_base_pos + Vector2(-62, -62), "TEMPORAL REWIND! (YANKED)", Color(0.86, 0.52, 1.0))
 	queue_redraw()
 
 
@@ -787,7 +800,24 @@ func get_ability_fx_state() -> Dictionary:
 	}
 
 
+func _ensure_static_layer() -> void:
+	if _static_layer != null and is_instance_valid(_static_layer):
+		return
+	_static_layer = Node2D.new()
+	_static_layer.name = "StaticBackdropLayer"
+	_static_layer.z_index = -5
+	add_child(_static_layer)
+	move_child(_static_layer, 0)
+	_static_layer.draw.connect(_draw_static_layer)
+
+
+func _queue_static_redraw() -> void:
+	if _static_layer != null and is_instance_valid(_static_layer):
+		_static_layer.queue_redraw()
+
+
 func _ready() -> void:
+	_ensure_static_layer()
 	load_level(GameState.selected_map_level)
 	if map_click_area != null:
 		map_click_area.gui_input.connect(_on_map_gui_input)
@@ -799,6 +829,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	_projectile_pool.clear()
 	if GameState.mission_reset.is_connected(_on_mission_reset):
 		GameState.mission_reset.disconnect(_on_mission_reset)
 	if GameState.enemy_leaked.is_connected(_on_enemy_leaked):
@@ -809,6 +840,26 @@ func _exit_tree() -> void:
 		GameState.surge_triggered.disconnect(_on_surge_triggered)
 	if GameState.time_power_used.is_connected(_on_time_power_used):
 		GameState.time_power_used.disconnect(_on_time_power_used)
+
+
+func _refresh_conduit_shields() -> void:
+	_sync_enemy_caches()
+	if _live_conduits_cache.is_empty():
+		return
+	var cur_f: int = Engine.get_process_frames()
+	for enemy in _active_enemies_cache:
+		if enemy.enemy_type == "conduit":
+			enemy._cached_conduit_shielded = false
+			enemy._conduit_cache_frame = cur_f
+			continue
+		var shielded: bool = false
+		for c_unit in _live_conduits_cache:
+			var r: float = c_unit.shield_aura_radius
+			if r > 0.0 and enemy.position.distance_squared_to(c_unit.position) <= r * r:
+				shielded = true
+				break
+		enemy._cached_conduit_shielded = shielded
+		enemy._conduit_cache_frame = cur_f
 
 
 func _process(delta: float) -> void:
@@ -878,7 +929,35 @@ func _process(delta: float) -> void:
 			if float(rewind_trails[i]["timer"]) <= 0.0:
 				rewind_trails.remove_at(i)
 
-	queue_redraw()
+	if has_live_conduits():
+		_conduit_refresh_accum += delta
+		if _conduit_refresh_accum >= 0.10:
+			_conduit_refresh_accum = 0.0
+			_refresh_conduit_shields()
+
+	var is_dynamic_active: bool = (
+		GameState.is_wave_active
+		or _shake_timer > 0.0
+		or drag_tower_type != ""
+		or pending_build_type != ""
+		or leak_flash_timer > 0.0
+		or hive_beam_timer > 0.0
+		or surge_explosion_timer > 0.0
+		or ability_fx_timer > 0.0
+		or not floating_texts.is_empty()
+		or not apex_shockwaves.is_empty()
+		or not death_bursts.is_empty()
+		or not citadel_beams.is_empty()
+		or not rewind_trails.is_empty()
+	)
+	if is_dynamic_active:
+		_idle_redraw_accum = 0.0
+		queue_redraw()
+	else:
+		_idle_redraw_accum += delta
+		if _idle_redraw_accum >= 0.08:
+			_idle_redraw_accum = 0.0
+			queue_redraw()
 
 
 func _find_tower_at(local_pos: Vector2, search_radius: float = 36.0) -> TowerUnit:
@@ -1512,10 +1591,29 @@ func get_path_length() -> float:
 
 
 func spawn_projectile() -> ProjectileEffect:
+	while not _projectile_pool.is_empty():
+		var recycled: ProjectileEffect = _projectile_pool.pop_back()
+		if is_instance_valid(recycled) and not recycled.is_queued_for_deletion():
+			if recycled.get_parent() == null and projectiles_container != null:
+				projectiles_container.add_child(recycled)
+			recycled.reset_for_pool(self)
+			return recycled
 	var proj: ProjectileEffect = projectile_scene.instantiate()
 	if projectiles_container != null:
 		projectiles_container.add_child(proj)
+	proj.reset_for_pool(self)
 	return proj
+
+
+func release_projectile(proj: ProjectileEffect) -> void:
+	if proj == null or not is_instance_valid(proj) or proj.is_queued_for_deletion():
+		return
+	if _projectile_pool.size() < MAX_PROJECTILE_POOL:
+		proj.visible = false
+		proj.set_process(false)
+		_projectile_pool.append(proj)
+	else:
+		proj.queue_free()
 
 
 func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
@@ -1525,6 +1623,7 @@ func spawn_enemy(enemy_type: String, wave_num: int) -> EnemyUnit:
 	next_enemy_id += 1
 	enemy.leaked.connect(_on_unit_leaked)
 	enemy.died.connect(_on_unit_died)
+	_enemies_cache_dirty = true
 	return enemy
 
 
@@ -1569,6 +1668,7 @@ func sandbox_clear_towers() -> void:
 
 
 func _on_unit_leaked(enemy: EnemyUnit) -> void:
+	_enemies_cache_dirty = true
 	GameState.lose_lives(enemy.leak_cost, enemy.enemy_type, enemy.global_position)
 
 
@@ -1647,6 +1747,7 @@ func absorb_tower_into_citadel(tower: TowerUnit) -> void:
 
 
 func _on_unit_died(enemy: EnemyUnit) -> void:
+	_enemies_cache_dirty = true
 	spawn_death_burst(enemy.position, enemy.enemy_type)
 	var prog_pct: float = enemy.get_path_progress_pct()
 	if AnalyticsManager != null:
@@ -1682,15 +1783,41 @@ func _on_unit_died(enemy: EnemyUnit) -> void:
 				other.take_damage(nova_dmg, "Normal", src_node)
 
 
+func _sync_enemy_caches() -> void:
+	var cur_f: int = Engine.get_process_frames()
+	if not _enemies_cache_dirty and _enemies_cache_frame == cur_f:
+		return
+	_active_enemies_cache.clear()
+	_live_conduits_cache.clear()
+	if enemies_container != null:
+		for child in enemies_container.get_children():
+			if child is EnemyUnit and not child.is_dead_or_leaked and not child.is_queued_for_deletion():
+				_active_enemies_cache.append(child)
+				if child.enemy_type == "conduit" and child.shield_aura_radius > 0.0:
+					_live_conduits_cache.append(child)
+	_enemies_cache_frame = cur_f
+	_enemies_cache_dirty = false
+
+
 func get_active_enemies() -> Array[EnemyUnit]:
-	var list: Array[EnemyUnit] = []
-	for child in enemies_container.get_children():
-		if child is EnemyUnit and not child.is_dead_or_leaked:
-			list.append(child)
-	return list
+	_sync_enemy_caches()
+	return _active_enemies_cache
+
+
+func get_live_conduits() -> Array[EnemyUnit]:
+	_sync_enemy_caches()
+	return _live_conduits_cache
+
+
+func has_live_conduits() -> bool:
+	_sync_enemy_caches()
+	return not _live_conduits_cache.is_empty()
 
 
 func clear_all_enemies() -> void:
+	_enemies_cache_dirty = true
+	_active_enemies_cache.clear()
+	_live_conduits_cache.clear()
 	if enemies_container == null:
 		return
 	for child in enemies_container.get_children():
@@ -1710,6 +1837,7 @@ func clear_all_towers() -> void:
 
 
 func clear_all_projectiles() -> void:
+	_projectile_pool.clear()
 	if projectiles_container == null:
 		return
 	for child in projectiles_container.get_children():
@@ -1832,15 +1960,10 @@ func get_enemy_base_visual_state() -> Dictionary:
 	}
 
 
-func _draw() -> void:
-	if _shake_timer > 0.0 and _shake_intensity > 0.0:
-		var ox: float = sin(visual_time * 58.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
-		var oy: float = cos(visual_time * 67.0) * _shake_intensity * clampf(_shake_timer / 0.3, 0.0, 1.0)
-		_draw_shake_offset = Vector2(ox, oy)
-		draw_set_transform(_draw_shake_offset)
-	else:
-		_draw_shake_offset = Vector2.ZERO
-		draw_set_transform(Vector2.ZERO)
+func _draw_static_layer() -> void:
+	if _static_layer == null:
+		return
+	var sl: Node2D = _static_layer
 	var font: Font = ThemeDB.fallback_font
 	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
 	var left_x: float = -extra_left_margin
@@ -1849,48 +1972,91 @@ func _draw() -> void:
 	var lvl_cfg: Dictionary = get_level_config(current_level_id)
 	var lvl_accent: Color = lvl_cfg["accent"]
 
-	# 1) Deep sci-fi tactical terrain background + dual-scale sector grid
-	draw_rect(arena_rect, Color(0.06, 0.08, 0.13))
-	draw_rect(Rect2(Vector2(left_x + 12.0, 12.0), Vector2(full_w - 24.0, MAP_HEIGHT - 24.0)), Color(0.075, 0.10, 0.155))
+	# 1) Deep sci-fi tactical terrain background + dual-scale sector grid (drawn ONCE per level/resize!)
+	sl.draw_rect(arena_rect, Color(0.06, 0.08, 0.13))
+	sl.draw_rect(Rect2(Vector2(left_x + 12.0, 12.0), Vector2(full_w - 24.0, MAP_HEIGHT - 24.0)), Color(0.075, 0.10, 0.155))
 
 	var gx_minor: float = -floorf(extra_left_margin / 40.0) * 40.0
 	while gx_minor <= right_x:
-		draw_line(Vector2(gx_minor, 0.0), Vector2(gx_minor, MAP_HEIGHT), Color(0.10, 0.13, 0.19, 0.38), 1.0)
+		sl.draw_line(Vector2(gx_minor, 0.0), Vector2(gx_minor, MAP_HEIGHT), Color(0.10, 0.13, 0.19, 0.38), 1.0)
 		gx_minor += 40.0
 	var gy_minor: float = 40.0
 	while gy_minor < MAP_HEIGHT:
-		draw_line(Vector2(left_x, gy_minor), Vector2(right_x, gy_minor), Color(0.10, 0.13, 0.19, 0.38), 1.0)
+		sl.draw_line(Vector2(left_x, gy_minor), Vector2(right_x, gy_minor), Color(0.10, 0.13, 0.19, 0.38), 1.0)
 		gy_minor += 40.0
 
 	var gx: float = -floorf(extra_left_margin / 80.0) * 80.0
 	while gx <= right_x:
-		draw_line(Vector2(gx, 0.0), Vector2(gx, MAP_HEIGHT), Color(0.14, 0.19, 0.28, 0.62), 1.0)
+		sl.draw_line(Vector2(gx, 0.0), Vector2(gx, MAP_HEIGHT), Color(0.14, 0.19, 0.28, 0.62), 1.0)
 		var cy: float = 80.0
 		while cy < MAP_HEIGHT:
-			draw_line(Vector2(gx - 3.0, cy), Vector2(gx + 3.0, cy), Color(0.24, 0.35, 0.50, 0.55), 1.0)
-			draw_line(Vector2(gx, cy - 3.0), Vector2(gx, cy + 3.0), Color(0.24, 0.35, 0.50, 0.55), 1.0)
+			sl.draw_line(Vector2(gx - 3.0, cy), Vector2(gx + 3.0, cy), Color(0.24, 0.35, 0.50, 0.55), 1.0)
+			sl.draw_line(Vector2(gx, cy - 3.0), Vector2(gx, cy + 3.0), Color(0.24, 0.35, 0.50, 0.55), 1.0)
 			cy += 80.0
 		gx += 80.0
 	var gy: float = 80.0
 	while gy < MAP_HEIGHT:
-		draw_line(Vector2(left_x, gy), Vector2(right_x, gy), Color(0.14, 0.19, 0.28, 0.62), 1.0)
+		sl.draw_line(Vector2(left_x, gy), Vector2(right_x, gy), Color(0.14, 0.19, 0.28, 0.62), 1.0)
 		gy += 80.0
 
-	# Sector power conduits & corner telemetry beacons (eliminates dead-space feel in outer corners)
+	# Static sector power conduits + corner rings + sector watermark
 	var conduit_col := Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.22)
 	var annex_hub := Vector2(REFINERY_ANNEX_RECT.end.x, REFINERY_ANNEX_RECT.get_center().y)
-	draw_line(annex_hub, Vector2(annex_hub.x + 28.0, annex_hub.y), conduit_col, 2.2)
-	draw_line(Vector2(annex_hub.x + 28.0, annex_hub.y), Vector2(active_player_base_pos.x, annex_hub.y), Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.12), 1.8)
-	draw_line(Vector2(active_player_base_pos.x, annex_hub.y), active_player_base_pos, conduit_col, 2.2)
+	sl.draw_line(annex_hub, Vector2(annex_hub.x + 28.0, annex_hub.y), conduit_col, 2.2)
+	sl.draw_line(Vector2(annex_hub.x + 28.0, annex_hub.y), Vector2(active_player_base_pos.x, annex_hub.y), Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.12), 1.8)
+	sl.draw_line(Vector2(active_player_base_pos.x, annex_hub.y), active_player_base_pos, conduit_col, 2.2)
+	for corner_p in [Vector2(left_x + 24.0, 24.0), Vector2(right_x - 24.0, 24.0), Vector2(right_x - 24.0, MAP_HEIGHT - 24.0)]:
+		sl.draw_arc(corner_p, 9.0, 0.0, TAU, 16, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.26), 1.2)
+	sl.draw_string(font, Vector2(695.0, 472.0), "%s (%s)" % [str(lvl_cfg["name"]), str(lvl_cfg["zone_rule"])], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.52))
+
+	# Static 4-pass layered path transit trench
+	if enemy_path != null and enemy_path.curve != null:
+		var pts: PackedVector2Array = enemy_path.curve.get_baked_points()
+		var wpts: Array[Vector2] = active_path_waypoints if not active_path_waypoints.is_empty() else PATH_WAYPOINTS
+		if extra_left_margin > 0.0 and not wpts.is_empty():
+			var lead_pts := PackedVector2Array([Vector2(left_x, wpts[0].y), wpts[0]])
+			sl.draw_polyline(lead_pts, Color(0.11, 0.15, 0.22), 34.0)
+			sl.draw_polyline(lead_pts, Color(0.18, 0.23, 0.32), 24.0)
+		if extra_right_margin > 0.0 and not wpts.is_empty():
+			var end_pt: Vector2 = wpts[wpts.size() - 1]
+			var tail_pts := PackedVector2Array([end_pt, Vector2(right_x, end_pt.y)])
+			sl.draw_polyline(tail_pts, Color(0.11, 0.15, 0.22), 34.0)
+			sl.draw_polyline(tail_pts, Color(0.18, 0.23, 0.32), 24.0)
+		if pts.size() >= 2:
+			sl.draw_polyline(pts, Color(0.04, 0.05, 0.08, 0.75), 40.0)
+			sl.draw_polyline(pts, Color(0.22, 0.28, 0.39), 34.0)
+			sl.draw_polyline(pts, Color(0.13, 0.17, 0.24), 26.0)
+			sl.draw_polyline(pts, Color(0.17, 0.22, 0.31), 18.0)
+
+
+func _draw() -> void:
+	if _shake_timer > 0.0 and _shake_intensity > 0.0 and not GameState.reduce_screen_shake:
+		var trauma: float = clampf(_shake_timer / 0.34, 0.0, 1.0)
+		var sq: float = trauma * trauma * _shake_intensity
+		var ox: float = (sin(visual_time * 37.0) * 0.72 + sin(visual_time * 61.0) * 0.28) * sq
+		var oy: float = (cos(visual_time * 43.0) * 0.72 + sin(visual_time * 73.0) * 0.28) * sq
+		_draw_shake_offset = Vector2(ox, oy)
+		draw_set_transform(_draw_shake_offset)
+	else:
+		_draw_shake_offset = Vector2.ZERO
+		draw_set_transform(Vector2.ZERO)
+	if _static_layer != null and is_instance_valid(_static_layer):
+		_static_layer.position = _draw_shake_offset
+	var font: Font = ThemeDB.fallback_font
+	var full_w: float = MAP_WIDTH + extra_left_margin + extra_right_margin
+	var left_x: float = -extra_left_margin
+	var right_x: float = MAP_WIDTH + extra_right_margin
+	var arena_rect := Rect2(Vector2(left_x, 0.0), Vector2(full_w, MAP_HEIGHT))
+	var lvl_cfg: Dictionary = get_level_config(current_level_id)
+	var lvl_accent: Color = lvl_cfg["accent"]
+
+	# 1) Dynamic power conduit pulse & corner telemetry beacons (static terrain/grid live on _static_layer!)
+	var annex_hub := Vector2(REFINERY_ANNEX_RECT.end.x, REFINERY_ANNEX_RECT.get_center().y)
 	var c_pulse: float = fmod(visual_time * 0.35, 1.0)
 	var sig_x: float = lerpf(annex_hub.x + 28.0, active_player_base_pos.x, c_pulse)
 	draw_circle(Vector2(sig_x, annex_hub.y), 2.6, Color(0.45, 0.96, 1.0, 0.55))
 	for corner_p in [Vector2(left_x + 24.0, 24.0), Vector2(right_x - 24.0, 24.0), Vector2(right_x - 24.0, MAP_HEIGHT - 24.0)]:
-		draw_arc(corner_p, 9.0, 0.0, TAU, 16, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.26), 1.2)
 		draw_circle(corner_p, 2.2, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.45 + 0.30 * sin(visual_time * 3.0)))
-
-	# Sector watermark in bottom-right corner
-	draw_string(font, Vector2(695.0, 472.0), "%s (%s)" % [str(lvl_cfg["name"]), str(lvl_cfg["zone_rule"])], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(lvl_accent.r, lvl_accent.g, lvl_accent.b, 0.52))
 
 	# 2) Refinery Annex industrial zone (bottom-left) + Refinery Tech Tier indicator
 	var r_tier: int = GameState.get_refinery_tier()
@@ -1947,24 +2113,10 @@ func _draw() -> void:
 			draw_arc(center, 14.0, -PI * 0.5, -PI * 0.5 + TAU * prog, 24, Color(0.45, 0.95, 0.65), 2.5)
 			draw_string(font, Vector2(rx + 6, ry + 21), "%.1fs" % economy_ref.refinery_job.remaining_time, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.92, 0.45))
 
-	# 3) Layered Path Transit Trench + Animated Directional Flow Chevrons
+	# 3) Dynamic Path Center Rail + Animated Directional Flow Chevrons (4-pass static trench lives on _static_layer)
 	if enemy_path != null and enemy_path.curve != null:
 		var pts: PackedVector2Array = enemy_path.curve.get_baked_points()
-		var wpts: Array[Vector2] = active_path_waypoints if not active_path_waypoints.is_empty() else PATH_WAYPOINTS
-		if extra_left_margin > 0.0 and not wpts.is_empty():
-			var lead_pts := PackedVector2Array([Vector2(left_x, wpts[0].y), wpts[0]])
-			draw_polyline(lead_pts, Color(0.11, 0.15, 0.22), 34.0)
-			draw_polyline(lead_pts, Color(0.18, 0.23, 0.32), 24.0)
-		if extra_right_margin > 0.0 and not wpts.is_empty():
-			var end_pt: Vector2 = wpts[wpts.size() - 1]
-			var tail_pts := PackedVector2Array([end_pt, Vector2(right_x, end_pt.y)])
-			draw_polyline(tail_pts, Color(0.11, 0.15, 0.22), 34.0)
-			draw_polyline(tail_pts, Color(0.18, 0.23, 0.32), 24.0)
 		if pts.size() >= 2:
-			draw_polyline(pts, Color(0.04, 0.05, 0.08, 0.75), 40.0)
-			draw_polyline(pts, Color(0.22, 0.28, 0.39), 34.0)
-			draw_polyline(pts, Color(0.13, 0.17, 0.24), 26.0)
-			draw_polyline(pts, Color(0.17, 0.22, 0.31), 18.0)
 			var rail_col := Color(0.45, 0.88, 1.0, 0.55) if GameState.is_enemies_frozen else Color(0.36, 0.48, 0.66, 0.50)
 			draw_polyline(pts, rail_col, 2.0)
 
@@ -2158,10 +2310,14 @@ func _draw() -> void:
 		draw_circle(cb["to"], 8.0 * c_a + 2.0, Color(c_col.r, c_col.g, c_col.b, c_a * 0.85))
 
 	# 9) Global Time Power Battlefield Border FX (Pause Stasis Frost / Haste Overclock)
+	var fx_alpha_scale: float = 0.45 if GameState.reduce_flashes else 1.0
 	if GameState.is_enemies_frozen:
-		draw_rect(arena_rect.grow(-2.0), Color(0.42, 0.88, 1.0, 0.45), false, 3.5)
+		draw_rect(arena_rect.grow(-2.0), Color(0.42, 0.88, 1.0, 0.45 * fx_alpha_scale), false, 3.5)
 	elif GameState.is_haste_active:
-		draw_rect(arena_rect.grow(-2.0), Color(0.35, 1.0, 0.78, 0.40), false, 3.0)
+		draw_rect(arena_rect.grow(-2.0), Color(0.35, 1.0, 0.78, 0.40 * fx_alpha_scale), false, 3.0)
+	if leak_flash_timer > 0.0:
+		var lf_a: float = clampf(leak_flash_timer / 0.35, 0.0, 1.0) * (0.10 if GameState.reduce_flashes else 0.22)
+		draw_rect(arena_rect.grow(-3.0), Color(1.0, 0.22, 0.24, lf_a), false, 6.0)
 	draw_rect(arena_rect, Color(0.24, 0.34, 0.48), false, 2.0)
 
 	# 10) Floating earnings texts

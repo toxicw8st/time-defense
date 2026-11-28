@@ -100,6 +100,10 @@ var difficulty_key: String = "standard" # "standard" | "hard" | "nightmare"
 var is_endless_mode: bool = false
 var auto_wave_enabled: bool = false
 var show_damage_numbers: bool = true
+var sfx_volume: float = 0.85
+var saved_sfx_muted: bool = false
+var reduce_screen_shake: bool = false
+var reduce_flashes: bool = false
 var is_sandbox_mode: bool = false
 var sandbox_instant_build: bool = true
 var sandbox_no_loss: bool = true
@@ -126,6 +130,9 @@ func save_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	cfg.set_value("prefs", "guide_completed", guide_completed)
 	cfg.set_value("prefs", "show_damage_numbers", show_damage_numbers)
 	cfg.set_value("prefs", "auto_wave", auto_wave_enabled)
+	cfg.set_value("prefs", "sfx_volume", sfx_volume)
+	cfg.set_value("prefs", "reduce_screen_shake", reduce_screen_shake)
+	cfg.set_value("prefs", "reduce_flashes", reduce_flashes)
 	if SfxManager != null:
 		cfg.set_value("prefs", "sfx_muted", SfxManager.muted)
 	return cfg.save(path) == OK
@@ -154,8 +161,13 @@ func load_meta_progress(path: String = SAVE_FILE_PATH) -> bool:
 	guide_completed = false
 	show_damage_numbers = bool(cfg.get_value("prefs", "show_damage_numbers", true))
 	auto_wave_enabled = bool(cfg.get_value("prefs", "auto_wave", false))
+	sfx_volume = clampf(float(cfg.get_value("prefs", "sfx_volume", 0.85)), 0.0, 1.0)
+	saved_sfx_muted = bool(cfg.get_value("prefs", "sfx_muted", false))
+	reduce_screen_shake = bool(cfg.get_value("prefs", "reduce_screen_shake", false))
+	reduce_flashes = bool(cfg.get_value("prefs", "reduce_flashes", false))
 	if SfxManager != null:
-		SfxManager.set_muted(bool(cfg.get_value("prefs", "sfx_muted", false)))
+		SfxManager.set_volume_linear(sfx_volume)
+		SfxManager.set_muted(saved_sfx_muted)
 	_sync_mission_research_mirror()
 	economy_changed.emit()
 	return true

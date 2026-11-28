@@ -280,6 +280,17 @@ func get_decay_flat_damage() -> float:
 	return float(ladder[lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("decay_mult", 1.0)
 
 
+func get_bubble_decay_flat_damage() -> float:
+	if not uses_decay_upgrades():
+		return 0.0
+	var cfg: Dictionary = Balance.TOWERS[tower_type]
+	if cfg.has("bubble_decay_flat_by_level"):
+		var b_ladder: Array = cfg["bubble_decay_flat_by_level"]
+		var lvl: int = clampi(int(levels["damage"]), 0, b_ladder.size() - 1)
+		return float(b_ladder[lvl]) * GameState.get_tower_damage_research_multiplier() * get_apex_mod_float("decay_mult", 1.0)
+	return get_decay_flat_damage()
+
+
 func get_decay_tick_pct() -> float:
 	return get_decay_flat_damage()
 
@@ -611,12 +622,13 @@ func _fire_at(target: EnemyUnit) -> void:
 		shred_max = shred_bonus
 
 	var bubble_cfg: Dictionary = {}
+	var has_split_bubble_decay: bool = cfg.has("bubble_decay_flat_by_level")
 	if creates_bubble:
 		bubble_cfg = {
 			"duration": float(cfg.get("bubble_duration", 3.5)) + get_apex_mod_float("bubble_duration_add", 0.0),
 			"radius": get_effective_bubble_radius(),
 			"slow_pct": slow_pct if slow_pct > 0.0 else 0.30,
-			"decay_flat": decay_flat,
+			"decay_flat": get_bubble_decay_flat_damage(),
 			"decay_ticks": decay_ticks,
 			"burn_dps": float(cfg.get("bubble_burn_dps", 0.0)) * dmg_scale * get_apex_mod_float("bubble_burn_mult", 1.0),
 			"burn_type": String(cfg.get("bubble_burn_type", "Laser" if tower_type.contains("laser") else "Time")),
@@ -632,8 +644,7 @@ func _fire_at(target: EnemyUnit) -> void:
 		if SfxManager != null:
 			SfxManager.play("blaster", 0.12, -5.0)
 		if map_ref != null:
-			var shell: ProjectileEffect = projectile_scene.instantiate()
-			map_ref.projectiles_container.add_child(shell)
+			var shell: ProjectileEffect = map_ref.spawn_projectile()
 			shell.setup_mortar_shell(
 				position,
 				target.position,
@@ -707,8 +718,7 @@ func _fire_at(target: EnemyUnit) -> void:
 				beam_end = extra_e.position
 
 	if map_ref != null:
-		var tracer: ProjectileEffect = projectile_scene.instantiate()
-		map_ref.projectiles_container.add_child(tracer)
+		var tracer: ProjectileEffect = map_ref.spawn_projectile()
 		var beam_width: float = 2.5
 		var beam_dur: float = 0.09
 		if tower_type == "slow" or creates_bubble:
@@ -735,8 +745,7 @@ func _fire_at(target: EnemyUnit) -> void:
 		tracer.setup_tracer(position, beam_end, t_col, beam_width, beam_dur)
 
 		if creates_bubble:
-			var bubble: ProjectileEffect = projectile_scene.instantiate()
-			map_ref.projectiles_container.add_child(bubble)
+			var bubble: ProjectileEffect = map_ref.spawn_projectile()
 			bubble.setup_chrono_bubble(
 				target.position,
 				float(bubble_cfg["duration"]),
@@ -772,7 +781,7 @@ func _fire_at(target: EnemyUnit) -> void:
 		if is_instance_valid(h_target) and h_target.is_alive():
 			if shred_pct > 0.0:
 				h_target.apply_armor_shred(shred_max, 3.8)
-			if slow_pct > 0.0 and not creates_bubble:
+			if slow_pct > 0.0 and (not creates_bubble or has_split_bubble_decay):
 				h_target.apply_time_hit(slow_pct, slow_dur, decay_flat, decay_ticks, self)
 			if apex_stun > 0.0:
 				h_target.apply_stun(apex_stun)
@@ -805,8 +814,7 @@ func _fire_at(target: EnemyUnit) -> void:
 				continue
 			if apex_slag_nova > 0.0:
 				chain_e.mark_slag_nova(apex_slag_nova, self)
-			var arc: ProjectileEffect = projectile_scene.instantiate()
-			map_ref.projectiles_container.add_child(arc)
+			var arc: ProjectileEffect = map_ref.spawn_projectile()
 			arc.setup_tracer(origin_p, chain_e.position, Color(0.55, 0.96, 1.0), 2.1 if apex_tier >= 1 else 1.9, 0.12)
 			chain_e.take_damage(dmg * eff_refract_ratio, "Laser", self)
 
@@ -836,8 +844,7 @@ func _fire_at(target: EnemyUnit) -> void:
 					if cm > best_m:
 						best_m = cm
 						r_dtype = cand_dt
-			var r_tracer: ProjectileEffect = projectile_scene.instantiate()
-			map_ref.projectiles_container.add_child(r_tracer)
+			var r_tracer: ProjectileEffect = map_ref.spawn_projectile()
 			r_tracer.setup_tracer(r_origin, re.position, Color(1.0, 0.88, 0.42), 2.0, 0.10)
 			re.take_damage(dmg * rico_ratio, r_dtype, self)
 			if shred_pct > 0.0 and is_instance_valid(re) and re.is_alive():

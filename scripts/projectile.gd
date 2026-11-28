@@ -50,6 +50,69 @@ var bubble_color: Color = Color(0.64, 0.48, 1.0)
 var bubble_pull_px_per_sec: float = 0.0
 var bubble_anti_regen: bool = false
 var _bubble_pulse_accum: float = 0.0
+var _pooled: bool = false
+
+
+func reset_for_pool(p_map: GameMap = null) -> void:
+	_pooled = false
+	is_tracer = false
+	is_bubble = false
+	tracer_color = Color(0.45, 0.9, 1.0)
+	tracer_width = 2.5
+	damage_type = "Normal"
+	start_pos = Vector2.ZERO
+	target_pos = Vector2.ZERO
+	flight_time = 0.55
+	elapsed = 0.0
+	damage = 22.0
+	splash_radius = 70.0
+	splash_edge_ratio = 0.5
+	map_ref = p_map
+	_exploded = false
+	_explosion_flash_timer = 0.0
+	blast_color = Color(1.0, 0.52, 0.16)
+	secondary_damage = 0.0
+	secondary_damage_type = "Normal"
+	direct_primary_only = false
+	mirv_subshells = 0
+	mirv_damage_ratio = 0.36
+	shell_slow_pct = 0.0
+	shell_slow_dur = 0.0
+	shell_decay_flat = 0.0
+	shell_spawn_bubble = {}
+	shell_stun_duration = 0.0
+	shell_slag_nova_dmg = 0.0
+	shell_shred_max = 0
+	shell_reveals_cloaked = false
+	shell_anti_regen = false
+	source_tower_ref = null
+	bubble_radius = 42.0
+	bubble_slow_pct = 0.30
+	bubble_slow_linger = 0.45
+	bubble_decay_flat = 0.0
+	bubble_decay_ticks = 2
+	bubble_burn_dps = 0.0
+	bubble_burn_type = "Laser"
+	bubble_color = Color(0.64, 0.48, 1.0)
+	bubble_pull_px_per_sec = 0.0
+	bubble_anti_regen = false
+	_bubble_pulse_accum = 0.0
+	position = Vector2.ZERO
+	visible = true
+	set_process(true)
+
+
+func _recycle() -> void:
+	if _pooled:
+		return
+	if map_ref != null and is_instance_valid(map_ref) and map_ref.has_method("release_projectile"):
+		_pooled = true
+		source_tower_ref = null
+		visible = false
+		set_process(false)
+		map_ref.release_projectile(self)
+	else:
+		queue_free()
 
 
 func setup_tracer(p_start: Vector2, p_end: Vector2, p_color: Color = Color(0.45, 0.9, 1.0), p_width: float = 2.5, p_duration: float = 0.08) -> void:
@@ -176,7 +239,7 @@ func _process(delta: float) -> void:
 
 
 func advance_projectile(delta: float) -> void:
-	if GameState.mission.is_over or delta <= 0.0:
+	if _pooled or GameState.mission.is_over or delta <= 0.0:
 		return
 	if is_bubble:
 		elapsed += delta
@@ -185,14 +248,14 @@ func advance_projectile(delta: float) -> void:
 			_apply_bubble_pulse(_bubble_pulse_accum)
 			_bubble_pulse_accum = 0.0
 		if elapsed >= flight_time:
-			queue_free()
+			_recycle()
 		else:
 			queue_redraw()
 		return
 	if is_tracer:
 		elapsed += delta
 		if elapsed >= flight_time:
-			queue_free()
+			_recycle()
 		else:
 			queue_redraw()
 		return
@@ -200,7 +263,7 @@ func advance_projectile(delta: float) -> void:
 	if _exploded:
 		_explosion_flash_timer -= delta
 		if _explosion_flash_timer <= 0.0:
-			queue_free()
+			_recycle()
 		else:
 			queue_redraw()
 		return

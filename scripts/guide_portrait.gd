@@ -22,6 +22,8 @@ func trigger_talk(p_mood: String = "smirk", duration: float = 3.2) -> void:
 
 
 func _process(delta: float) -> void:
+	if not is_visible_in_tree():
+		return
 	anim_time += delta
 	if talk_timer > 0.0:
 		talk_timer = maxf(0.0, talk_timer - delta)

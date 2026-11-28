@@ -168,12 +168,17 @@ var wave_intel_card: PanelContainer = null
 var wave_intel_title_label: Label = null
 var wave_intel_bounty_label: Label = null
 var wave_intel_hide_button: Button = null
+var wave_intel_body_scroll: ScrollContainer = null
 var wave_intel_roster_box: HFlowContainer = null
 var wave_intel_tip_label: Label = null
 var wave_intel_mut_label: Label = null
 var _wave_intel_hidden_for_wave: int = -1
 var _wave_intel_pinned_in_combat: bool = false
 var _last_wave_intel_sig: String = ""
+var pause_sfx_volume_slider: HSlider = null
+var pause_sfx_volume_label: Label = null
+var pause_reduce_shake_check: CheckBox = null
+var pause_reduce_flashes_check: CheckBox = null
 var comms_toast_panel: PanelContainer = null
 var comms_speaker_label: Label = null
 var comms_text_label: Label = null
@@ -365,6 +370,15 @@ func _ready() -> void:
 	GameState.mission_reset.connect(_on_mission_reset)
 	GameState.event_logged.connect(_on_event_logged)
 	GameState.enemy_leaked.connect(_on_lives_lost_comms)
+	GameState.economy_changed.connect(_mark_hud_dirty)
+	GameState.lives_changed.connect(_mark_hud_dirty_arg1)
+	GameState.enemy_base_hp_changed.connect(_mark_hud_dirty_arg1)
+	GameState.wave_started.connect(_mark_hud_dirty_arg1)
+	GameState.wave_cleared.connect(_mark_hud_dirty_arg1)
+	GameState.speed_changed.connect(_mark_hud_dirty_arg2)
+	GameState.time_power_used.connect(_mark_hud_dirty_arg1)
+	GameState.citadel_upgraded.connect(_mark_hud_dirty_arg1)
+	GameState.ability_upgraded.connect(_mark_hud_dirty_arg2)
 	if get_viewport() != null:
 		get_viewport().size_changed.connect(_on_viewport_size_changed)
 		apply_responsive_layout(_get_effective_viewport_size())
@@ -380,6 +394,52 @@ func _exit_tree() -> void:
 		GameState.event_logged.disconnect(_on_event_logged)
 	if GameState.enemy_leaked.is_connected(_on_lives_lost_comms):
 		GameState.enemy_leaked.disconnect(_on_lives_lost_comms)
+	if GameState.economy_changed.is_connected(_mark_hud_dirty):
+		GameState.economy_changed.disconnect(_mark_hud_dirty)
+	if GameState.lives_changed.is_connected(_mark_hud_dirty_arg1):
+		GameState.lives_changed.disconnect(_mark_hud_dirty_arg1)
+	if GameState.enemy_base_hp_changed.is_connected(_mark_hud_dirty_arg1):
+		GameState.enemy_base_hp_changed.disconnect(_mark_hud_dirty_arg1)
+	if GameState.wave_started.is_connected(_mark_hud_dirty_arg1):
+		GameState.wave_started.disconnect(_mark_hud_dirty_arg1)
+	if GameState.wave_cleared.is_connected(_mark_hud_dirty_arg1):
+		GameState.wave_cleared.disconnect(_mark_hud_dirty_arg1)
+	if GameState.speed_changed.is_connected(_mark_hud_dirty_arg2):
+		GameState.speed_changed.disconnect(_mark_hud_dirty_arg2)
+	if GameState.time_power_used.is_connected(_mark_hud_dirty_arg1):
+		GameState.time_power_used.disconnect(_mark_hud_dirty_arg1)
+	if GameState.citadel_upgraded.is_connected(_mark_hud_dirty_arg1):
+		GameState.citadel_upgraded.disconnect(_mark_hud_dirty_arg1)
+	if GameState.ability_upgraded.is_connected(_mark_hud_dirty_arg2):
+		GameState.ability_upgraded.disconnect(_mark_hud_dirty_arg2)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED or (what == NOTIFICATION_APPLICATION_FOCUS_OUT and (_seen_touch_input or DisplayServer.is_touchscreen_available())):
+		if GameState.mission != null and not GameState.mission.is_over and GameState.is_wave_active and not GameState.is_speed_paused:
+			GameState.is_speed_paused = true
+			GameState.speed_changed.emit(GameState.game_speed, true)
+			_hud_dirty = true
+		GameState.save_meta_progress()
+		if AnalyticsManager != null:
+			AnalyticsManager.save_analytics()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if citadel_overlay != null and citadel_overlay.visible:
+			citadel_overlay.visible = false
+			_selected_sacrifice_ids.clear()
+			_sacrifice_refinery_checked = false
+			_refresh_all()
+		elif recipes_overlay != null and recipes_overlay.visible:
+			recipes_overlay.visible = false
+			_hud_dirty = true
+		elif analytics_overlay != null and analytics_overlay.visible:
+			analytics_overlay.visible = false
+			_hud_dirty = true
+		elif between_levels_overlay != null and between_levels_overlay.visible:
+			between_levels_overlay.visible = false
+			_hud_dirty = true
+		elif start_menu_overlay == null or not start_menu_overlay.visible:
+			_toggle_pause_menu()
 
 
 func _reapply_overlay_bounds() -> void:
@@ -790,6 +850,62 @@ func _build_start_menu() -> void:
 		)
 		UIIcons.apply_right_button_theme(pause_analytics_button, Color(0.28, 0.86, 0.96))
 		pause_extra_grid.add_child(pause_analytics_button)
+
+		# Audio volume slider (squared perceptual dB curve) + Accessibility toggles (Reduce Shake / Reduce Flashes)
+		var access_row := HBoxContainer.new()
+		access_row.name = "PauseAudioAccessRow"
+		access_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		access_row.add_theme_constant_override("separation", 12)
+		pause_vbox.add_child(access_row)
+		pause_vbox.move_child(access_row, pause_extra_grid.get_index() + 1)
+
+		pause_sfx_volume_label = Label.new()
+		pause_sfx_volume_label.name = "PauseSfxVolumeLabel"
+		pause_sfx_volume_label.text = "SFX Vol: %d%%" % int(round(GameState.sfx_volume * 100.0))
+		pause_sfx_volume_label.custom_minimum_size = Vector2(94.0, 0.0)
+		access_row.add_child(pause_sfx_volume_label)
+
+		pause_sfx_volume_slider = HSlider.new()
+		pause_sfx_volume_slider.name = "PauseSfxVolumeSlider"
+		pause_sfx_volume_slider.min_value = 0.0
+		pause_sfx_volume_slider.max_value = 100.0
+		pause_sfx_volume_slider.step = 5.0
+		pause_sfx_volume_slider.value = round(GameState.sfx_volume * 100.0)
+		pause_sfx_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pause_sfx_volume_slider.custom_minimum_size = Vector2(120.0, 24.0)
+		pause_sfx_volume_slider.value_changed.connect(func(v: float) -> void:
+			GameState.sfx_volume = clampf(v / 100.0, 0.0, 1.0)
+			if pause_sfx_volume_label != null:
+				pause_sfx_volume_label.text = "SFX Vol: %d%%" % int(round(v))
+			if SfxManager != null:
+				SfxManager.set_volume_linear(GameState.sfx_volume)
+		)
+		pause_sfx_volume_slider.drag_ended.connect(func(_changed: bool) -> void:
+			GameState.save_meta_progress()
+			if SfxManager != null:
+				SfxManager.play("ui")
+		)
+		access_row.add_child(pause_sfx_volume_slider)
+
+		pause_reduce_shake_check = CheckBox.new()
+		pause_reduce_shake_check.name = "PauseReduceShakeCheck"
+		pause_reduce_shake_check.text = "Reduce Shake"
+		pause_reduce_shake_check.button_pressed = GameState.reduce_screen_shake
+		pause_reduce_shake_check.toggled.connect(func(on: bool) -> void:
+			GameState.reduce_screen_shake = on
+			GameState.save_meta_progress()
+		)
+		access_row.add_child(pause_reduce_shake_check)
+
+		pause_reduce_flashes_check = CheckBox.new()
+		pause_reduce_flashes_check.name = "PauseReduceFlashesCheck"
+		pause_reduce_flashes_check.text = "Reduce Flashes"
+		pause_reduce_flashes_check.button_pressed = GameState.reduce_flashes
+		pause_reduce_flashes_check.toggled.connect(func(on: bool) -> void:
+			GameState.reduce_flashes = on
+			GameState.save_meta_progress()
+		)
+		access_row.add_child(pause_reduce_flashes_check)
 
 
 func _build_combine_and_sandbox_ui() -> void:
@@ -1590,81 +1706,104 @@ func _build_wave_intel_ui() -> void:
 		wave_intel_button = Button.new()
 		wave_intel_button.name = "WaveIntelButton"
 		wave_intel_button.text = "Next Wave ▾"
-		wave_intel_button.tooltip_text = "Show / Hide detailed Next Wave Intel & counter tips"
+		wave_intel_button.tooltip_text = "Show / Hide visual Next Wave Intel inside the Top-Right panel"
 		wave_intel_button.custom_minimum_size = Vector2(104.0, 24.0)
 		wave_intel_button.add_theme_font_size_override("font_size", 11)
 		wave_intel_button.pressed.connect(_toggle_wave_intel_card)
 		UIIcons.apply_right_button_theme(wave_intel_button, Color(0.32, 0.86, 1.0))
 		row1.add_child(wave_intel_button)
 
+	# Dock visual NextWaveIntelCard directly inside Top-Right RightPanel (replaces redundant plain-text preview
+	# and never blocks the battlefield or overflows downward!)
 	wave_intel_card = PanelContainer.new()
 	wave_intel_card.name = "NextWaveIntelCard"
 	wave_intel_card.visible = false
+	wave_intel_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	wave_intel_card.clip_contents = true
 	wave_intel_card.mouse_filter = Control.MOUSE_FILTER_STOP
-	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.94), Color(0.35, 0.82, 1.0), 10, 10.0, 7.0))
-	add_child(wave_intel_card)
-	if surge_banner != null and surge_banner.get_parent() == self:
-		move_child(wave_intel_card, surge_banner.get_index())
+	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.96), Color(0.35, 0.82, 1.0), 8, 8.0, 5.0))
+	var right_vbox := get_node_or_null("RightPanel/Margin/VBox") as VBoxContainer
+	if right_vbox != null:
+		right_vbox.add_child(wave_intel_card)
+		right_vbox.move_child(wave_intel_card, 0)
+	else:
+		add_child(wave_intel_card)
 
 	var vb := VBoxContainer.new()
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_theme_constant_override("separation", 5)
+	vb.add_theme_constant_override("separation", 4)
 	wave_intel_card.add_child(vb)
 
 	var hdr_row := HBoxContainer.new()
 	hdr_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hdr_row.add_theme_constant_override("separation", 8)
+	hdr_row.add_theme_constant_override("separation", 6)
 	vb.add_child(hdr_row)
 
 	wave_intel_title_label = Label.new()
 	wave_intel_title_label.name = "WaveIntelTitleLabel"
 	wave_intel_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wave_intel_title_label.add_theme_font_size_override("font_size", 13)
+	wave_intel_title_label.clip_text = true
+	wave_intel_title_label.add_theme_font_size_override("font_size", 12)
 	wave_intel_title_label.add_theme_color_override("font_color", Color(0.55, 0.96, 1.0))
 	wave_intel_title_label.text = "NEXT: WAVE 1"
 	hdr_row.add_child(wave_intel_title_label)
 
 	wave_intel_bounty_label = Label.new()
 	wave_intel_bounty_label.name = "WaveIntelBountyLabel"
-	wave_intel_bounty_label.add_theme_font_size_override("font_size", 12)
+	wave_intel_bounty_label.add_theme_font_size_override("font_size", 11)
 	wave_intel_bounty_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.36))
-	wave_intel_bounty_label.text = "Reward: $80"
+	wave_intel_bounty_label.text = "~$80"
 	hdr_row.add_child(wave_intel_bounty_label)
 
 	wave_intel_hide_button = Button.new()
 	wave_intel_hide_button.name = "WaveIntelHideButton"
 	wave_intel_hide_button.text = "Hide ✕"
-	wave_intel_hide_button.tooltip_text = "Hide Next Wave Intel for this wave (tap TopBar Intel button anytime to reopen)"
-	wave_intel_hide_button.custom_minimum_size = Vector2(62.0, 24.0)
-	wave_intel_hide_button.add_theme_font_size_override("font_size", 11)
+	wave_intel_hide_button.tooltip_text = "Collapse Wave Intel for this wave (tap TopBar Intel button anytime to reopen)"
+	wave_intel_hide_button.custom_minimum_size = Vector2(56.0, 22.0)
+	wave_intel_hide_button.add_theme_font_size_override("font_size", 10)
 	wave_intel_hide_button.pressed.connect(_on_wave_intel_hide_pressed)
 	UIIcons.apply_right_button_theme(wave_intel_hide_button, Color(0.52, 0.66, 0.84))
 	hdr_row.add_child(wave_intel_hide_button)
 
+	# Bounded scrollable body so large multi-enemy waves NEVER overflow or push down the Build Shop!
+	wave_intel_body_scroll = ScrollContainer.new()
+	wave_intel_body_scroll.name = "WaveIntelBodyScroll"
+	wave_intel_body_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_intel_body_scroll.custom_minimum_size = Vector2(0.0, 114.0)
+	wave_intel_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	wave_intel_body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	vb.add_child(wave_intel_body_scroll)
+
+	var body_vb := VBoxContainer.new()
+	body_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_vb.add_theme_constant_override("separation", 4)
+	wave_intel_body_scroll.add_child(body_vb)
+
 	wave_intel_roster_box = HFlowContainer.new()
 	wave_intel_roster_box.name = "WaveIntelRosterBox"
 	wave_intel_roster_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wave_intel_roster_box.add_theme_constant_override("h_separation", 6)
+	wave_intel_roster_box.add_theme_constant_override("h_separation", 5)
 	wave_intel_roster_box.add_theme_constant_override("v_separation", 4)
-	vb.add_child(wave_intel_roster_box)
+	body_vb.add_child(wave_intel_roster_box)
 
 	wave_intel_tip_label = Label.new()
 	wave_intel_tip_label.name = "WaveIntelTipLabel"
 	wave_intel_tip_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wave_intel_tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	wave_intel_tip_label.add_theme_font_size_override("font_size", 12)
+	wave_intel_tip_label.add_theme_font_size_override("font_size", 11)
 	wave_intel_tip_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
 	wave_intel_tip_label.text = ""
-	vb.add_child(wave_intel_tip_label)
+	body_vb.add_child(wave_intel_tip_label)
 
 	wave_intel_mut_label = Label.new()
 	wave_intel_mut_label.name = "WaveIntelMutLabel"
 	wave_intel_mut_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wave_intel_mut_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	wave_intel_mut_label.add_theme_font_size_override("font_size", 11)
+	wave_intel_mut_label.add_theme_font_size_override("font_size", 10)
 	wave_intel_mut_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.34))
 	wave_intel_mut_label.visible = false
-	vb.add_child(wave_intel_mut_label)
+	body_vb.add_child(wave_intel_mut_label)
 
 
 func _toggle_wave_intel_card() -> void:
@@ -1832,23 +1971,23 @@ func _refresh_wave_intel_card() -> void:
 		border_col = Color(1.0, 0.82, 0.30)
 		title_col = Color(1.0, 0.90, 0.45)
 
-	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.94), border_col, 10, 12.0 if is_port else 10.0, 10.0 if is_port else 7.0))
+	wave_intel_card.add_theme_stylebox_override("panel", UIIcons.make_panel_style(Color(0.05, 0.09, 0.16, 0.96), border_col, 8, 10.0 if is_port else 7.0, 8.0 if is_port else 5.0))
 	wave_intel_title_label.text = heading_prefix
 	wave_intel_title_label.add_theme_color_override("font_color", title_col)
-	wave_intel_title_label.add_theme_font_size_override("font_size", 21 if is_port else (14 if is_wide else 13))
+	wave_intel_title_label.add_theme_font_size_override("font_size", 19 if is_port else (13 if is_wide else 11))
 
 	var est_bounty: int = int(round(float(preview.get("b_dollars", 0)) * GameState.get_enemy_bounty_multiplier()))
-	wave_intel_bounty_label.text = "Reward: ~$%d" % est_bounty
-	wave_intel_bounty_label.add_theme_font_size_override("font_size", 19 if is_port else (13 if is_wide else 12))
-	wave_intel_hide_button.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
-	wave_intel_hide_button.custom_minimum_size = Vector2(96.0, 40.0) if is_port else (Vector2(68.0, 28.0) if is_wide else Vector2(58.0, 24.0))
+	wave_intel_bounty_label.text = "~$%d" % est_bounty
+	wave_intel_bounty_label.add_theme_font_size_override("font_size", 18 if is_port else (12 if is_wide else 11))
+	wave_intel_hide_button.add_theme_font_size_override("font_size", 17 if is_port else (11 if is_wide else 10))
+	wave_intel_hide_button.custom_minimum_size = Vector2(86.0, 36.0) if is_port else (Vector2(58.0, 24.0) if is_wide else Vector2(52.0, 22.0))
 
 	for ch in wave_intel_roster_box.get_children():
 		ch.queue_free()
 
-	var icon_px: int = 36 if is_port else (26 if is_wide else 22)
-	var chip_fs: int = 18 if is_port else (12 if is_wide else 11)
-	var sub_fs: int = 15 if is_port else (10 if is_wide else 10)
+	var icon_px: int = 34 if is_port else (24 if is_wide else 20)
+	var chip_fs: int = 17 if is_port else (11 if is_wide else 10)
+	var sub_fs: int = 14 if is_port else (10 if is_wide else 9)
 	for utype in ["colossus", "juggernaut", "conduit", "carrier", "mender", "stalker", "blitzer", "brute", "rusher", "crawler"]:
 		if not counts.has(utype):
 			continue
@@ -1921,7 +2060,10 @@ func _refresh_wave_intel_card() -> void:
 		wave_intel_mut_label.text = "⚠ Active Mutations: " + " | ".join(m_parts)
 		wave_intel_mut_label.add_theme_font_size_override("font_size", 16 if is_port else 11)
 		wave_intel_mut_label.visible = true
-	wave_intel_card.reset_size()
+	if wave_intel_body_scroll != null:
+		wave_intel_body_scroll.scroll_vertical = 0
+		var est_body_h: float = 156.0 if is_port else (124.0 if is_wide else 112.0)
+		wave_intel_body_scroll.custom_minimum_size = Vector2(0.0, est_body_h)
 
 
 func _build_comms_toast_ui() -> void:
@@ -2912,6 +3054,38 @@ func _input(event: InputEvent) -> void:
 			_is_dragging_tower = false
 
 
+var _hud_dirty: bool = true
+var _hud_poll_accum: float = 0.0
+
+
+func _mark_hud_dirty() -> void:
+	_hud_dirty = true
+
+
+func _mark_hud_dirty_arg1(_a = null) -> void:
+	_hud_dirty = true
+
+
+func _mark_hud_dirty_arg2(_a = null, _b = null) -> void:
+	_hud_dirty = true
+
+
+func _has_active_hud_timers() -> bool:
+	if debug_panel != null and debug_panel.visible:
+		return true
+	if _early_call_armed_timer > 0.0:
+		return true
+	if _selected_tower != null and is_instance_valid(_selected_tower) and _selected_tower.current_job != null:
+		return true
+	if economy_ref != null and (economy_ref.refinery_job != null or economy_ref.refinery_tech_job != null):
+		return true
+	if time_powers_ref != null and (GameState.is_enemies_frozen or GameState.is_haste_active):
+		return true
+	if _inspected_enemy != null and is_instance_valid(_inspected_enemy) and _inspected_enemy.is_alive():
+		return true
+	return false
+
+
 func _process(delta: float) -> void:
 	if not get_tree().paused:
 		_pulse_accum += delta
@@ -2930,10 +3104,19 @@ func _process(delta: float) -> void:
 					comms_toast_panel.modulate.a = clampf(_comms_timer / 0.6, 0.0, 1.0)
 	if _early_call_armed_timer > 0.0:
 		_early_call_armed_timer = maxf(0.0, _early_call_armed_timer - delta)
-	_refresh_all()
+		if _early_call_armed_timer <= 0.0:
+			_hud_dirty = true
+
+	# Event-driven HUD refresh: immediate on state signals, throttled for live clocks/cooldowns/timers
+	_hud_poll_accum += delta
+	var poll_interval: float = 0.16 if (GameState.is_wave_active or _has_active_hud_timers()) else 0.45
+	if _hud_dirty or _hud_poll_accum >= poll_interval:
+		_refresh_all()
 
 
 func _refresh_all() -> void:
+	_hud_dirty = false
+	_hud_poll_accum = 0.0
 	var m := GameState.mission
 	top_status_label.text = "Lives: %d / %d" % [m.lives, Balance.PLAYER_STARTING_LIVES]
 	var max_w: int = wave_manager_ref.max_waves_limit if wave_manager_ref != null else WavesData.MISSION_TARGET_WAVE
@@ -2983,7 +3166,8 @@ func _refresh_all() -> void:
 	_refresh_manipulator_panel()
 	_refresh_refinery_tech_button()
 	_refresh_research_panel()
-	_refresh_surge_bar()
+	if Balance.SURGE_ENABLED:
+		_refresh_surge_bar()
 	_refresh_power_buttons()
 	_refresh_refinery_button()
 	_refresh_charge_button()
@@ -3240,6 +3424,13 @@ func _refresh_preview_panel() -> void:
 	wave_summary_label.clip_text = true
 	wave_summary_label.text = _last_summary_text
 	wave_summary_label.visible = (_last_summary_text != "")
+
+	# Eliminate redundant plain-text wave info whenever the docked visual NextWaveIntelCard is mounted in Top-Right
+	var intel_docked: bool = (wave_intel_card != null and wave_intel_card.get_parent() == preview_title_label.get_parent())
+	var intel_expanded: bool = intel_docked and wave_intel_card.visible
+	preview_title_label.visible = not intel_expanded
+	preview_body_label.visible = false if intel_docked else true
+	preview_mutations_label.visible = (not intel_docked) and (not muts.is_empty())
 
 
 func _refresh_selection_panel() -> void:
@@ -3503,11 +3694,18 @@ func _refresh_research_panel() -> void:
 			btn.modulate = Color.WHITE if affordable else Color(1.0, 0.65, 0.65)
 
 
+func _fmt_cash_short(amount: int) -> String:
+	if amount >= 10000:
+		return "$%.0fk" % (float(amount) / 1000.0)
+	if amount >= 1000:
+		return "$%.1fk" % (float(amount) / 1000.0)
+	return "$%d" % amount
+
+
 func _refresh_charge_button() -> void:
 	if base_attack_ref == null:
 		charge_button.disabled = true
 		return
-	var st: int = GameState.mission.citadel_stage
 	var nxt_s: int = base_attack_ref.get_next_citadel_stage()
 	var can_asc: bool = base_attack_ref.can_ascend_citadel()
 	var can_ab_u: bool = time_powers_ref != null and (
@@ -3515,12 +3713,16 @@ func _refresh_charge_button() -> void:
 		time_powers_ref.can_upgrade_ability("haste") or
 		time_powers_ref.can_upgrade_ability("rewind")
 	)
+	var money_now: int = int(GameState.mission.economy.get("money", 0))
 	if nxt_s > 0:
 		var ncost: int = int(Balance.CITADEL_STAGES[nxt_s]["cost"])
 		var nname: String = "TIME GOD S3" if nxt_s >= 3 else ("CITADEL S%d" % nxt_s)
-		charge_button.text = "★ %s ($%d)\nAbilities & Sacrifices" % [nname, ncost]
+		if can_asc:
+			charge_button.text = "★ READY: %s (%s)!\nTap to Ascend + Sacrifices" % [nname, _fmt_cash_short(ncost)]
+		else:
+			charge_button.text = "★ %s (%s / %s)\nAbilities & Citadel" % [nname, _fmt_cash_short(money_now), _fmt_cash_short(ncost)]
 	else:
-		charge_button.text = "★ TIME GOD MAX\nUpgrade Abilities"
+		charge_button.text = "★ TIME GOD MAX\nUpgrade Time Abilities"
 	charge_button.disabled = GameState.mission.is_over
 	if can_asc:
 		charge_button.modulate = Color(1.0, 0.94, 0.44)
@@ -3807,6 +4009,32 @@ func _on_sell_pressed() -> void:
 		map_ref.sell_tower(_selected_tower)
 
 
+func _get_combo_synergy_tag(combo_key: String) -> String:
+	match combo_key:
+		"blaster+blaster": return "Armor-Crack DPS"
+		"mortar+mortar": return "3x MIRV Splash"
+		"laser+laser": return "Ramp + Chain"
+		"slow+slow": return "Wide 40% Bubble"
+		"railgun+railgun": return "3x Pierce Sniper"
+		"annihilator+annihilator": return "Boss Assassin"
+		"blaster+mortar": return "No-Blindspot Flak"
+		"blaster+laser": return "Smart All-Armor"
+		"blaster+slow": return "Fast Slow Bubble"
+		"blaster+railgun": return "Fast Time Rifle"
+		"blaster+annihilator": return "Rapid Boss Shred"
+		"mortar+laser": return "Plasma Horde AoE"
+		"mortar+slow": return "Cryo AoE Bubble"
+		"mortar+railgun": return "Cross-Map AoE+Slow"
+		"mortar+annihilator": return "Boss+Splash Siege"
+		"laser+slow": return "Burn+Slow Bubble"
+		"laser+railgun": return "290px Time Lance"
+		"laser+annihilator": return "Armor-Melt +30%"
+		"slow+railgun": return "Sniper + 55% Bubble"
+		"slow+annihilator": return "Boss-Lock Bubble"
+		"railgun+annihilator": return "Apex Boss Killer"
+		_: return "Combo"
+
+
 func _refresh_combine_partner_list() -> void:
 	if combine_partner_box == null:
 		return
@@ -3894,16 +4122,17 @@ func _refresh_combine_partner_list() -> void:
 		var c_icon: ImageTexture = SpriteLibrary.get_ui_badge_icon(combo_key, 34)
 		if c_icon != null:
 			p_btn.icon = c_icon
+		var syn_tag: String = _get_combo_synergy_tag(combo_key)
 		if meets and afford:
-			p_btn.text = "FUSE $%d  ->  %s" % [total_c, combo_name]
+			p_btn.text = "FUSE $%d  ->  %s [%s]" % [total_c, combo_name, syn_tag]
 			UIIcons.apply_right_button_theme(p_btn, Color(0.32, 0.98, 0.62), true)
 			p_btn.modulate = Color(0.75, 1.0, 0.84)
 		elif meets:
-			p_btn.text = "NEED $%d  ->  %s (short $%d)" % [total_c, combo_name, int(q["shortfall"])]
+			p_btn.text = "NEED $%d  ->  %s [%s] (short $%d)" % [total_c, combo_name, syn_tag, int(q["shortfall"])]
 			UIIcons.apply_right_button_theme(p_btn, Color(0.98, 0.42, 0.38), false)
 			p_btn.modulate = Color(1.0, 0.78, 0.75)
 		else:
-			p_btn.text = "%d/3 RANKS  ->  %s ($%d)" % [int(q["combined_ranks"]), combo_name, total_c]
+			p_btn.text = "%d/3 RANKS  ->  %s [%s] ($%d)" % [int(q["combined_ranks"]), combo_name, syn_tag, total_c]
 			UIIcons.apply_right_button_theme(p_btn, Color(0.96, 0.76, 0.30), false)
 			p_btn.modulate = Color(1.0, 0.90, 0.66)
 		p_btn.pressed.connect(func() -> void:
@@ -4414,6 +4643,31 @@ func _place_overlay_exact(ctrl: Control, pos: Vector2, sz: Vector2) -> void:
 	ctrl.set_deferred("size", sz)
 
 
+func _get_safe_area_insets(vp_size: Vector2) -> Dictionary:
+	var out := {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+	if DisplayServer.get_name() == "headless":
+		return out
+	var win_sz: Vector2i = DisplayServer.window_get_size()
+	if win_sz.x <= 0 or win_sz.y <= 0:
+		return out
+	var safe_i: Rect2i = DisplayServer.get_display_safe_area()
+	if safe_i.size.x <= 0 or safe_i.size.y <= 0:
+		return out
+	var win_pos: Vector2i = DisplayServer.window_get_position()
+	var win_r := Rect2(Vector2(win_pos), Vector2(win_sz))
+	var safe_r := Rect2(Vector2(safe_i.position), Vector2(safe_i.size))
+	var inner: Rect2 = safe_r.intersection(win_r)
+	if inner.size.x <= 0.0 or inner.size.y <= 0.0:
+		return out
+	var sx: float = vp_size.x / float(win_sz.x)
+	var sy: float = vp_size.y / float(win_sz.y)
+	out["left"] = clampf((inner.position.x - win_r.position.x) * sx, 0.0, 64.0)
+	out["top"] = clampf((inner.position.y - win_r.position.y) * sy, 0.0, 64.0)
+	out["right"] = clampf((win_r.end.x - inner.end.x) * sx, 0.0, 64.0)
+	out["bottom"] = clampf((win_r.end.y - inner.end.y) * sy, 0.0, 64.0)
+	return out
+
+
 func apply_responsive_layout(vp_size: Vector2) -> void:
 	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
 		return
@@ -4452,17 +4706,13 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			wave_intel_button.custom_minimum_size = Vector2(104.0, 24.0)
 			wave_intel_button.add_theme_font_size_override("font_size", 11)
 		if wave_intel_card != null:
-			var intel_w_d: float = minf(690.0, 940.0 - 156.0 - 10.0)
-			wave_intel_card.position = Vector2(10.0, 68.0)
-			wave_intel_card.custom_minimum_size = Vector2(intel_w_d, 0.0)
-			wave_intel_card.size = Vector2(intel_w_d, wave_intel_card.get_combined_minimum_size().y)
 			_last_wave_intel_sig = ""
 			_refresh_wave_intel_card()
 		surge_banner.position = Vector2(150.0, 68.0)
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(572.0, 68.0)
 		prompt_banner.size = Vector2(362.0, 54.0)
-		_place_overlay_exact(pause_overlay, Vector2(240.0, 120.0), Vector2(800.0, 400.0))
+		_place_overlay_exact(pause_overlay, Vector2(240.0, 105.0), Vector2(800.0, 430.0))
 		_place_overlay_exact(between_levels_overlay, Vector2(220.0, 86.0), Vector2(840.0, 444.0))
 		_place_overlay_exact(end_overlay, Vector2(340.0, 150.0), Vector2(600.0, 360.0))
 		_place_overlay_exact(start_menu_overlay, Vector2(180.0, 22.0), Vector2(920.0, 548.0))
@@ -4483,37 +4733,41 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 	# while giving RightPanel a generous 460px 2-column zero-scroll touch grid and bigger 74px bottom buttons!
 	if vp_size.x >= vp_size.y:
 		_apply_responsive_ergonomics("landscape_wide")
+		var hw_safe: Dictionary = _get_safe_area_insets(vp_size)
 		var top_h: float = 74.0
 		var bot_h: float = 108.0
 		var rp_w: float = 460.0 if vp_size.x >= 1460.0 else (420.0 if vp_size.x >= 1360.0 else 368.0)
-		var safe_x: float = clampf((vp_size.x - 1280.0) * 0.06, 0.0, 24.0)
+		var safe_x: float = maxf(clampf((vp_size.x - 1280.0) * 0.06, 0.0, 24.0), maxf(float(hw_safe["left"]), float(hw_safe["right"])))
 		_apply_bar_safe_margins(top_bar, safe_x)
 		_apply_bar_safe_margins(bottom_bar, safe_x)
 
-		top_bar.position = Vector2.ZERO
+		top_bar.position = Vector2(0.0, float(hw_safe["top"]))
 		top_bar.size = Vector2(vp_size.x, top_h)
 
-		bottom_bar.position = Vector2(0.0, vp_size.y - bot_h)
+		var safe_bot_l: float = float(hw_safe["bottom"])
+		bottom_bar.position = Vector2(0.0, vp_size.y - bot_h - safe_bot_l)
 		_set_bottom_button_widths(clampf(vp_size.x / 1280.0, 1.0, 1.24), 74.0, 13, false)
 		bottom_bar.size = Vector2(vp_size.x, bot_h)
 
-		var middle_h: float = maxf(460.0, vp_size.y - top_h - bot_h)
+		var top_edge_l: float = float(hw_safe["top"]) + top_h
+		var middle_h: float = maxf(440.0, vp_size.y - top_edge_l - bot_h - safe_bot_l)
+		var rp_right_inset: float = float(hw_safe["right"])
 		right_panel.custom_minimum_size = Vector2(rp_w, middle_h)
-		right_panel.position = Vector2(vp_size.x - rp_w, top_h)
+		right_panel.position = Vector2(vp_size.x - rp_w - rp_right_inset, top_edge_l)
 		right_panel.size = Vector2(rp_w, middle_h)
 
-		var avail_w: float = maxf(300.0, vp_size.x - rp_w)
+		var avail_w: float = maxf(300.0, right_panel.position.x - float(hw_safe["left"]))
 		var avail_h: float = middle_h
 		var map_scale: float = minf(avail_w / GameMap.MAP_WIDTH, avail_h / GameMap.MAP_HEIGHT)
 		var extra_w: float = maxf(0.0, (avail_w / map_scale) - GameMap.MAP_WIDTH)
 		var extra_left: float = floorf(extra_w * 0.5)
 		var extra_right: float = extra_w - extra_left
-		var map_y: float = top_h + floorf((avail_h - GameMap.MAP_HEIGHT * map_scale) * 0.5)
+		var map_y: float = top_edge_l + floorf((avail_h - GameMap.MAP_HEIGHT * map_scale) * 0.5)
 		if map_ref != null:
 			map_ref.set_viewport_margins(extra_left, extra_right)
-			map_ref.set_base_layout(Rect2(0.0, top_h, avail_w, avail_h), Vector2(extra_left * map_scale, map_y), map_scale)
+			map_ref.set_base_layout(Rect2(float(hw_safe["left"]), top_edge_l, avail_w, avail_h), Vector2(float(hw_safe["left"]) + extra_left * map_scale, map_y), map_scale)
 		if zoom_bar != null:
-			_place_overlay_exact(zoom_bar, Vector2(right_panel.position.x - 186.0, top_h + 6.0), Vector2(178.0, 44.0))
+			_place_overlay_exact(zoom_bar, Vector2(right_panel.position.x - 186.0, top_edge_l + 6.0), Vector2(178.0, 44.0))
 			for zb in [zoom_out_button, zoom_reset_button, zoom_in_button]:
 				if zb != null:
 					zb.custom_minimum_size = Vector2(46.0, 36.0)
@@ -4522,11 +4776,6 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 			wave_intel_button.custom_minimum_size = Vector2(128.0, 28.0)
 			wave_intel_button.add_theme_font_size_override("font_size", 12)
 		if wave_intel_card != null:
-			var intel_x_l: float = safe_x + 12.0
-			var intel_w_l: float = minf(760.0, maxf(340.0, right_panel.position.x - 196.0 - intel_x_l))
-			wave_intel_card.position = Vector2(intel_x_l, top_h + 6.0)
-			wave_intel_card.custom_minimum_size = Vector2(intel_w_l, 0.0)
-			wave_intel_card.size = Vector2(intel_w_l, wave_intel_card.get_combined_minimum_size().y)
 			_last_wave_intel_sig = ""
 			_refresh_wave_intel_card()
 
@@ -4534,7 +4783,7 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		surge_banner.size = Vector2(410.0, 42.0)
 		prompt_banner.position = Vector2(maxf(safe_x + 12.0, right_panel.position.x - 368.0), top_h + 6.0)
 		prompt_banner.size = Vector2(362.0, 54.0)
-		_center_overlay(pause_overlay, vp_size, Vector2(820.0, 420.0))
+		_center_overlay(pause_overlay, vp_size, Vector2(820.0, 450.0))
 		_center_overlay(between_levels_overlay, vp_size, Vector2(920.0, 480.0))
 		_center_overlay(end_overlay, vp_size, Vector2(660.0, 420.0))
 		var sm_w: float = minf(1060.0, vp_size.x - 40.0)
@@ -4553,12 +4802,13 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 
 	# 3) Phone Portrait Ergonomic Layout (e.g. 1280x2844 — 3-row TopBar, 2-col chunky shop cards, 3x2 bottom bar, large readable fonts!)
 	_apply_responsive_ergonomics("portrait")
-	var safe_top: float = 36.0
-	var safe_bot: float = 20.0
+	var hw_safe_p: Dictionary = _get_safe_area_insets(vp_size)
+	var safe_top: float = maxf(36.0, float(hw_safe_p["top"]))
+	var safe_bot: float = maxf(20.0, float(hw_safe_p["bottom"]))
 	var p_top_h: float = 160.0
 	var p_bot_h: float = 376.0
-	_apply_bar_safe_margins(top_bar, 10.0)
-	_apply_bar_safe_margins(bottom_bar, 10.0)
+	_apply_bar_safe_margins(top_bar, maxf(10.0, maxf(float(hw_safe_p["left"]), float(hw_safe_p["right"]))))
+	_apply_bar_safe_margins(bottom_bar, maxf(10.0, maxf(float(hw_safe_p["left"]), float(hw_safe_p["right"]))))
 
 	top_bar.position = Vector2(0.0, safe_top)
 	top_bar.size = Vector2(vp_size.x, p_top_h)
@@ -4581,10 +4831,6 @@ func apply_responsive_layout(vp_size: Vector2) -> void:
 		wave_intel_button.custom_minimum_size = Vector2(190.0, 44.0)
 		wave_intel_button.add_theme_font_size_override("font_size", 18)
 	if wave_intel_card != null:
-		var intel_w_p: float = maxf(460.0, vp_size.x - 280.0)
-		wave_intel_card.position = Vector2(16.0, safe_top + p_top_h + 8.0)
-		wave_intel_card.custom_minimum_size = Vector2(intel_w_p, 0.0)
-		wave_intel_card.size = Vector2(intel_w_p, wave_intel_card.get_combined_minimum_size().y)
 		_last_wave_intel_sig = ""
 		_refresh_wave_intel_card()
 

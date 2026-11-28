@@ -56,6 +56,8 @@ var _slag_nova_dmg: float = 0.0
 var _slag_nova_source_ref: WeakRef = null
 var _shiny_ping_cd: float = 0.0
 var _hit_squish_timer: float = 0.0
+var _cached_conduit_shielded: bool = false
+var _conduit_cache_frame: int = -1
 
 
 func setup(p_id: int, p_type: String, p_wave: int, p_curve: Curve2D, p_map: Node = null) -> void:
@@ -153,13 +155,34 @@ func mark_slag_nova(nova_dmg: float, source_tower: Node = null) -> void:
 
 
 func is_shielded_by_conduit() -> bool:
-	if is_dead_or_leaked or enemy_type == "conduit" or map_ref == null or not map_ref.has_method("get_active_enemies"):
+	if is_dead_or_leaked or enemy_type == "conduit" or map_ref == null:
+		return false
+	if map_ref.has_method("has_live_conduits") and not map_ref.has_live_conduits():
+		_cached_conduit_shielded = false
+		return false
+	var cur_f: int = Engine.get_process_frames()
+	if _conduit_cache_frame >= 0 and (cur_f - _conduit_cache_frame) <= 8:
+		return _cached_conduit_shielded
+	if map_ref.has_method("get_live_conduits"):
+		for c_unit in map_ref.get_live_conduits():
+			if c_unit == self or not is_instance_valid(c_unit) or not c_unit.is_alive():
+				continue
+			var r: float = c_unit.shield_aura_radius
+			if r > 0.0 and position.distance_squared_to(c_unit.position) <= r * r:
+				_cached_conduit_shielded = true
+				_conduit_cache_frame = cur_f
+				return true
+		_cached_conduit_shielded = false
+		_conduit_cache_frame = cur_f
+		return false
+	if not map_ref.has_method("get_active_enemies"):
 		return false
 	for other in map_ref.get_active_enemies():
 		if other == self or not is_instance_valid(other) or not other.is_alive():
 			continue
 		if other.enemy_type == "conduit" and other.shield_aura_radius > 0.0:
-			if position.distance_to(other.position) <= other.shield_aura_radius:
+			var r2: float = other.shield_aura_radius * other.shield_aura_radius
+			if position.distance_squared_to(other.position) <= r2:
 				return true
 	return false
 

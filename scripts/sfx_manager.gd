@@ -8,6 +8,7 @@ const SAMPLE_RATE: int = 22050
 const POOL_SIZE: int = 10
 
 var muted: bool = false
+var volume_linear: float = 0.85
 var master_volume_db: float = -8.0
 
 var _streams: Dictionary = {}
@@ -19,14 +20,31 @@ var _is_headless: bool = false
 
 func _ready() -> void:
 	_is_headless = (DisplayServer.get_name() == "headless")
+	if GameState != null:
+		volume_linear = clampf(GameState.sfx_volume, 0.0, 1.0)
+		muted = GameState.saved_sfx_muted
 	if _is_headless:
 		return
 	for _i in range(POOL_SIZE):
 		var p := AudioStreamPlayer.new()
-		p.volume_db = master_volume_db
+		p.volume_db = _effective_volume_db(0.0)
 		add_child(p)
 		_players.append(p)
 	_build_all_clips()
+
+
+func set_volume_linear(slider01: float) -> void:
+	volume_linear = clampf(slider01, 0.0, 1.0)
+	var db: float = _effective_volume_db(0.0)
+	for p in _players:
+		p.volume_db = db
+
+
+func _effective_volume_db(vol_offset_db: float) -> float:
+	if volume_linear <= 0.001:
+		return -80.0
+	# Squared perceptual slider-to-dB mapping (per audio-design skill)
+	return master_volume_db + linear_to_db(volume_linear * volume_linear) + vol_offset_db
 
 
 func set_muted(is_muted: bool) -> void:
@@ -38,7 +56,7 @@ func set_muted(is_muted: bool) -> void:
 
 
 func play(sfx_name: String, pitch_jitter: float = 0.06, vol_offset_db: float = 0.0) -> void:
-	if _is_headless or muted or _players.is_empty():
+	if _is_headless or muted or volume_linear <= 0.001 or _players.is_empty():
 		return
 	if not _streams.has(sfx_name):
 		return
@@ -51,7 +69,7 @@ func play(sfx_name: String, pitch_jitter: float = 0.06, vol_offset_db: float = 0
 	var player: AudioStreamPlayer = _players[_next_player_idx]
 	_next_player_idx = (_next_player_idx + 1) % _players.size()
 	player.stream = _streams[sfx_name]
-	player.volume_db = master_volume_db + vol_offset_db
+	player.volume_db = _effective_volume_db(vol_offset_db)
 	player.pitch_scale = randf_range(1.0 - pitch_jitter, 1.0 + pitch_jitter) if pitch_jitter > 0.0 else 1.0
 	player.play()
 
