@@ -6,6 +6,7 @@ extends Node
 ## stay sample-locked across Web PWA, Android APK, and Desktop.
 
 const SAMPLE_RATE: int = 22050
+const MUSIC_SAMPLE_RATE: int = 11025
 const POOL_SIZE: int = 10
 const SFX_BUS_NAME: StringName = &"SFX"
 const MUSIC_BUS_NAME: StringName = &"Music"
@@ -53,7 +54,7 @@ func _ready() -> void:
 		add_child(p)
 		_players.append(p)
 	_build_all_clips()
-	_build_adaptive_music()
+	call_deferred("_build_adaptive_music")
 
 
 func _exit_tree() -> void:
@@ -216,9 +217,12 @@ func _build_all_clips() -> void:
 
 
 func _build_adaptive_music() -> void:
+	if _music_player != null:
+		return
 	# 8.0s seamless loop at 120 BPM (4 bars in D Dorian: Dm7 | Dm7 | Bbmaj7 | C6)
 	var dur: float = 8.0
-	var n: int = int(dur * float(SAMPLE_RATE))
+	var sr: float = float(MUSIC_SAMPLE_RATE)
+	var n: int = int(dur * sr)
 	var pad_buf := PackedFloat32Array()
 	var pulse_buf := PackedFloat32Array()
 	pad_buf.resize(n)
@@ -238,7 +242,7 @@ func _build_adaptive_music() -> void:
 	var lp_hat: float = 0.0
 
 	for i in range(n):
-		var sec: float = float(i) / float(SAMPLE_RATE)
+		var sec: float = float(i) / sr
 		var bar_f: float = sec * 0.5 # 2.0 seconds per bar at 120 BPM
 		var bar_idx: int = clampi(int(floor(bar_f)), 0, 3)
 		var bar_pos: float = bar_f - float(bar_idx)
@@ -277,14 +281,16 @@ func _build_adaptive_music() -> void:
 
 		pulse_buf[i] = clampf(arp_sig + kick_sig + hat_sig, -0.92, 0.92)
 
-	var pad_wav: AudioStreamWAV = _pack_pcm(pad_buf, true)
-	var pulse_wav: AudioStreamWAV = _pack_pcm(pulse_buf, true)
+	var pad_wav: AudioStreamWAV = _pack_pcm(pad_buf, true, MUSIC_SAMPLE_RATE)
+	var pulse_wav: AudioStreamWAV = _pack_pcm(pulse_buf, true, MUSIC_SAMPLE_RATE)
 	_music_sync = AudioStreamSynchronized.new()
 	_music_sync.stream_count = 2
 	_music_sync.set_sync_stream(0, pad_wav)
 	_music_sync.set_sync_stream(1, pulse_wav)
-	_music_sync.set_sync_stream_volume(0, -6.0)
-	_music_sync.set_sync_stream_volume(1, -60.0)
+	var cur_pad_db: float = -6.0 if music_intensity < 2 else -5.0
+	var cur_pulse_db: float = -60.0 if music_intensity == 0 else (-8.0 if music_intensity == 1 else -4.5)
+	_music_sync.set_sync_stream_volume(0, cur_pad_db)
+	_music_sync.set_sync_stream_volume(1, cur_pulse_db)
 
 	_music_player = AudioStreamPlayer.new()
 	_music_player.name = "AdaptiveMusicPlayer"
@@ -295,7 +301,7 @@ func _build_adaptive_music() -> void:
 		_music_player.play()
 
 
-func _pack_pcm(samples: PackedFloat32Array, loop_forward: bool = false) -> AudioStreamWAV:
+func _pack_pcm(samples: PackedFloat32Array, loop_forward: bool = false, rate: int = SAMPLE_RATE) -> AudioStreamWAV:
 	var n: int = samples.size()
 	var bytes := PackedByteArray()
 	bytes.resize(n * 2)
@@ -305,7 +311,7 @@ func _pack_pcm(samples: PackedFloat32Array, loop_forward: bool = false) -> Audio
 		bytes[i * 2 + 1] = (s >> 8) & 0xFF
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = SAMPLE_RATE
+	wav.mix_rate = rate
 	wav.stereo = false
 	wav.data = bytes
 	if loop_forward:
